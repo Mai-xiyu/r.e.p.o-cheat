@@ -1,0 +1,45 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+
+# NuGet
+packages/
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# Rider
+.idea/
+*.sln.iml
+
+# Build logs
+*.log
+msbuild*.wrn
+msbuild*.err
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Game DLL references (users must provide their own)
+*.dll
+!r.e.p.o cheat/Cheats/ChamsShader.shader
+
+# Temp / cache
+*.tmp
+*.temp
+~$*
+*.cache
+project.lock.json
