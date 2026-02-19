@@ -228,6 +228,7 @@ public static class MiniRadar
     private static void DrawLineSegment(float x1, float y1, float x2, float y2, float thickness, Color color)
     {
         Color prevColor = GUI.color;
+        Matrix4x4 savedMatrix = GUI.matrix;
         GUI.color = color;
 
         Vector2 start = new Vector2(x1, y1);
@@ -237,8 +238,8 @@ public static class MiniRadar
 
         GUIUtility.RotateAroundPivot(angle, start);
         GUI.DrawTexture(new Rect(start.x, start.y - thickness / 2f, length, thickness), radarBgTex);
-        GUIUtility.RotateAroundPivot(-angle, start);
 
+        GUI.matrix = savedMatrix;
         GUI.color = prevColor;
     }
 
@@ -250,15 +251,15 @@ public static class MiniRadar
 
         float spacing = 12f;
         DrawDot(x + 4f, y + 6f, 3f, enemyDotColor);
-        GUI.Label(new Rect(x + 10f, y, 40f, 14f), "敌人", style);
+        GUI.Label(new Rect(x + 10f, y, 40f, 14f), L.T("radar.enemy"), style);
 
         DrawDot(x + 54f, y + 6f, 3f, playerDotColor);
-        GUI.Label(new Rect(x + 60f, y, 40f, 14f), "玩家", style);
+        GUI.Label(new Rect(x + 60f, y, 40f, 14f), L.T("radar.player"), style);
 
         DrawDot(x + 104f, y + 6f, 2f, itemDotColor);
-        GUI.Label(new Rect(x + 110f, y, 40f, 14f), "物品", style);
+        GUI.Label(new Rect(x + 110f, y, 40f, 14f), L.T("radar.item"), style);
 
         DrawDot(x + 154f, y + 6f, 4f, extractDotColor);
-        GUI.Label(new Rect(x + 160f, y, 40f, 14f), "撤离", style);
+        GUI.Label(new Rect(x + 160f, y, 40f, 14f), L.T("radar.extract"), style);
     }
 }

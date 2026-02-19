@@ -1,0 +1,561 @@
+# ============================================
+# DARK MENU - English Language File
+# Format: key=value (one per line)
+# ============================================
+
+# Language meta
+lang.name=English
+
+# Tab names
+tab.self=Self
+tab.visuals=Visuals
+tab.combat=Combat
+tab.misc=Misc
+tab.enemies=Enemies
+tab.items=Items
+tab.hotkeys=Hotkeys
+tab.trolling=Room
+tab.config=Config
+tab.server=Server
+tab.creative=Creative
+tab.teleport=Teleport
+tab.menu=Menu
+
+# Menu title
+menu.title=DARK MENU 1.5
+
+# ============ Self Tab ============
+self.health=Health
+self.god_mode= God Mode
+self.inf_health= Infinite Health
+self.revive_self=Revive Self
+self.movement=Movement
+self.noclip= NoClip
+self.inf_stamina= Infinite Stamina
+self.auto_dodge= Auto Dodge
+self.dodge_dist_fmt=Dodge Distance: {0}m
+self.misc=Misc
+self.rgb_player= RGB Player
+self.no_fog= No Fog
+self.watermark= Show Watermark
+self.anti_grab= Anti-Grab
+self.give_crown=Give Crown
+self.no_recoil= No Weapon Recoil
+self.no_cooldown= No Weapon Cooldown
+self.spread_fmt=Spread: {0:F2}x ({1})
+self.spread_none=None
+self.spread_normal=Normal
+self.grab_walls= Grab Through Walls
+self.stats=Player Stats
+self.strength_fmt=Strength: {0}
+self.throw_fmt=Throw Force: {0}
+self.speed_fmt=Speed: {0}
+self.grab_range_fmt=Grab Range: {0}
+self.stam_delay_fmt=Stamina Delay: {0}
+self.stam_rate_fmt=Stamina Rate: {0}
+self.extra_jump_fmt=Extra Jumps: {0}
+self.tumble_fmt=Tumble Launch: {0}
+self.jump_fmt=Jump Force: {0}
+self.gravity_fmt=Gravity: {0}
+self.crouch_delay_fmt=Crouch Delay: {0}
+self.crouch_speed_fmt=Crouch Speed: {0}
+self.slide_fmt=Slide Decay: {0}
+self.flashlight_fmt=Flashlight: {0}
+self.fov_fmt=FOV: {0}
+self.fov_loading=Loading FOV editor...
+
+# ============ Visuals Tab ============
+vis.modern_esp= Modern ESP
+vis.enemy_esp=Enemy ESP
+vis.enemy_toggle= Enable Enemy ESP
+vis.show_2d_box= Show 2D Box
+vis.show_chams= Show Chams
+vis.show_name= Show Name
+vis.show_distance= Show Distance
+vis.show_health= Show Health
+vis.item_esp=Item ESP
+vis.item_toggle= Enable Item ESP
+vis.show_3d_box= Show 3D Box
+vis.item_chams= Show Chams
+vis.chams_color=Chams Color
+vis.item_name= Show Name
+vis.item_distance= Show Distance
+vis.max_dist_fmt=Max Distance {0}m
+vis.show_value= Show Value
+vis.min_value_fmt=Min Value ${0}
+vis.show_skulls= Show Dead Player Skulls
+vis.extract_esp=Extraction ESP
+vis.extract_toggle= Enable Extraction ESP
+vis.show_name_status= Show Name/Status
+vis.extract_dist= Show Distance
+vis.player_esp=Player ESP
+vis.player_toggle= Enable Player ESP
+vis.player_2d= Show 2D Box
+vis.player_3d= Show 3D Box
+vis.player_name= Show Name
+vis.player_dist= Show Distance
+vis.player_hp= Show Health
+vis.player_list= Show Alive/Dead List
+vis.trace=Trace Lines
+vis.trace_enemy= Enemy Trace Lines
+vis.trace_item= Item Trace Lines
+vis.trace_player= Player Trace Lines
+vis.esp_presets=ESP Presets
+vis.radar=Radar
+vis.radar_toggle= Mini Radar
+vis.radar_range_fmt=Radar Range: {0}
+
+# ============ Combat Tab ============
+combat.select=Select Player:
+combat.damage=-1 Damage
+combat.heal=Max Heal
+combat.kill=Kill
+combat.revive=Revive
+combat.heal_revive=Heal & Revive (RPC Sync)
+combat.tumble=Tumble (10s)
+combat.hide_tp=Hide Teleport
+combat.show_tp=Show Teleport
+
+# ============ Misc Tab ============
+misc.select=Select Player:
+misc.spawn_money=[Host] Spawn Money
+misc.spoof_name=Name Spoof
+misc.spoof_btn=Spoof
+misc.reset_spoof=Reset Name
+misc.random_player_name=Random Player Name
+misc.random_string=Random String
+misc.persist_spoof= Persistent Spoof
+misc.spoof_color=Color Spoof
+misc.select_color=Select Color
+misc.rainbow= Rainbow Mode
+misc.chat_spam=Chat Spam
+misc.send=Send
+misc.activate_extraction=Activate All Extractions
+misc.map_tweaks=Map Tweaks (can't undo):
+misc.disable_overlay=Disable '?' Overlay
+misc.discover_valuables=Discover Valuables
+
+# ============ Enemies Tab ============
+enemies.select=Select Enemy:
+enemies.spawn=[Host] Spawn
+enemies.select_fallback=Select Enemy
+enemies.kill=Kill Enemy
+enemies.kill_all=Kill All Enemies
+enemies.blind= Blind Enemies
+enemies.hide_tp=Hide Teleport
+enemies.show_tp=Show Teleport
+enemies.tp_to=Teleport Enemy To:
+enemies.no_player=No Players
+enemies.execute_tp=Execute Teleport
+
+# ============ Items Tab ============
+items.auto=Auto Features
+items.auto_pickup= Auto Pickup
+items.pickup_range_fmt=Pickup Range: {0}m
+items.min_value_fmt=Min Value: {0}
+items.auto_sell= Auto Sell (to extraction)
+items.select=Select Item:
+items.value_fmt=[Value ${0}]
+items.tp_to_me=Teleport Item To Me
+items.tp_all=Teleport All Items
+items.modify_value=Modify Value
+items.apply_value=Apply Value
+items.hide_spawner=Hide Spawner
+items.show_spawner=Show Spawner
+items.select_spawn=Select Item to Spawn:
+items.spawn=Spawn Selected
+items.spawn_50=Spawn 50 Selected
+
+# ============ Hotkeys Tab ============
+hotkeys.config=Hotkey Config
+hotkeys.how_to=How to set hotkeys:
+hotkeys.step1=1. Click key field, press desired key
+hotkeys.step2=2. Click action field, select feature
+hotkeys.warning=Warning: Use unique keys per action
+hotkeys.system=System Keys
+hotkeys.menu_toggle=Menu Toggle
+hotkeys.reload=Reload:
+hotkeys.unload=Unload:
+hotkeys.action=Action Hotkeys
+hotkeys.press_key=Press any key...
+hotkeys.not_set=Not Set
+hotkeys.need_key=Assign a key first
+hotkeys.clear=Clear
+hotkeys.save=Save Hotkeys
+hotkeys.saved=Hotkeys Saved
+
+# ============ Room Tab ============
+room.select=Select Player:
+room.force_host=Force Take Host
+room.force_host_info=Disable NetworkManager → SetMasterClient → Restore
+room.forcing=Taking host...
+room.force_success=You are now host!
+room.force_fail=Failed (not in room)
+room.not_in_room=Not in a room
+room.current_host=Current Host:
+room.auto_force=Auto Force Host
+room.pick_method=Or pick a method:
+room.crash_host=Crash Host
+room.local_fake=Local Fake
+room.already_host=You are already host
+room.crashing_host=Crashing current host...
+room.waiting_promotion=Waiting for auto-promotion...
+room.method_fail_fmt=Method {0} failed
+room.trying_method_fmt=Trying method {0}...
+room.auto_suggest_crash=All auto methods failed, try "Crash Host"
+room.local_fake_done=Local fake complete (local only)
+room.trolling=Trolling
+trolling.select=Select Player:
+trolling.bubble=Activate Bubble
+trolling.clown=Touch Clown Nose
+trolling.glitch=Force Glitch
+trolling.unmute=Force Unmute
+trolling.mute=Force Mute
+trolling.inf_tumble=Infinite Tumble
+trolling.inf_loading=Infinite Loading
+trolling.remove_loading=Remove Loading
+trolling.crash_player=Crash Player
+trolling.detonate=Detonate All
+trolling.crash_lobby=Crash Lobby
+
+# ============ Combat Tab (Possession) ============
+combat.possess=Possess Player
+combat.unpossess=Stop Possession
+combat.possess_active=Possessing: {0}
+combat.possess_self_warning=Cannot possess yourself
+combat.possess_no_player=Select a player first
+
+# ============ Self Tab (Third Person) ============
+self.third_person= Third Person Camera
+self.tp_cam_dist_fmt=Camera Distance: {0:F1}
+self.tp_cam_height_fmt=Camera Height: {0:F1}
+
+# ============ ESP Translation ============
+esp.death_head=Dead Player Skull
+esp.extraction=Extraction Point
+esp.state_active=Active
+esp.state_idle=Idle
+esp.hp_fmt= HP: {0}/{1}
+esp.player_hp_fmt=HP: {0}
+
+# ============ Watermark ============
+watermark.main_fmt=DARK CHEAT | {0} - MENU
+watermark.credit=@Github/D4rkks (+collabs)| 汉化(二创) Mai_xiyu
+
+# ============ Server Selected Format ============
+server.selected_fmt=Selected: {0} | Host: {1} | Region: {2}
+
+# ============ Item Teleport ============
+items.no_items=No items found
+items.tp_host=Teleport (Host Direct)
+items.tp_client=Teleport (Request Ownership)
+
+# ============ Enemy Name Mapping ============
+enemy.name.Apex Predator=Apex Predator
+enemy.name.Banger=Banger
+enemy.name.Bowtie=Bowtie
+enemy.name.Ceiling Eye=Ceiling Eye
+enemy.name.Chef=Chef
+enemy.name.Clown=Clown
+enemy.name.Duckling=Duckling
+enemy.name.Gnome=Gnome
+enemy.name.Headman=Headman
+enemy.name.Hidden=Hidden
+enemy.name.Huntsman=Huntsman
+enemy.name.Mentalist=Mentalist
+enemy.name.Peeper=Peeper
+enemy.name.Reaper=Reaper
+enemy.name.Robe=Robe
+enemy.name.Rugrat=Rugrat
+enemy.name.Shadow Child=Shadow Child
+enemy.name.Slug=Slug
+enemy.name.Spewer=Spewer
+enemy.name.Thin Man=Thin Man
+enemy.name.Trudge=Trudge
+enemy.name.Upscream=Upscream
+enemy.name.Animal=Animal
+enemy.name.Floater=Floater
+enemy.name.Spider=Spider
+
+# ============ Config Tab ============
+config.title=Config
+config.prefs=PlayerPrefs Config
+config.save=Save Config
+config.saved=Config Saved
+config.load=Load Config
+config.loaded=Config Loaded
+config.json=JSON Config File
+config.save_json=Save JSON
+config.json_saved_fmt=JSON Saved: {0}
+config.load_json=Load JSON
+config.json_loaded=JSON Loaded
+config.json_path_fmt=Path: {0}
+config.language=Language
+config.lang_switched=Language Switched
+config.lang_current=Current Language:
+
+# ============ Menu Settings Tab ============
+menupage.title=Menu Settings
+menupage.bg_color=Background Color
+menupage.bg_r=Red(R):
+menupage.bg_g=Green(G):
+menupage.bg_b=Blue(B):
+menupage.bg_a=Alpha(A):
+menupage.apply_color=Apply Background Color
+menupage.bg_image=Custom Background Image
+menupage.load_image=Load Image
+menupage.clear_image=Clear Image
+menupage.image_path=Image Path:
+menupage.image_loaded=Background image loaded
+menupage.image_cleared=Background image cleared
+menupage.image_failed=Failed to load image
+menupage.controls=Menu Controls
+menupage.language=Language
+menupage.lang_current=Current Language:
+menupage.lang_switched=Language Switched
+menupage.reload=Reload Menu
+menupage.unload=Unload Menu
+menupage.main_menu=Return to Main Menu
+menupage.quit_game=Quit Game
+menupage.confirm_unload=Confirm unload? Click again
+menupage.confirm_quit=Confirm quit? Click again
+
+# ============ Creative Tab ============
+creative.title=Creative Mode
+creative.desc=Minecraft-like Creative Mode:
+creative.feat1=• Invincible + Flight + Inf Stamina
+creative.feat2=• Grab Through Walls + No Cooldown
+creative.feat3=• No Fog
+creative.toggle= Creative Mode
+creative.status_on=Status: Creative Mode ON
+creative.controls=Flight Controls
+creative.wasd=WASD Move, Space Up, Ctrl Down
+creative.shift=Shift - Speed Boost
+creative.active=Active Features:
+creative.god=  ✓ God Mode
+creative.hp=  ✓ Infinite Health
+creative.fly=  ✓ NoClip Flight
+creative.stam=  ✓ Infinite Stamina
+creative.grab=  ✓ Grab Through Walls
+creative.cd=  ✓ No Weapon Cooldown
+creative.fog=  ✓ No Fog
+creative.status_off=Status: Survival Mode
+
+# ============ Teleport Tab ============
+tp.quick=Quick Teleport
+tp.crosshair=Teleport to Crosshair
+tp.extraction=Teleport to Extraction
+tp.random=Random TP (50m)
+tp.waypoints=Waypoint Manager
+tp.name=Name:
+tp.save=Save Position
+tp.no_waypoints=No saved waypoints
+tp.goto=Go To Selected
+tp.delete=Delete Selected
+
+# ============ Server Tab ============
+server.title=Server Browser
+server.refresh=Refresh
+server.hide_full= Hide Full Rooms
+server.show_members= Show Members
+server.search=Search:
+server.sort_az=Region A-Z
+server.sort_za=Region Z-A
+server.sort_most=Most Players
+server.sort_least=Least Players
+server.col_name=Room Name
+server.col_players=Players
+server.col_region=Region
+server.col_host=Host
+server.fetching=Fetching..
+server.room_fmt=Room: {0}
+server.unknown=Unknown
+server.modded=(Modded)
+server.join=Join Room
+server.invite=Get Invite Link
+server.members=Room Members
+
+# ============ Common ============
+common.all=All
+common.void=The Void
+common.enemy=Enemy
+common.hp_unknown=HP: Unknown
+common.no_enemies=No Enemies Found
+common.unknown_player=Unknown Player
+common.alive=[Alive]
+common.dead=[Dead]
+common.no_players=No Players Found
+common.alive_list=Alive:
+common.dead_list=Dead:
+common.map_value_fmt=Total Map Value ${0}
+common.select_feature=Select Feature to Bind
+common.cancel=Cancel
+common.close=Close
+common.chams_picker=Chams Color Picker
+common.status_wait=Waiting...
+common.all_players=All Players
+common.tp_options=Teleport Options
+common.to=to
+common.execute_tp=Execute Teleport
+common.fetching_players=Fetching players...
+
+# ============ Radar Legends ============
+radar.enemy=Enemy
+radar.player=Player
+radar.item=Item
+radar.extract=Extract
+
+# ============ ESP Presets ============
+preset.custom=Custom
+preset.high_value=High Val
+preset.enemy_only=Enemy
+preset.player_only=Player
+preset.everything=All
+preset.stealth=Stealth
+
+# ============ Color Names ============
+color.0=White
+color.1=Gray
+color.2=Black
+color.3=Light Red
+color.4=Red
+color.5=Dark Red 1
+color.6=Dark Red 2
+color.7=Bright Pink 1
+color.8=Bright Pink 2
+color.9=Bright Purple
+color.10=Light Purple 1
+color.11=Light Purple 2
+color.12=Purple
+color.13=Dark Purple 1
+color.14=Dark Purple 2
+color.15=Dark Blue
+color.16=Blue
+color.17=Light Blue 1
+color.18=Light Blue 2
+color.19=Cyan
+color.20=Light Green 1
+color.21=Light Green 2
+color.22=Light Green 3
+color.23=Green
+color.24=Green 2
+color.25=Dark Green 1
+color.26=Dark Green 2
+color.27=Dark Green 3
+color.28=Light Yellow
+color.29=Yellow
+color.30=Dark Yellow
+color.31=Orange
+color.32=Dark Orange
+color.33=Brown
+color.34=Olive
+color.35=Skin
+
+# Chams sub-window labels
+chams.enemy_visible=Enemy Visible
+chams.enemy_hidden=Enemy Hidden
+chams.item_visible=Item Visible
+chams.item_hidden=Item Hidden
+
+# ============ New Features ============
+# Self Tab - New
+self.max_all_upgrades=⬆ Max All Upgrades
+self.game_speed_fmt=Game Speed: {0}x
+self.stealth_mode=Network Stealth (Anti-Cheat)
+
+# Combat Tab - Aimbot
+combat.aimbot_title=━━ Aimbot ━━
+combat.aimbot_toggle=Enable Aimbot (Hold Gun + RMB)
+combat.aimbot_smooth_fmt=Smoothness: {0}
+combat.aimbot_range_fmt=Max Range: {0}m
+
+# Enemies Tab - New
+enemies.freeze=❄ Freeze All Enemies
+enemies.unfreeze=▶ Unfreeze All Enemies
+enemies.disable_traps=🚫 Disable All Traps
+
+# Items Tab - New
+items.inflate_title=━━ Value Inflation ━━
+items.inflate_10x=10x Inflate
+items.inflate_100x=100x Inflate
+items.inflate_max=MAX All ($99999)
+items.duplicate=📋 Duplicate Held Item
+
+# Misc Tab - New
+misc.round_tools=━━ Round Tools ━━
+misc.zero_haul=Zero Haul Goal (Instant Win)
+misc.auto_complete=⚡ Auto-Complete Round
+misc.chat_commands=━━ Chat Commands ━━
+misc.chat_commands_desc=Type !help to see all commands
+
+# Haul Goal Feedback
+haul.zeroed=✓ Haul goal zeroed!
+haul.no_round=✗ No active round
+haul.no_field=✗ Haul goal field not found
+haul.error=✗ Error: {0}
+
+# Chat Commands
+cmd.god_on=✓ God mode ON
+cmd.god_off=✓ God mode OFF
+cmd.noclip_on=✓ Noclip ON
+cmd.noclip_off=✓ Noclip OFF
+cmd.tp_success=✓ Teleported to: {0}
+cmd.tp_notfound=✗ Player not found: {0}
+cmd.kill_self=✓ Self-kill
+cmd.kill_all=✓ All enemies killed
+cmd.speed=✓ Game speed: {0}x
+cmd.heal=✓ Healed
+cmd.items_tp=✓ All items teleported
+cmd.upgrade=✓ All maxed
+cmd.freeze_on=✓ Enemies frozen
+cmd.freeze_off=✓ Enemies unfrozen
+cmd.inflate=✓ Items inflated
+cmd.dup_ok=✓ Duplicated
+cmd.dup_fail=✗ Not holding item
+cmd.stealth_on=✓ Stealth ON
+cmd.stealth_off=✓ Stealth OFF
+cmd.help_title=━━ Command List ━━
+cmd.unknown=✗ Unknown command: {0}
+
+# Item Name Translations
+item.name.Diamond=Diamond
+item.name.Gold Bar=Gold Bar
+item.name.Cash Register=Cash Register
+item.name.Goblet=Goblet
+item.name.Crown=Crown
+item.name.Necklace=Necklace
+item.name.Ring=Ring
+item.name.Watch=Watch
+item.name.Vase=Vase
+item.name.Painting=Painting
+item.name.Statue=Statue
+item.name.Trophy=Trophy
+item.name.Lamp=Lamp
+item.name.Clock=Clock
+item.name.Music Box=Music Box
+item.name.Globe=Globe
+item.name.Telescope=Telescope
+item.name.Crystal Ball=Crystal Ball
+item.name.Hourglass=Hourglass
+item.name.Chalice=Chalice
+item.name.Candelabra=Candelabra
+item.name.Mirror=Mirror
+item.name.Book=Book
+item.name.Chest=Chest
+item.name.Urn=Urn
+item.name.Skull=Skull
+item.name.Plate=Plate
+item.name.Coin=Coin
+item.name.Gem=Gem
+item.name.Figurine=Figurine
+item.name.Doll=Doll
+item.name.Toy=Toy
+item.name.Instrument=Instrument
+item.name.Orb=Orb
+item.name.Egg=Egg
+item.name.Cube=Cube
+item.name.Relic=Relic
+item.name.Idol=Idol
+item.name.Artifact=Artifact
+item.name.Jewel=Jewel
+

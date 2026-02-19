@@ -14,6 +14,7 @@ public static class CreativeMode
 
     // 进入创造模式前的状态备份
     private static bool prevGodMode;
+    private static bool prevInfiniteHealth;
     private static bool prevNoclip;
     private static bool prevInfStamina;
     private static bool prevGrabThroughWalls;
@@ -31,8 +32,7 @@ public static class CreativeMode
 
     public static void ToggleCreativeMode()
     {
-        isCreativeMode = !isCreativeMode;
-
+        // 注意：isCreativeMode 已由 ToggleLogic 设置，此处不再翻转
         if (isCreativeMode)
         {
             EnterCreativeMode();
@@ -47,6 +47,7 @@ public static class CreativeMode
     {
         // 备份当前状态
         prevGodMode = Hax2.godModeActive;
+        prevInfiniteHealth = Hax2.infiniteHealthActive;
         prevNoclip = NoclipController.noclipActive;
         prevInfStamina = Hax2.stamineState;
         prevGrabThroughWalls = Hax2.grabThroughWallsEnabled;
@@ -59,7 +60,7 @@ public static class CreativeMode
         if (!Hax2.godModeActive)
         {
             Hax2.godModeActive = true;
-            PlayerController.GodMode();
+            PlayerController.SetGodMode(true);
         }
 
         if (!Hax2.infiniteHealthActive)
@@ -106,7 +107,7 @@ public static class CreativeMode
         if (!prevGodMode && Hax2.godModeActive)
         {
             Hax2.godModeActive = false;
-            PlayerController.GodMode();
+            PlayerController.SetGodMode(false);
         }
 
         if (!prevNoclip && NoclipController.noclipActive)
@@ -121,7 +122,12 @@ public static class CreativeMode
             PlayerController.MaxStamina();
         }
 
-        Hax2.infiniteHealthActive = prevGodMode ? Hax2.infiniteHealthActive : false;
+        // 恢复无限血量状态
+        if (!prevInfiniteHealth && Hax2.infiniteHealthActive)
+        {
+            Hax2.infiniteHealthActive = false;
+            PlayerController.MaxHealth();
+        }
 
         if (!prevGrabThroughWalls && Hax2.grabThroughWallsEnabled)
         {

@@ -26,18 +26,52 @@ public static class NoclipController
 
 	private static MethodInfo antiGravityMethod;
 
+	/// <summary>
+	/// 检测 playerControllerInstance 是否真正有效（包括Unity对象已销毁的情况）
+	/// </summary>
+	private static bool IsPlayerControllerValid()
+	{
+		if (playerControllerInstance == null) return false;
+		// 对于Unity对象，需要用Unity的null检查来检测已销毁的对象
+		if (playerControllerInstance is UnityEngine.Object unityObj)
+		{
+			return (Object)(object)unityObj != (Object)null;
+		}
+		return true;
+	}
+
+	/// <summary>
+	/// 重置所有缓存的引用，下次使用时会重新查找
+	/// </summary>
+	public static void ResetState()
+	{
+		playerControllerInstance = null;
+		rbField = null;
+		customGravityField = null;
+		antiGravityMethod = null;
+		jumpAction = null;
+		crouchAction = null;
+		sprintAction = null;
+	}
+
 	private static void InitializePlayerController()
 	{
 		if (playerControllerType == null)
 		{
 			Debug.LogError((object)"未找到 PlayerController 类型。");
+			return;
 		}
-		else if (playerControllerInstance == null)
+		// 使用 Unity-safe 检查，处理对象已被销毁的情况
+		if (!IsPlayerControllerValid())
 		{
+			playerControllerInstance = null;
+			rbField = null;
+			customGravityField = null;
+			antiGravityMethod = null;
+
 			playerControllerInstance = Object.FindObjectOfType(playerControllerType);
 			if (playerControllerInstance == null)
 			{
-				Debug.LogError((object)"当前场景未找到 PlayerController 实例。");
 				return;
 			}
 			rbField = playerControllerType.GetField("rb", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -117,8 +151,10 @@ public static class NoclipController
 		//IL_00e4: Unknown result type (might be due to invalid IL or missing references)
 		//IL_009b: Unknown result type (might be due to invalid IL or missing references)
 		InitializePlayerController();
-		if (playerControllerInstance == null)
+		if (!IsPlayerControllerValid())
 		{
+			Debug.Log((object)"[Noclip] PlayerController 未找到，重置状态等待重试");
+			ResetState();
 			return;
 		}
 		if (rbField != null)
@@ -186,77 +222,58 @@ public static class NoclipController
 
 	public static void UpdateMovement()
 	{
-		//IL_007b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0080: Unknown result type (might be due to invalid IL or missing references)
-		//IL_008d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00c9: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00cb: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00d0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00d5: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00df: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00e1: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00e6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00eb: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f5: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00fc: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0101: Unknown result type (might be due to invalid IL or missing references)
-		//IL_010b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_010d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0112: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0117: Unknown result type (might be due to invalid IL or missing references)
-		//IL_013f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0140: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0145: Unknown result type (might be due to invalid IL or missing references)
-		//IL_014a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_015e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_015f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0164: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0169: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0197: Unknown result type (might be due to invalid IL or missing references)
-		//IL_019e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01a8: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01ad: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01b0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01b5: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01b6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_020c: Unknown result type (might be due to invalid IL or missing references)
 		try
 		{
-			if (!noclipActive || playerControllerInstance == null)
+			if (!noclipActive) return;
+
+			// 检测PlayerController是否有效（死亡/进商店后可能被销毁）
+			if (!IsPlayerControllerValid())
 			{
-				if (playerControllerInstance == null)
-				{
-					Debug.Log((object)"PlayerControllerInstance 为 null");
-				}
-				else
-				{
-					Debug.Log((object)"noclipActive 为 false");
-				}
+				ResetState();
+				InitializePlayerController();
+				if (!IsPlayerControllerValid()) return; // 等待下一帧重试
+				// 重新找到PlayerController，重新激活noclip
+				ToggleNoclip();
 				return;
 			}
+
+			// === 每帧强制清零物理状态，防止向上飘移 ===
+			if (rbField != null)
+			{
+				object rbObj = rbField.GetValue(playerControllerInstance);
+				Rigidbody rb = (Rigidbody)((rbObj is Rigidbody) ? rbObj : null);
+				if ((Object)(object)rb != (Object)null)
+				{
+					rb.velocity = Vector3.zero;
+					rb.angularVelocity = Vector3.zero;
+				}
+			}
+			// 每帧强制 CustomGravity=0 防止游戏系统恢复重力
+			if (customGravityField != null)
+			{
+				customGravityField.SetValue(playerControllerInstance, 0f);
+			}
+
+			// === 翻滚状态下仍可穿墙移动：强制停止翻滚物理 ===
+			CancelTumblePhysics();
+
 			if (jumpAction == null || crouchAction == null || sprintAction == null)
 			{
-				Debug.Log((object)"Jump/Crouch/Sprint 为空，正在初始化输入动作。");
 				InitializeInputActions();
 			}
 			Camera main = Camera.main;
 			if ((Object)(object)main == (Object)null)
 			{
-				Debug.LogError((object)"Camera.main 为空！");
-				noclipActive = false;
-				return;
+				return; // 等待相机恢复，不关闭noclip
 			}
 			Vector3 val = Vector3.zero;
 			Transform transform = ((Component)main).transform;
 			Transform transform2 = ((Component)(MonoBehaviour)playerControllerInstance).transform;
 			if ((Object)(object)transform2 == (Object)null)
 			{
-				Debug.LogError((object)"玩家 Transform 为空！");
-				noclipActive = false;
-				return;
+				ResetState();
+				return; // 等待下一帧重试
 			}
-			Debug.Log((object)"处理按键输入前。");
 			if (Input.GetKey((KeyCode)119))
 			{
 				val += transform.forward;
@@ -273,8 +290,6 @@ public static class NoclipController
 			{
 				val += transform.right;
 			}
-			Debug.Log((object)"处理按键输入后。");
-			Debug.Log((object)"处理跳跃/下蹲前。");
 			if (jumpAction != null && jumpAction.IsPressed())
 			{
 				val += Vector3.up;
@@ -283,28 +298,51 @@ public static class NoclipController
 			{
 				val -= Vector3.up;
 			}
-			Debug.Log((object)"处理跳跃/下蹲后。");
 			float num = ((sprintAction != null && sprintAction.IsPressed()) ? 20f : 10f);
 			val = val.normalized * num * Time.deltaTime;
 			transform2.position += val;
-			Debug.Log((object)"更新玩家位置后。");
-			if (sprintAction != null && !sprintAction.IsPressed() && rbField != null)
-			{
-				object value = rbField.GetValue(playerControllerInstance);
-				Rigidbody val2 = (Rigidbody)((value is Rigidbody) ? value : null);
-				if ((Object)(object)val2 != (Object)null)
-				{
-					val2.velocity = Vector3.zero;
-					return;
-				}
-				Debug.LogError((object)"Rigidbody（rb）为空！");
-				noclipActive = false;
-			}
 		}
 		catch (Exception ex)
 		{
 			Debug.LogError((object)("NoclipController.UpdateMovement 出错：" + ex.Message));
-			noclipActive = false;
+			ResetState();
+			// 不关闭 noclipActive，允许下一帧重试
 		}
+	}
+
+	/// <summary>
+	/// 翻滚状态下强制停止翻滚物理，使穿墙仍然有效
+	/// </summary>
+	private static void CancelTumblePhysics()
+	{
+		try
+		{
+			if (!IsPlayerControllerValid()) return;
+
+			Type tumbleType = Type.GetType("PlayerTumble, Assembly-CSharp");
+			if (tumbleType == null) return;
+
+			Component tumble = ((Component)(MonoBehaviour)playerControllerInstance).GetComponentInChildren(tumbleType);
+			if (tumble == null) return;
+
+			// 获取 tumbleActive 字段并设为 false
+			FieldInfo tumbleActiveField = tumbleType.GetField("tumbleActive", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			if (tumbleActiveField != null)
+			{
+				bool isTumbling = (bool)tumbleActiveField.GetValue(tumble);
+				if (isTumbling)
+				{
+					tumbleActiveField.SetValue(tumble, false);
+				}
+			}
+
+			// 同时尝试设置 tumbleTimer 为 0
+			FieldInfo tumbleTimerField = tumbleType.GetField("tumbleTimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			if (tumbleTimerField != null)
+			{
+				tumbleTimerField.SetValue(tumble, 0f);
+			}
+		}
+		catch { }
 	}
 }

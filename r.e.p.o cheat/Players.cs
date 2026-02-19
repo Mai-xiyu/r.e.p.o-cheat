@@ -380,4 +380,175 @@ internal static class Players
 		}
 		return (int)field.GetValue(playerHealthInstance);
 	}
+
+	/// <summary>
+	/// 复活自己 - 无需主机权限
+	/// 通过RPC同步确保所有客户端看到复活效果
+	/// </summary>
+	public static void ReviveSelf()
+	{
+		try
+		{
+			// 找到本地玩家的 PlayerAvatar
+			List<PlayerAvatar> players = SemiFunc.PlayerGetList();
+			if (players == null || players.Count == 0)
+			{
+				Debug.Log((object)"[ReviveSelf] 没有找到玩家列表");
+				return;
+			}
+
+			object localPlayer = null;
+			foreach (PlayerAvatar avatar in players)
+			{
+				FieldInfo pvField = ((object)avatar).GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				if (pvField == null) continue;
+				object pvObj = pvField.GetValue(avatar);
+				PhotonView pv = (PhotonView)((pvObj is PhotonView) ? pvObj : null);
+				if ((Object)(object)pv != (Object)null && pv.IsMine)
+				{
+					localPlayer = avatar;
+					break;
+				}
+			}
+
+			if (localPlayer == null)
+			{
+				Debug.Log((object)"[ReviveSelf] 无法找到本地玩家");
+				return;
+			}
+
+			// 获取 playerDeathHead
+			FieldInfo deathHeadField = localPlayer.GetType().GetField("playerDeathHead", BindingFlags.Instance | BindingFlags.Public);
+			if (deathHeadField != null)
+			{
+				object deathHead = deathHeadField.GetValue(localPlayer);
+				if (deathHead != null)
+				{
+					// 设置 inExtractionPoint = true（跳过撤离点检查）
+					FieldInfo extractField = deathHead.GetType().GetField("inExtractionPoint", BindingFlags.Instance | BindingFlags.NonPublic);
+					if (extractField != null)
+					{
+						extractField.SetValue(deathHead, true);
+					}
+
+					// 调用 Revive() 方法
+					MethodInfo reviveMethod = deathHead.GetType().GetMethod("Revive", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					if (reviveMethod != null)
+					{
+						reviveMethod.Invoke(deathHead, null);
+					}
+
+					// 通过 RPC 同步 Revive（让其他客户端也看到）
+					FieldInfo deathHeadPvField = deathHead.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					if (deathHeadPvField != null)
+					{
+						object dpvObj = deathHeadPvField.GetValue(deathHead);
+						PhotonView dpv = (PhotonView)((dpvObj is PhotonView) ? dpvObj : null);
+						if ((Object)(object)dpv != (Object)null)
+						{
+							try { dpv.RPC("ReviveRPC", (RpcTarget)0, Array.Empty<object>()); } catch { }
+						}
+					}
+				}
+			}
+
+			// 恢复血量
+			FieldInfo healthField = localPlayer.GetType().GetField("playerHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			if (healthField != null)
+			{
+				object healthInstance = healthField.GetValue(localPlayer);
+				if (healthInstance != null)
+				{
+					int maxHP = GetPlayerMaxHealth(healthInstance);
+					// 设置本地血量
+					FieldInfo hpField = healthInstance.GetType().GetField("health", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					if (hpField != null)
+					{
+						hpField.SetValue(healthInstance, maxHP);
+					}
+					// RPC 同步血量
+					FieldInfo pvField = localPlayer.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					if (pvField != null)
+					{
+						object pvObj = pvField.GetValue(localPlayer);
+						PhotonView pv = (PhotonView)((pvObj is PhotonView) ? pvObj : null);
+						if ((Object)(object)pv != (Object)null && PhotonNetwork.IsConnected)
+						{
+							try { pv.RPC("UpdateHealthRPC", (RpcTarget)0, new object[] { maxHP, maxHP, true }); } catch { }
+							try { pv.RPC("HealRPC", (RpcTarget)0, new object[] { maxHP, true }); } catch { }
+						}
+					}
+				}
+			}
+
+			Debug.Log((object)"[ReviveSelf] 已复活自己");
+		}
+		catch (Exception ex)
+		{
+			Debug.LogError((object)("[ReviveSelf] 出错: " + ex.Message));
+		}
+	}
+
+	/// <summary>
+	/// 治疗复活队友 - 通过RPC同步，不需要主机权限
+	/// 先恢复血量（通过HealPlayer），然后尝试复活死亡头/玩家
+	/// </summary>
+	public static void HealRevivePlayer(object targetPlayer, string playerName)
+	{
+		if (targetPlayer == null) return;
+
+		try
+		{
+			// 1. 先尝试复活（如果已死亡）
+			FieldInfo deathHeadField = targetPlayer.GetType().GetField("playerDeathHead", BindingFlags.Instance | BindingFlags.Public);
+			if (deathHeadField != null)
+			{
+				object deathHead = deathHeadField.GetValue(targetPlayer);
+				if (deathHead != null)
+				{
+					// 设置 inExtractionPoint = true
+					FieldInfo extractField = deathHead.GetType().GetField("inExtractionPoint", BindingFlags.Instance | BindingFlags.NonPublic);
+					if (extractField != null)
+					{
+						extractField.SetValue(deathHead, true);
+					}
+					// 调用 Revive()
+					MethodInfo reviveMethod = deathHead.GetType().GetMethod("Revive", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					if (reviveMethod != null)
+					{
+						reviveMethod.Invoke(deathHead, null);
+					}
+					// RPC 同步
+					FieldInfo dhPvField = deathHead.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					if (dhPvField != null)
+					{
+						object dpvObj = dhPvField.GetValue(deathHead);
+						PhotonView dpv = (PhotonView)((dpvObj is PhotonView) ? dpvObj : null);
+						if ((Object)(object)dpv != (Object)null)
+						{
+							try { dpv.RPC("ReviveRPC", (RpcTarget)0, Array.Empty<object>()); } catch { }
+						}
+					}
+				}
+			}
+
+			// 2. 恢复满血 (通过已有的 HealPlayer，自带 RPC 同步)
+			FieldInfo healthField = targetPlayer.GetType().GetField("playerHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			if (healthField != null)
+			{
+				object healthInstance = healthField.GetValue(targetPlayer);
+				if (healthInstance != null)
+				{
+					int maxHP = GetPlayerMaxHealth(healthInstance);
+					HealPlayer(targetPlayer, maxHP, playerName);
+				}
+			}
+
+			Debug.Log((object)("[HealRevive] 已治疗复活: " + playerName));
+		}
+		catch (Exception ex)
+		{
+			Debug.LogError((object)("[HealRevive] 出错: " + ex.Message));
+		}
+	}
 }

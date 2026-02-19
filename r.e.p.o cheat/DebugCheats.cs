@@ -168,13 +168,21 @@ internal static class DebugCheats
 
 	private static Dictionary<Renderer, Material[]> itemOriginalMaterials;
 
-	private static bool cachedOriginalCamera;
+	private static bool enemyCachedOriginalCamera;
 
-	private static float originalFarClipPlane;
+	private static float enemyOriginalFarClipPlane;
 
-	private static DepthTextureMode originalDepthTextureMode;
+	private static DepthTextureMode enemyOriginalDepthTextureMode;
 
-	private static bool originalOcclusionCulling;
+	private static bool enemyOriginalOcclusionCulling;
+
+	private static bool itemCachedOriginalCamera;
+
+	private static float itemOriginalFarClipPlane;
+
+	private static DepthTextureMode itemOriginalDepthTextureMode;
+
+	private static bool itemOriginalOcclusionCulling;
 
 	private static List<PlayerData> playerDataList;
 
@@ -248,10 +256,14 @@ internal static class DebugCheats
 		itemVisibleColor = new Color(0.6f, 0.6f, 0f, 0.85f);
 		itemHiddenColor = new Color(0.6f, 0.3f, 0f, 0.4f);
 		itemOriginalMaterials = new Dictionary<Renderer, Material[]>();
-		cachedOriginalCamera = false;
-		originalFarClipPlane = 0f;
-		originalDepthTextureMode = (DepthTextureMode)0;
-		originalOcclusionCulling = false;
+		enemyCachedOriginalCamera = false;
+		enemyOriginalFarClipPlane = 0f;
+		enemyOriginalDepthTextureMode = (DepthTextureMode)0;
+		enemyOriginalOcclusionCulling = false;
+		itemCachedOriginalCamera = false;
+		itemOriginalFarClipPlane = 0f;
+		itemOriginalDepthTextureMode = (DepthTextureMode)0;
+		itemOriginalOcclusionCulling = false;
 		playerDataList = new List<PlayerData>();
 		playerUpdateInterval = 1f;
 		playerHealthCache = new Dictionary<int, int>();
@@ -259,12 +271,7 @@ internal static class DebugCheats
 		enemyHealthCache = new Dictionary<Enemy, int>();
 		_levelAnimationStartedField = typeof(LoadingUI).GetField("levelAnimationStarted", BindingFlags.Instance | BindingFlags.NonPublic);
 		drawChamsBool = false;
-		cachedCamera = Camera.main;
-		if ((Object)(object)cachedCamera != (Object)null)
-		{
-			scaleX = (float)Screen.width / (float)cachedCamera.pixelWidth;
-			scaleY = (float)Screen.height / (float)cachedCamera.pixelHeight;
-		}
+		cachedCamera = null; // 延迟到DrawESP时获取，避免静态构造时Camera.main为空
 		UpdateLists();
 		UpdateLocalPlayer();
 		UpdateExtractionPointList();
@@ -1062,8 +1069,12 @@ internal static class DebugCheats
 		//IL_18b6: Unknown result type (might be due to invalid IL or missing references)
 		//IL_18fa: Unknown result type (might be due to invalid IL or missing references)
 		//IL_18df: Unknown result type (might be due to invalid IL or missing references)
-		bool flag = _levelAnimationStartedField != null && (bool)_levelAnimationStartedField.GetValue(LoadingUI.instance);
-		if (((Object)(object)RunManager.instance.levelCurrent != (Object)null && !Hax2.levelsToSearchItems.Contains(((Object)RunManager.instance.levelCurrent).name)) || (!Hax2.levelsToSearchItems.Contains(((Object)RunManager.instance.levelCurrent).name) && flag))
+		if ((Object)(object)RunManager.instance == (Object)null)
+		{
+			return;
+		}
+		bool flag = _levelAnimationStartedField != null && (Object)(object)LoadingUI.instance != (Object)null && (bool)_levelAnimationStartedField.GetValue(LoadingUI.instance);
+		if (flag)
 		{
 			return;
 		}
@@ -1177,12 +1188,12 @@ internal static class DebugCheats
 			Camera main = Camera.main;
 			if ((Object)(object)main != (Object)null)
 			{
-				if (!cachedOriginalCamera)
+				if (!enemyCachedOriginalCamera)
 				{
-					originalFarClipPlane = main.farClipPlane;
-					originalDepthTextureMode = main.depthTextureMode;
-					originalOcclusionCulling = main.useOcclusionCulling;
-					cachedOriginalCamera = true;
+					enemyOriginalFarClipPlane = main.farClipPlane;
+					enemyOriginalDepthTextureMode = main.depthTextureMode;
+					enemyOriginalOcclusionCulling = main.useOcclusionCulling;
+					enemyCachedOriginalCamera = true;
 				}
 				main.farClipPlane = 500f;
 				main.depthTextureMode = (DepthTextureMode)0;
@@ -1248,16 +1259,16 @@ internal static class DebugCheats
 				}
 			}
 			enemyOriginalMaterials.Clear();
-			if (cachedOriginalCamera)
+			if (enemyCachedOriginalCamera)
 			{
 				Camera main2 = Camera.main;
 				if ((Object)(object)main2 != (Object)null)
 				{
-					main2.farClipPlane = originalFarClipPlane;
-					main2.depthTextureMode = originalDepthTextureMode;
-					main2.useOcclusionCulling = originalOcclusionCulling;
+					main2.farClipPlane = enemyOriginalFarClipPlane;
+					main2.depthTextureMode = enemyOriginalDepthTextureMode;
+					main2.useOcclusionCulling = enemyOriginalOcclusionCulling;
 				}
-				cachedOriginalCamera = false;
+				enemyCachedOriginalCamera = false;
 			}
 		}
 		if (drawItemEspBool && drawItemChamsBool)
@@ -1290,12 +1301,12 @@ internal static class DebugCheats
 			Camera main3 = Camera.main;
 			if ((Object)(object)main3 != (Object)null)
 			{
-				if (!cachedOriginalCamera)
+				if (!itemCachedOriginalCamera)
 				{
-					originalFarClipPlane = main3.farClipPlane;
-					originalDepthTextureMode = main3.depthTextureMode;
-					originalOcclusionCulling = main3.useOcclusionCulling;
-					cachedOriginalCamera = true;
+					itemOriginalFarClipPlane = main3.farClipPlane;
+					itemOriginalDepthTextureMode = main3.depthTextureMode;
+					itemOriginalOcclusionCulling = main3.useOcclusionCulling;
+					itemCachedOriginalCamera = true;
 				}
 				main3.farClipPlane = 500f;
 				main3.depthTextureMode = (DepthTextureMode)0;
@@ -1312,11 +1323,12 @@ internal static class DebugCheats
 				}
 			}
 			itemOriginalMaterials.Clear();
-			if (cachedOriginalCamera && (Object)(object)cachedCamera != (Object)null)
+			if (itemCachedOriginalCamera && (Object)(object)cachedCamera != (Object)null)
 			{
-				cachedCamera.farClipPlane = originalFarClipPlane;
-				cachedCamera.depthTextureMode = originalDepthTextureMode;
-				cachedCamera.useOcclusionCulling = originalOcclusionCulling;
+				cachedCamera.farClipPlane = itemOriginalFarClipPlane;
+				cachedCamera.depthTextureMode = itemOriginalDepthTextureMode;
+				cachedCamera.useOcclusionCulling = itemOriginalOcclusionCulling;
+				itemCachedOriginalCamera = false;
 			}
 		}
 		if (drawEspBool)
@@ -1338,24 +1350,23 @@ internal static class DebugCheats
 				{
 					continue;
 				}
-				Vector3 position = ((Component)enemy2).transform.position;
-				float num2 = 2f;
-				Vector3 val6 = ((Component)enemy2).transform.position + Vector3.up * num2;
-				Vector3 val7 = cachedCamera.WorldToScreenPoint(position);
-				Vector3 val8 = cachedCamera.WorldToScreenPoint(val6);
-				if (val7.z > 0f && val8.z > 0f)
+				// 使用 CenterTransform 作为参考点，避免俯仰角导致框消失
+				Vector3 centerWorld = enemy2.CenterTransform.position;
+				Vector3 centerScreen = cachedCamera.WorldToScreenPoint(centerWorld);
+				if (centerScreen.z > 0f)
 				{
-					float num3 = val7.x * scaleX;
-					float num4 = (float)Screen.height - val7.y * scaleY;
-					float num5 = (float)Screen.height - val8.y * scaleY;
-					float num6 = Mathf.Abs(num4 - num5);
-					float num7 = ((Component)enemy2).transform.localScale.y * 200f;
-					float z = val7.z;
-					float num8 = num7 / z * scaleX;
+					float distance = centerScreen.z;
+					float enemyScale = ((Component)enemy2).transform.localScale.y;
+					float worldHeight = 2f * Mathf.Max(enemyScale, 0.5f);
+					// 通过 FOV 和距离计算屏幕高度，不依赖两点投影
+					float halfTanFov = Mathf.Tan(cachedCamera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+					float num6 = (worldHeight / (2f * distance * halfTanFov)) * (float)Screen.height * scaleY;
+					float num7 = enemyScale * 200f;
+					float num8 = num7 / distance * scaleX;
 					num8 = Mathf.Clamp(num8, 30f, num6 * 1.2f);
 					num6 = Mathf.Clamp(num6, 40f, 400f);
-					float num9 = num3;
-					float num10 = num4;
+					float num9 = centerScreen.x * scaleX;
+					float num10 = (float)Screen.height - centerScreen.y * scaleY + num6 * 0.5f;
 					if (showEnemyBox)
 					{
 						Box(num9, num10, num8, num6, texture2, 1f);
@@ -1363,10 +1374,11 @@ internal static class DebugCheats
 					float num11 = 200f;
 					float num12 = num9 - num11 / 2f;
 					Component componentInParent2 = ((Component)enemy2).GetComponentInParent(Type.GetType("EnemyParent, Assembly-CSharp"));
-					string text = "敌人";
+					string text = L.T("common.enemy");
 					if ((Object)(object)componentInParent2 != (Object)null)
 					{
-						text = (((object)componentInParent2).GetType().GetField("enemyName", BindingFlags.Instance | BindingFlags.Public)?.GetValue(componentInParent2) as string) ?? "敌人";
+						string rawEnemyName = (((object)componentInParent2).GetType().GetField("enemyName", BindingFlags.Instance | BindingFlags.Public)?.GetValue(componentInParent2) as string) ?? "";
+						text = LanguageManager.GetEnemyName(rawEnemyName);
 					}
 					string text2 = "";
 					if (showEnemyHP && enemyHealthCache.ContainsKey(enemy2))
@@ -1375,7 +1387,7 @@ internal static class DebugCheats
 						enemyHealthCache[enemy2] = enemyHealth;
 						int enemyMaxHealth = Enemies.GetEnemyMaxHealth(enemy2);
 						float num13 = ((enemyMaxHealth > 0) ? ((float)enemyHealth / (float)enemyMaxHealth) : 0f);
-						text2 = ((enemyHealth >= 0) ? $" HP: {enemyHealth}/{enemyMaxHealth}" : "");
+						text2 = ((enemyHealth >= 0) ? L.T("esp.hp_fmt", enemyHealth, enemyMaxHealth) : "");
 						healthStyle.normal.textColor = ((num13 > 0.66f) ? Color.green : ((num13 > 0.33f) ? Color.yellow : Color.red));
 					}
 					string text3 = "";
@@ -1406,33 +1418,19 @@ internal static class DebugCheats
 		}
 		if (drawItemEspBool)
 		{
-			valuableObjects.RemoveAll(delegate(object item)
-			{
-				try
-				{
-					int result;
-					if (item != null)
-					{
-						Object val16 = (Object)((item is Object) ? item : null);
-						result = ((val16 != null && val16 == (Object)null) ? 1 : 0);
-					}
-					else
-					{
-						result = 1;
-					}
-					return (byte)result != 0;
-				}
-				catch
-				{
-					return true;
-				}
-			});
+			// 不再用 RemoveAll 修改共享列表，改为渲染时跳过无效条目
 			foreach (object valuableObject2 in valuableObjects)
 			{
 				if (valuableObject2 == null)
 				{
 					continue;
 				}
+				try
+				{
+					Object unityObj = (Object)((valuableObject2 is Object) ? valuableObject2 : null);
+					if (unityObj != null && unityObj == (Object)null) continue;
+				}
+				catch { continue; }
 				bool flag2 = valuableObject2.GetType().Name == "PlayerDeathHead";
 				if (!showPlayerDeathHeads && flag2)
 				{
@@ -1487,7 +1485,7 @@ internal static class DebugCheats
 				string text5;
 				if (flag2)
 				{
-					text5 = "死亡玩家头颅";
+					text5 = L.T("esp.death_head");
 					nameStyle.normal.textColor = Color.red;
 				}
 				else
@@ -1499,13 +1497,13 @@ internal static class DebugCheats
 						if (string.IsNullOrEmpty(text5))
 						{
 							object obj4 = ((valuableObject2 is Object) ? valuableObject2 : null);
-							text5 = ((obj4 != null) ? ((Object)obj4).name : null) ?? "未知";
+							text5 = ((obj4 != null) ? ((Object)obj4).name : null) ?? L.T("server.unknown");
 						}
 					}
 					catch (Exception ex5)
 					{
 						object obj5 = ((valuableObject2 is Object) ? valuableObject2 : null);
-						text5 = ((obj5 != null) ? ((Object)obj5).name : null) ?? "未知";
+						text5 = ((obj5 != null) ? ((Object)obj5).name : null) ?? L.T("server.unknown");
 						Debug.Log((object)("Error accessing item 'name': " + ex5.Message + ". Using GameObject name: " + text5));
 					}
 					if (text5.StartsWith("Valuable", StringComparison.OrdinalIgnoreCase))
@@ -1516,6 +1514,8 @@ internal static class DebugCheats
 					{
 						text5 = text5.Substring(0, text5.Length - "(Clone)".Length).Trim();
 					}
+					// i18n: 使用翻译系统获取物品名称
+					text5 = LanguageManager.GetItemName(text5);
 				}
 				int num20 = 0;
 				if (!flag2)
@@ -1604,11 +1604,13 @@ internal static class DebugCheats
 				{
 					float num28 = val11.x * scaleX;
 					float num29 = (float)Screen.height - val11.y * scaleY;
-					string text8 = "Extraction Point";
-					string text9 = " (" + extractionPoint2.CachedState + ")";
+					string text8 = L.T("esp.extraction");
+					string cachedState = extractionPoint2.CachedState;
+					string translatedState = (cachedState == "Active") ? L.T("esp.state_active") : ((cachedState == "Idle") ? L.T("esp.state_idle") : cachedState);
+					string text9 = " (" + translatedState + ")";
 					string text10 = ((showExtractionDistance && (Object)(object)localPlayer != (Object)null) ? $"{Vector3.Distance(localPlayer.transform.position, extractionPoint2.CachedPosition):F1}m" : "");
 					Color textColor3 = nameStyle.normal.textColor;
-					nameStyle.normal.textColor = ((extractionPoint2.CachedState == "Active") ? Color.green : ((extractionPoint2.CachedState == "Idle") ? Color.red : Color.cyan));
+					nameStyle.normal.textColor = ((cachedState == "Active") ? Color.green : ((cachedState == "Idle") ? Color.red : Color.cyan));
 					string text11 = (showExtractionNames ? (text8 + text9) : "");
 					if (showExtractionDistance)
 					{
@@ -1686,7 +1688,7 @@ internal static class DebugCheats
 				Color textColor4 = nameStyle.normal.textColor;
 				nameStyle.normal.textColor = Color.white;
 				int num42 = (playerHealthCache.ContainsKey(playerData.PhotonView.ViewID) ? playerHealthCache[playerData.PhotonView.ViewID] : 100);
-				string text12 = $"HP: {num42}";
+				string text12 = L.T("esp.player_hp_fmt", num42);
 				string text13 = ((showPlayerDistance && (Object)(object)localPlayer != (Object)null) ? $"{num35:F1}m" : "");
 				string text14 = (showPlayerNames ? playerData.Name : "");
 				if (showPlayerDistance)

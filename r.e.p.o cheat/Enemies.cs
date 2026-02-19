@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using Photon.Pun;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace r.e.p.o_cheat;
 
@@ -347,5 +348,96 @@ public static class Enemies
 			return -1f;
 		}
 		return (float)enemyHealth / (float)enemyMaxHealth;
+	}
+
+	// === 冻结所有敌人 ===
+	public static bool freezeAllEnemies = false;
+	private static Dictionary<Enemy, bool> savedNavMeshState = new Dictionary<Enemy, bool>();
+
+	public static void FreezeAllEnemies()
+	{
+		freezeAllEnemies = true;
+		try
+		{
+			List<EnemyParent> list = EnemyDirector.instance?.enemiesSpawned;
+			if (list == null) return;
+			foreach (var ep in list)
+			{
+				if ((Object)(object)ep == (Object)null) continue;
+				Enemy enemy = ((Component)ep).GetComponentInChildren<Enemy>();
+				if ((Object)(object)enemy == (Object)null) continue;
+				try
+				{
+					NavMeshAgent agent = ((Component)enemy).GetComponent<NavMeshAgent>();
+					if (agent != null && agent.enabled)
+					{
+						savedNavMeshState[enemy] = true;
+						agent.enabled = false;
+					}
+					// Also try to freeze Rigidbody
+					Rigidbody rb = ((Component)enemy).GetComponent<Rigidbody>();
+					if (rb != null) rb.isKinematic = true;
+				}
+				catch { }
+			}
+		}
+		catch (Exception ex) { Debug.LogWarning("[Enemies] FreezeAll: " + ex.Message); }
+	}
+
+	public static void UnfreezeAllEnemies()
+	{
+		freezeAllEnemies = false;
+		try
+		{
+			foreach (var kvp in savedNavMeshState)
+			{
+				if ((Object)(object)kvp.Key != (Object)null)
+				{
+					try
+					{
+						NavMeshAgent agent = ((Component)kvp.Key).GetComponent<NavMeshAgent>();
+						if (agent != null) agent.enabled = true;
+						Rigidbody rb = ((Component)kvp.Key).GetComponent<Rigidbody>();
+						if (rb != null) rb.isKinematic = false;
+					}
+					catch { }
+				}
+			}
+			savedNavMeshState.Clear();
+		}
+		catch (Exception ex) { Debug.LogWarning("[Enemies] UnfreezeAll: " + ex.Message); }
+	}
+
+	/// <summary>
+	/// 每帧调用: 持续冻结新刷出的敌人
+	/// </summary>
+	public static void UpdateFreeze()
+	{
+		if (!freezeAllEnemies) return;
+		try
+		{
+			List<EnemyParent> list = EnemyDirector.instance?.enemiesSpawned;
+			if (list == null) return;
+			foreach (var ep in list)
+			{
+				if ((Object)(object)ep == (Object)null) continue;
+				Enemy enemy = ((Component)ep).GetComponentInChildren<Enemy>();
+				if ((Object)(object)enemy == (Object)null) continue;
+				if (savedNavMeshState.ContainsKey(enemy)) continue;
+				try
+				{
+					NavMeshAgent agent = ((Component)enemy).GetComponent<NavMeshAgent>();
+					if (agent != null && agent.enabled)
+					{
+						savedNavMeshState[enemy] = true;
+						agent.enabled = false;
+					}
+					Rigidbody rb = ((Component)enemy).GetComponent<Rigidbody>();
+					if (rb != null) rb.isKinematic = true;
+				}
+				catch { }
+			}
+		}
+		catch { }
 	}
 }

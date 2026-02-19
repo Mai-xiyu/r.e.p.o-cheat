@@ -23,6 +23,52 @@ public class ModernESP : MonoBehaviour
 
 	public static bool sortByPrice = false;
 
+	private static TMP_FontAsset cachedCJKFont = null;
+	private static bool fontSearched = false;
+
+	/// <summary>
+	/// 获取支持中文的字体 (从游戏资源中查找)
+	/// </summary>
+	private static TMP_FontAsset GetCJKFont()
+	{
+		if (cachedCJKFont != null) return cachedCJKFont;
+		if (fontSearched) return null;
+		fontSearched = true;
+		try
+		{
+			var allFonts = Resources.FindObjectsOfTypeAll<TMP_FontAsset>();
+			foreach (var font in allFonts)
+			{
+				if (font == null) continue;
+				string fontName = font.name.ToLower();
+				if (fontName.Contains("cjk") || fontName.Contains("chinese") || fontName.Contains("noto") ||
+				    fontName.Contains("sourcehansans") || fontName.Contains("arial") || fontName.Contains("msyh"))
+				{
+					Debug.Log("[ModernESP] Found CJK font: " + font.name);
+					cachedCJKFont = font;
+					return font;
+				}
+			}
+			// If no CJK font found by name, try any font with more than 5000 characters
+			foreach (var font in allFonts)
+			{
+				if (font == null || font.name.Contains("Liberation")) continue;
+				if (font.characterTable != null && font.characterTable.Count > 3000)
+				{
+					Debug.Log("[ModernESP] Using font with many chars: " + font.name + " (" + font.characterTable.Count + " chars)");
+					cachedCJKFont = font;
+					return font;
+				}
+			}
+			Debug.LogWarning("[ModernESP] No CJK font found, using default");
+		}
+		catch (Exception ex)
+		{
+			Debug.LogWarning("[ModernESP] Font search error: " + ex.Message);
+		}
+		return null;
+	}
+
 	public static void Render()
 	{
 		if (Hax2.useModernESP)
@@ -50,6 +96,7 @@ public class ModernESP : MonoBehaviour
 			return;
 		}
 		Camera main = Camera.main;
+		if ((Object)(object)main == (Object)null) return;
 		foreach (ValuableObject item in list)
 		{
 			if (!((Object)(object)item == (Object)null) && !((Object)(object)((Component)item).gameObject == (Object)null))
@@ -74,8 +121,13 @@ public class ModernESP : MonoBehaviour
 		GameObject val = new GameObject("ESP_Label_Item_" + ((Object)item).name);
 		val.transform.SetParent(((Component)item).transform, false);
 		TextMeshPro val2 = val.AddComponent<TextMeshPro>();
+		var cjkFont = GetCJKFont();
+		if (cjkFont != null)
+		{
+			((TMP_Text)val2).font = cjkFont;
+		}
 		((TMP_Text)val2).fontSize = 3f;
-		((Graphic)val2).color = new Color(1f, 1f, 1f, 1f);
+		((Graphic)val2).color = new Color(1f, 0.95f, 0.3f, 1f); // 黄色
 		((TMP_Text)val2).alignment = (TextAlignmentOptions)514;
 		((TMP_Text)val2).enableWordWrapping = false;
 		((TMP_Text)val2).isOverlay = true;
@@ -91,11 +143,7 @@ public class ModernESP : MonoBehaviour
 
 	private static void UpdateItemLabel(ValuableObject item, TextMeshPro label, Camera cam)
 	{
-		//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0011: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00b2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00ef: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f4: Unknown result type (might be due to invalid IL or missing references)
+		if ((Object)(object)cam == (Object)null) return;
 		float num = Vector3.Distance(((Component)cam).transform.position, ((Component)item).transform.position);
 		float fontSize = Mathf.Clamp(0.2f + num - 1f, 0.2f, itemTextSize);
 		float num2 = 0f;
@@ -106,7 +154,7 @@ public class ModernESP : MonoBehaviour
 		}
 		bool flag = num2 >= sortFromPrice && num2 <= sortToPrice;
 		((TMP_Text)label).fontSize = fontSize;
-		((Graphic)label).color = new Color(1f, 1f, 1f, 1f);
+		((Graphic)label).color = new Color(1f, 0.95f, 0.3f, 1f); // 黄色
 		((TMP_Text)label).text = ((sortByPrice && !flag) ? "" : GetItemInfo(item));
 		if ((Object)(object)cam != (Object)null)
 		{
@@ -116,8 +164,8 @@ public class ModernESP : MonoBehaviour
 
 	private static string GetItemInfo(ValuableObject item)
 	{
-		string text = ((Object)item).name.Replace("Valuable", "").Replace("(Clone)", "").Trim();
-		string text2 = "?";
+		string text = LanguageManager.GetItemName(((Object)item).name);
+		var parts = new List<string>();
 		float num = 0f;
 		FieldInfo fieldInfo = ((object)item).GetType().GetField("dollarValueCurrent", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) ?? ((object)item).GetType().GetField("dollarValue", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 		if (fieldInfo != null)
@@ -126,13 +174,13 @@ public class ModernESP : MonoBehaviour
 		}
 		if (DebugCheats.showItemNames)
 		{
-			text2 = text2 + "\n" + text;
+			parts.Add(text);
 		}
 		if (DebugCheats.showItemValue)
 		{
-			text2 += $"\n<b>{num}$</b>";
+			parts.Add($"<b>{num}$</b>");
 		}
-		return text2;
+		return string.Join("\n", parts);
 	}
 
 	public static void ClearItemLabels()
@@ -160,6 +208,7 @@ public class ModernESP : MonoBehaviour
 			return;
 		}
 		Camera main = Camera.main;
+		if ((Object)(object)main == (Object)null) return;
 		foreach (EnemyParent item in list)
 		{
 			Enemy componentInChildren = ((Component)item).GetComponentInChildren<Enemy>();
@@ -185,8 +234,13 @@ public class ModernESP : MonoBehaviour
 		GameObject val = new GameObject("ESP_Label_Enemy_" + ((Object)enemy).name);
 		val.transform.SetParent(((Component)enemy).transform, false);
 		TextMeshPro val2 = val.AddComponent<TextMeshPro>();
+		var cjkFont = GetCJKFont();
+		if (cjkFont != null)
+		{
+			((TMP_Text)val2).font = cjkFont;
+		}
 		((TMP_Text)val2).fontSize = 3f;
-		((Graphic)val2).color = new Color(1f, 1f, 1f, 1f);
+		((Graphic)val2).color = new Color(1f, 0.3f, 0.3f, 1f); // 红色
 		((TMP_Text)val2).alignment = (TextAlignmentOptions)514;
 		((TMP_Text)val2).enableWordWrapping = false;
 		((TMP_Text)val2).isOverlay = true;
@@ -202,15 +256,11 @@ public class ModernESP : MonoBehaviour
 
 	private static void UpdateEnemyLabel(EnemyParent enemyParent, Enemy enemy, TextMeshPro label, Camera cam)
 	{
-		//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0011: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0055: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0081: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0086: Unknown result type (might be due to invalid IL or missing references)
+		if ((Object)(object)cam == (Object)null) return;
 		float num = Vector3.Distance(((Component)cam).transform.position, ((Component)enemy).transform.position);
 		float fontSize = Mathf.Clamp(0.2f + num - 1f, 0.2f, enemyTextSize);
 		((TMP_Text)label).fontSize = fontSize;
-		((Graphic)label).color = new Color(1f, 1f, 1f, 1f);
+		((Graphic)label).color = new Color(1f, 0.3f, 0.3f, 1f); // 红色
 		((TMP_Text)label).text = GetEnemyInfo(enemyParent, enemy);
 		if ((Object)(object)cam != (Object)null)
 		{
@@ -224,18 +274,18 @@ public class ModernESP : MonoBehaviour
 		{
 			return "";
 		}
-		string text = enemyParent.enemyName.Replace("Enemy -", "").Replace("(Clone)", "").Trim();
-		string text2 = "?";
+		string text = LanguageManager.GetEnemyName(enemyParent.enemyName);
+		var parts = new List<string>();
 		if (DebugCheats.showEnemyNames)
 		{
-			text2 = text2 + "\n" + text;
+			parts.Add(text);
 		}
 		if (DebugCheats.showEnemyHP)
 		{
 			object arg = typeof(EnemyHealth).GetField("healthCurrent", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(((Component)enemy).GetComponent<EnemyHealth>());
-			text2 += $"\n<b>{arg}HP</b>";
+			parts.Add($"<b>{arg}HP</b>");
 		}
-		return text2;
+		return string.Join("\n", parts);
 	}
 
 	public static void ClearEnemyLabels()

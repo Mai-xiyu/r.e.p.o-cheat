@@ -29,15 +29,29 @@ public static class ESPEnhancements
 
     public static ESPPreset currentPreset = ESPPreset.Custom;
 
-    // 预设名称
+    // 预设名称 - 动态获取
+    public static string[] GetPresetNames()
+    {
+        return new string[]
+        {
+            L.T("preset.custom"),
+            L.T("preset.high_value"),
+            L.T("preset.enemy_only"),
+            L.T("preset.player_only"),
+            L.T("preset.everything"),
+            L.T("preset.stealth")
+        };
+    }
+
+    // 保留静态引用兼容性
     public static readonly string[] presetNames = new string[]
     {
-        "自定义",
-        "高价物品",
-        "仅敌人",
-        "仅玩家",
-        "全部显示",
-        "隐蔽模式"
+        "Custom",
+        "High Value",
+        "Enemy",
+        "Player",
+        "All",
+        "Stealth"
     };
 
     private static void EnsureLineTex()
@@ -64,6 +78,10 @@ public static class ESPEnhancements
             Camera cam = Camera.main;
             if ((Object)(object)cam == (Object)null) return;
 
+            // DPI缩放 - 与DebugCheats保持一致
+            float scaleX = (float)Screen.width / cam.pixelWidth;
+            float scaleY = (float)Screen.height / cam.pixelHeight;
+
             Vector2 screenBottom = new Vector2(Screen.width / 2f, Screen.height);
 
             // 敌人追踪线
@@ -81,7 +99,7 @@ public static class ESPEnhancements
                             Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
                             if (screenPos.z > 0)
                             {
-                                DrawGUILine(screenBottom, new Vector2(screenPos.x, Screen.height - screenPos.y), new Color(1f, 0.2f, 0.2f, 0.5f), 1.5f);
+                                DrawGUILine(screenBottom, new Vector2(screenPos.x * scaleX, Screen.height - screenPos.y * scaleY), new Color(1f, 0.2f, 0.2f, 0.5f), 1.5f);
                             }
                         }
                     }
@@ -104,7 +122,7 @@ public static class ESPEnhancements
                             Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
                             if (screenPos.z > 0)
                             {
-                                DrawGUILine(screenBottom, new Vector2(screenPos.x, Screen.height - screenPos.y), new Color(1f, 1f, 0f, 0.4f), 1f);
+                                DrawGUILine(screenBottom, new Vector2(screenPos.x * scaleX, Screen.height - screenPos.y * scaleY), new Color(1f, 1f, 0f, 0.4f), 1f);
                             }
                         }
                     }
@@ -130,7 +148,7 @@ public static class ESPEnhancements
                             Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
                             if (screenPos.z > 0)
                             {
-                                DrawGUILine(screenBottom, new Vector2(screenPos.x, Screen.height - screenPos.y), new Color(0f, 1f, 0f, 0.5f), 1.5f);
+                                DrawGUILine(screenBottom, new Vector2(screenPos.x * scaleX, Screen.height - screenPos.y * scaleY), new Color(0f, 1f, 0f, 0.5f), 1.5f);
                             }
                         }
                     }
@@ -238,6 +256,7 @@ public static class ESPEnhancements
         EnsureLineTex();
 
         Color savedColor = GUI.color;
+        Matrix4x4 savedMatrix = GUI.matrix;
         GUI.color = color;
 
         float length = Vector2.Distance(start, end);
@@ -245,8 +264,8 @@ public static class ESPEnhancements
 
         GUIUtility.RotateAroundPivot(angle, start);
         GUI.DrawTexture(new Rect(start.x, start.y - width / 2f, length, width), lineTex);
-        GUIUtility.RotateAroundPivot(-angle, start);
 
+        GUI.matrix = savedMatrix;
         GUI.color = savedColor;
     }
 }

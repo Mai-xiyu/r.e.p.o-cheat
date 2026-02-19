@@ -1,0 +1,560 @@
+# ============================================
+# DARK MENU - 中文语言文件
+# 格式: key=value (每行一条)
+# ============================================
+
+# 语言元信息
+lang.name=中文
+
+# Tab 名称
+tab.self=自身
+tab.visuals=视觉
+tab.combat=战斗
+tab.misc=杂项
+tab.enemies=敌人
+tab.items=物品
+tab.hotkeys=热键
+tab.trolling=房间
+tab.config=配置
+tab.server=服务器
+tab.creative=创造
+tab.teleport=传送
+tab.menu=菜单
+
+# 菜单标题
+menu.title=DARK MENU 1.5
+
+# ============ 自身 Tab ============
+self.health=生命值
+self.god_mode= 上帝模式
+self.inf_health= 无限生命
+self.revive_self=复活自己
+self.movement=移动
+self.noclip= 穿墙模式
+self.inf_stamina= 无限体力
+self.auto_dodge= 自动闪避
+self.dodge_dist_fmt=闪避距离: {0}m
+self.misc=杂项
+self.rgb_player= 玩家RGB颜色
+self.no_fog= 去除迷雾
+self.watermark= 显示水印
+self.anti_grab= 防抓取保护
+self.give_crown=给予皇冠
+self.no_recoil= 无武器后坐力
+self.no_cooldown= 无武器冷却
+self.spread_fmt=扩散倍率: {0:F2}x ({1})
+self.spread_none=无扩散
+self.spread_normal=正常
+self.grab_walls= 穿墙抓取
+self.stats=玩家属性
+self.strength_fmt=力量: {0}
+self.throw_fmt=投掷力量: {0}
+self.speed_fmt=速度: {0}
+self.grab_range_fmt=抓取范围: {0}
+self.stam_delay_fmt=体力恢复延迟: {0}
+self.stam_rate_fmt=体力恢复速率: {0}
+self.extra_jump_fmt=额外跳跃: {0}
+self.tumble_fmt=翻滚发射力度: {0}
+self.jump_fmt=跳跃力度: {0}
+self.gravity_fmt=重力: {0}
+self.crouch_delay_fmt=蹲下延迟: {0}
+self.crouch_speed_fmt=蹲下速度: {0}
+self.slide_fmt=滑行减速: {0}
+self.flashlight_fmt=手电筒亮度: {0}
+self.fov_fmt=视野FOV: {0}
+self.fov_loading=加载FOV编辑器中...
+
+# ============ 视觉 Tab ============
+vis.modern_esp= 使用现代ESP
+vis.enemy_esp=敌人透视
+vis.enemy_toggle= 启用敌人透视
+vis.show_2d_box= 显示2D方框
+vis.show_chams= 显示发光模型
+vis.show_name= 显示名称
+vis.show_distance= 显示距离
+vis.show_health= 显示血量
+vis.item_esp=物品透视
+vis.item_toggle= 启用物品透视
+vis.show_3d_box= 显示3D方框
+vis.item_chams= 显示发光模型
+vis.chams_color=发光颜色设置
+vis.item_name= 显示名称
+vis.item_distance= 显示距离
+vis.max_dist_fmt=最大距离 {0}米
+vis.show_value= 显示价值
+vis.min_value_fmt=最小价值 ${0}
+vis.show_skulls= 显示死亡玩家头颅
+vis.extract_esp=撤离点透视
+vis.extract_toggle= 启用撤离点透视
+vis.show_name_status= 显示名称/状态
+vis.extract_dist= 显示距离
+vis.player_esp=玩家透视
+vis.player_toggle= 启用玩家透视
+vis.player_2d= 显示2D方框
+vis.player_3d= 显示3D方框
+vis.player_name= 显示名称
+vis.player_dist= 显示距离
+vis.player_hp= 显示血量
+vis.player_list= 显示存活/死亡列表
+vis.trace=追踪线
+vis.trace_enemy= 敌人追踪线
+vis.trace_item= 物品追踪线
+vis.trace_player= 玩家追踪线
+vis.esp_presets=ESP预设
+vis.radar=雷达
+vis.radar_toggle= 小地图雷达
+vis.radar_range_fmt=扫描范围: {0}
+
+# ============ 战斗 Tab ============
+combat.select=选择玩家:
+combat.damage=-1 伤害
+combat.heal=最大治疗
+combat.kill=击杀
+combat.revive=复活
+combat.heal_revive=治疗复活 (RPC同步)
+combat.tumble=翻滚 (10秒)
+combat.hide_tp=隐藏传送选项
+combat.show_tp=显示传送选项
+
+# ============ 杂项 Tab ============
+misc.select=选择玩家:
+misc.spawn_money=[主机] 生成金钱
+misc.spoof_name=伪造名字
+misc.spoof_btn=伪造
+misc.reset_spoof=重置伪造名称
+misc.random_player_name=随机房间玩家名
+misc.random_string=随机字符串
+misc.persist_spoof= 持久伪造名称
+misc.spoof_color=伪造颜色
+misc.select_color=选择颜色
+misc.rainbow= 彩虹模式
+misc.chat_spam=聊天刷屏
+misc.send=发送
+misc.activate_extraction=激活所有撤离点
+misc.map_tweaks=地图调整 (关卡内不可撤销):
+misc.disable_overlay=禁用 '?' 覆盖层
+misc.discover_valuables=发现地图贵重物品
+
+# ============ 敌人 Tab ============
+enemies.select=选择敌人:
+enemies.spawn=[主机] 生成
+enemies.select_fallback=选择敌人
+enemies.kill=击杀敌人
+enemies.kill_all=击杀所有敌人
+enemies.blind= 致盲敌人
+enemies.hide_tp=隐藏传送选项
+enemies.show_tp=显示传送选项
+enemies.tp_to=传送敌人到 ↓
+enemies.no_player=无玩家可用
+enemies.execute_tp=执行传送
+
+# ============ 物品 Tab ============
+items.auto=自动功能
+items.auto_pickup= 自动拾取
+items.pickup_range_fmt=拾取范围: {0}m
+items.min_value_fmt=最小价值: {0}
+items.auto_sell= 自动卖出(传送到撤离点)
+items.select=选择物品:
+items.value_fmt=[价值 ${0}]
+items.tp_to_me=将物品传送到我
+items.tp_all=将所有物品传送到我
+items.modify_value=修改物品价值
+items.apply_value=应用价值修改
+items.hide_spawner=隐藏物品生成器
+items.show_spawner=显示物品生成器
+items.select_spawn=选择要生成的物品:
+items.spawn=生成选中物品
+items.spawn_50=生成50个选中物品
+
+# ============ 热键 Tab ============
+hotkeys.config=热键配置
+hotkeys.how_to=如何设置热键:
+hotkeys.step1=1. 点击按键字段 → 按下想要的键
+hotkeys.step2=2. 点击动作字段 → 选择功能
+hotkeys.warning=警告: 每个按键只分配给一个动作
+hotkeys.system=系统按键
+hotkeys.menu_toggle=菜单开关
+hotkeys.reload=重载:
+hotkeys.unload=卸载:
+hotkeys.action=动作热键
+hotkeys.press_key=按下任意键...
+hotkeys.not_set=未设置
+hotkeys.need_key=请先分配按键
+hotkeys.clear=清除
+hotkeys.save=保存热键
+hotkeys.saved=热键已保存
+
+# ============ 房间 Tab ============
+room.select=选择玩家:
+room.force_host=强制夺取主机
+room.force_host_info=禁用NetworkManager → 设为主机 → 恢复
+room.forcing=正在夺取主机...
+room.force_success=已成为主机！
+room.force_fail=夺取失败（未在房间中）
+room.not_in_room=不在房间中
+room.current_host=当前主机:
+room.auto_force=全自动夺取主机
+room.pick_method=或选择单个方法:
+room.crash_host=崩溃主机
+room.local_fake=本地伪装
+room.already_host=你已经是主机了
+room.crashing_host=正在崩溃当前主机...
+room.waiting_promotion=等待自动提升...
+room.method_fail_fmt=方法 {0} 失败
+room.trying_method_fmt=尝试方法 {0}...
+room.auto_suggest_crash=自动方法均失败，建议尝试“崩溃主机”
+room.local_fake_done=本地伪装完成 (仅本地有效)
+room.trolling=恶搞功能
+trolling.select=选择玩家:
+trolling.bubble=激活冲气泡泡
+trolling.clown=触摸小丑鼻子
+trolling.glitch=强制故障
+trolling.unmute=强制取消静音
+trolling.mute=强制静音
+trolling.inf_tumble=强制无限翻滚
+trolling.inf_loading=无限加载屏幕
+trolling.remove_loading=移除无限加载屏幕
+trolling.crash_player=崩溃选中玩家
+trolling.detonate=引爆所有爆炸物
+trolling.crash_lobby=崩溃大厅
+
+# ============ 战斗 Tab (附身) ============
+combat.possess=附身玩家
+combat.unpossess=取消附身
+combat.possess_active=正在附身: {0}
+combat.possess_self_warning=不能附身自己
+combat.possess_no_player=请先选择一个玩家
+
+# ============ 自身 Tab (第三人称) ============
+self.third_person= 第三人称视角
+self.tp_cam_dist_fmt=相机距离: {0:F1}
+self.tp_cam_height_fmt=相机高度: {0:F1}
+
+# ============ ESP翻译 ============
+esp.death_head=死亡玩家头颅
+esp.extraction=撤离点
+esp.state_active=激活
+esp.state_idle=空闲
+esp.hp_fmt= HP: {0}/{1}
+esp.player_hp_fmt=HP: {0}
+
+# ============ 水印 ============
+watermark.main_fmt=DARK CHEAT | {0} - MENU
+watermark.credit=@Github/D4rkks (+collabs)| 汉化(二创) Mai_xiyu
+
+# ============ 服务器选中格式 ============
+server.selected_fmt=选中: {0} | 主机: {1} | 区域: {2}
+
+# ============ 物品传送 ============
+items.no_items=未找到物品
+items.tp_host=传送(主机直接)
+items.tp_client=传送(请求所有权)
+
+# ============ 敌人名称映射 ============
+enemy.name.Apex Predator=顶级掠食者
+enemy.name.Banger=爆裂者
+enemy.name.Bowtie=领结怪
+enemy.name.Ceiling Eye=天花板眼
+enemy.name.Chef=厨师
+enemy.name.Clown=小丑
+enemy.name.Duckling=小鸭子
+enemy.name.Gnome=侏儒
+enemy.name.Headman=无头人
+enemy.name.Hidden=隐形怪
+enemy.name.Huntsman=猎人
+enemy.name.Mentalist=心灵术士
+enemy.name.Peeper=窥视者
+enemy.name.Reaper=死神
+enemy.name.Robe=长袍怪
+enemy.name.Rugrat=地毯鼠
+enemy.name.Shadow Child=暗影之子
+enemy.name.Slug=蛞蝓
+enemy.name.Spewer=喷吐者
+enemy.name.Thin Man=瘦长人
+enemy.name.Trudge=重步者
+enemy.name.Upscream=尖叫者
+enemy.name.Animal=动物
+enemy.name.Floater=漂浮者
+enemy.name.Spider=蜘蛛
+
+# ============ 配置 Tab ============
+config.title=配置
+config.prefs=PlayerPrefs 配置
+config.save=保存配置
+config.saved=配置已保存
+config.load=加载配置
+config.loaded=配置已加载
+config.json=JSON 配置文件
+config.save_json=保存JSON
+config.json_saved_fmt=JSON已保存: {0}
+config.load_json=加载JSON
+config.json_loaded=JSON已加载
+config.json_path_fmt=路径: {0}
+config.language=语言/Language
+config.lang_switched=语言已切换
+config.lang_current=当前语言:
+
+# ============ 菜单设置 Tab ============
+menupage.title=菜单设置
+menupage.bg_color=背景颜色
+menupage.bg_r=红(R):
+menupage.bg_g=绿(G):
+menupage.bg_b=蓝(B):
+menupage.bg_a=透明度(A):
+menupage.apply_color=应用背景颜色
+menupage.bg_image=自定义背景图片
+menupage.load_image=加载图片
+menupage.clear_image=清除图片
+menupage.image_path=图片路径:
+menupage.image_loaded=背景图片已加载
+menupage.image_cleared=背景图片已清除
+menupage.image_failed=图片加载失败
+menupage.controls=菜单控制
+menupage.language=语言/Language
+menupage.lang_current=当前语言:
+menupage.lang_switched=语言已切换
+menupage.reload=重载菜单
+menupage.unload=卸载菜单
+menupage.main_menu=回退主界面
+menupage.quit_game=退出游戏
+menupage.confirm_unload=确定卸载?再次点击确认
+menupage.confirm_quit=确定退出?再次点击确认
+
+# ============ 创造 Tab ============
+creative.title=创造模式
+creative.desc=类似Minecraft创造模式:
+creative.feat1=• 无敌 + 飞行 + 无限体力
+creative.feat2=• 穿墙抓取 + 无武器冷却
+creative.feat3=• 去除迷雾
+creative.toggle= 创造模式
+creative.status_on=状态: 创造模式已启用
+creative.controls=飞行控制
+creative.wasd=WASD移动 Space上升 Ctrl下降
+creative.shift=Shift - 加速飞行
+creative.active=已激活功能:
+creative.god=  ✓ 上帝模式
+creative.hp=  ✓ 无限生命
+creative.fly=  ✓ 穿墙飞行
+creative.stam=  ✓ 无限体力
+creative.grab=  ✓ 穿墙抓取
+creative.cd=  ✓ 无武器冷却
+creative.fog=  ✓ 去除迷雾
+creative.status_off=状态: 生存模式
+
+# ============ 传送 Tab ============
+tp.quick=快速传送
+tp.crosshair=传送到准心位置
+tp.extraction=传送到撤离点
+tp.random=随机传送 (50m)
+tp.waypoints=传送点管理
+tp.name=名称:
+tp.save=保存当前位置
+tp.no_waypoints=暂无保存的传送点
+tp.goto=传送到选中点
+tp.delete=删除选中点
+
+# ============ 服务器 Tab ============
+server.title=服务器浏览器
+server.refresh=刷新房间
+server.hide_full= 隐藏满员房间
+server.show_members= 显示房间成员
+server.search=搜索:
+server.sort_az=区域 A-Z
+server.sort_za=区域 Z-A
+server.sort_most=最多玩家
+server.sort_least=最少玩家
+server.col_name=房间名称
+server.col_players=玩家数
+server.col_region=区域
+server.col_host=主机
+server.fetching=获取中..
+server.room_fmt=房间: {0}
+server.unknown=未知
+server.modded=(模组)
+server.join=加入房间
+server.invite=获取邀请链接
+server.members=房间成员
+
+# ============ 通用 ============
+common.all=全部
+common.void=虚空
+common.enemy=敌人
+common.hp_unknown=HP: 未知
+common.no_enemies=未发现敌人
+common.unknown_player=未知玩家
+common.alive=[存活]
+common.dead=[死亡]
+common.no_players=未发现玩家
+common.alive_list=存活玩家:
+common.dead_list=死亡玩家:
+common.map_value_fmt=地图总价值 ${0}
+common.select_feature=选择要绑定的功能
+common.cancel=取消
+common.close=关闭
+common.chams_picker=Chams颜色选择器
+common.status_wait=等待操作...
+common.all_players=所有玩家
+common.tp_options=传送选项
+common.to=到
+common.execute_tp=执行传送
+common.fetching_players=获取玩家中...
+
+# ============ 雷达图例 ============
+radar.enemy=敌人
+radar.player=玩家
+radar.item=物品
+radar.extract=撤离
+
+# ============ ESP预设 ============
+preset.custom=自定义
+preset.high_value=高价值
+preset.enemy_only=仅敌人
+preset.player_only=仅玩家
+preset.everything=全部
+preset.stealth=隐蔽
+
+# ============ 颜色名称 ============
+color.0=白色
+color.1=灰色
+color.2=黑色
+color.3=浅红
+color.4=红色
+color.5=深红1
+color.6=深红2
+color.7=亮粉1
+color.8=亮粉2
+color.9=亮紫
+color.10=浅紫1
+color.11=浅紫2
+color.12=紫色
+color.13=深紫1
+color.14=深紫2
+color.15=深蓝
+color.16=蓝色
+color.17=浅蓝1
+color.18=浅蓝2
+color.19=青色
+color.20=浅绿1
+color.21=浅绿2
+color.22=浅绿3
+color.23=绿色
+color.24=绿色2
+color.25=深绿1
+color.26=深绿2
+color.27=深绿3
+color.28=浅黄
+color.29=黄色
+color.30=深黄
+color.31=橙色
+color.32=深橙
+color.33=棕色
+color.34=橄榄
+color.35=肤色
+
+# Chams子窗口标签
+chams.enemy_visible=敌人可见
+chams.enemy_hidden=敌人遮挡
+chams.item_visible=物品可见
+chams.item_hidden=物品遮挡
+
+# ============ 新增功能 ============
+# 自身Tab - 新增
+self.max_all_upgrades=⬆ 一键全升级(满级)
+self.game_speed_fmt=游戏速度: {0}x
+self.stealth_mode=网络隐身(反作弊)
+
+# 战斗Tab - 自动瞄准
+combat.aimbot_title=━━ 自动瞄准 ━━
+combat.aimbot_toggle=启用自动瞄准 (持枪+右键)
+combat.aimbot_smooth_fmt=平滑度: {0}
+combat.aimbot_range_fmt=最大距离: {0}m
+
+# 敌人Tab - 新增
+enemies.freeze=❄ 冻结所有敌人
+enemies.unfreeze=▶ 解冻所有敌人
+enemies.disable_traps=🚫 禁用所有陷阱
+
+# 物品Tab - 新增
+items.inflate_title=━━ 物品价值膨胀 ━━
+items.inflate_10x=10倍膨胀
+items.inflate_100x=100倍膨胀
+items.inflate_max=全部MAX($99999)
+items.duplicate=📋 复制手持物品
+
+# 杂项Tab - 新增
+misc.round_tools=━━ 回合工具 ━━
+misc.zero_haul=归零搬运目标(直接过关)
+misc.auto_complete=⚡ 一键完成回合
+misc.chat_commands=━━ 聊天命令 ━━
+misc.chat_commands_desc=输入 !help 查看所有命令
+
+# 搬运目标归零反馈
+haul.zeroed=✓ 搬运目标已归零!
+haul.no_round=✗ 没有进行中的回合
+haul.no_field=✗ 未找到搬运目标字段
+haul.error=✗ 错误: {0}
+
+# 聊天命令
+cmd.god_on=✓ 无敌模式已开启
+cmd.god_off=✓ 无敌模式已关闭
+cmd.noclip_on=✓ 穿墙飞行已开启
+cmd.noclip_off=✓ 穿墙飞行已关闭
+cmd.tp_success=✓ 已传送到: {0}
+cmd.tp_notfound=✗ 找不到玩家: {0}
+cmd.kill_self=✓ 已自杀
+cmd.kill_all=✓ 已杀死所有敌人
+cmd.speed=✓ 游戏速度: {0}x
+cmd.heal=✓ 已治疗
+cmd.items_tp=✓ 已传送所有物品
+cmd.upgrade=✓ 已全部升满
+cmd.freeze_on=✓ 敌人已冻结
+cmd.freeze_off=✓ 敌人已解冻
+cmd.inflate=✓ 物品已膨胀
+cmd.dup_ok=✓ 已复制
+cmd.dup_fail=✗ 未手持物品
+cmd.stealth_on=✓ 网络隐身已开启
+cmd.stealth_off=✓ 网络隐身已关闭
+cmd.help_title=━━ 命令列表 ━━
+cmd.unknown=✗ 未知命令: {0}
+
+# 物品名称翻译
+item.name.Diamond=钻石
+item.name.Gold Bar=金条
+item.name.Cash Register=收银机
+item.name.Goblet=高脚杯
+item.name.Crown=王冠
+item.name.Necklace=项链
+item.name.Ring=戒指
+item.name.Watch=手表
+item.name.Vase=花瓶
+item.name.Painting=画作
+item.name.Statue=雕像
+item.name.Trophy=奖杯
+item.name.Lamp=台灯
+item.name.Clock=时钟
+item.name.Music Box=音乐盒
+item.name.Globe=地球仪
+item.name.Telescope=望远镜
+item.name.Crystal Ball=水晶球
+item.name.Hourglass=沙漏
+item.name.Chalice=圣杯
+item.name.Candelabra=烛台
+item.name.Mirror=镜子
+item.name.Book=书本
+item.name.Chest=箱子
+item.name.Urn=骨灰缸
+item.name.Skull=骷髅
+item.name.Plate=盘子
+item.name.Coin=硬币
+item.name.Gem=宝石
+item.name.Figurine=小雕像
+item.name.Doll=玩偶
+item.name.Toy=玩具
+item.name.Instrument=乐器
+item.name.Orb=魔球
+item.name.Egg=彩蛋
+item.name.Cube=魔方
+item.name.Relic=遗物
+item.name.Idol=神像
+item.name.Artifact=远古文物
+item.name.Jewel=珠宝

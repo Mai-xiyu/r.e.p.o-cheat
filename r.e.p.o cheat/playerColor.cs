@@ -23,6 +23,11 @@ internal class playerColor
 
 	private static bool isInitialized = false;
 
+	/// <summary>
+	/// 保存的原始颜色索引，-1 表示尚未保存
+	/// </summary>
+	private static int savedOriginalColorIndex = -1;
+
 	private static void Initialize()
 	{
 		if (isInitialized)
@@ -103,6 +108,45 @@ internal class playerColor
 			Initialize();
 			return;
 		}
+		// 首次变色前保存原始颜色索引
+		if (savedOriginalColorIndex == -1)
+		{
+			try
+			{
+				// 尝试从 PlayerAvatar 的 playerAvatarVisuals.colorIndex 获取
+				FieldInfo visualsField = colorControllerType.GetField("playerAvatarVisuals", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				if (visualsField != null)
+				{
+					object visuals = visualsField.GetValue(colorControllerInstance);
+					if (visuals != null)
+					{
+						FieldInfo colorField = visuals.GetType().GetField("colorIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+						if (colorField != null)
+						{
+							savedOriginalColorIndex = (int)colorField.GetValue(visuals);
+						}
+					}
+				}
+				// 如果上面失败，尝试直接从 PlayerAvatar 获取 colorIndex
+				if (savedOriginalColorIndex == -1)
+				{
+					FieldInfo directColorField = colorControllerType.GetField("colorIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					if (directColorField != null)
+					{
+						savedOriginalColorIndex = (int)directColorField.GetValue(colorControllerInstance);
+					}
+				}
+				// 最终回退：默认 0
+				if (savedOriginalColorIndex == -1)
+				{
+					savedOriginalColorIndex = 0;
+				}
+			}
+			catch
+			{
+				savedOriginalColorIndex = 0;
+			}
+		}
 		int num = new System.Random().Next(0, 36);
 		try
 		{
@@ -131,6 +175,26 @@ internal class playerColor
 		return false;
 	}
 
+	/// <summary>
+	/// 恢复原始颜色（关闭 RGB 时调用）
+	/// </summary>
+	public static void RestoreOriginalColor()
+	{
+		try
+		{
+			Initialize();
+			if (savedOriginalColorIndex >= 0 && isInitialized && colorControllerInstance != null && playerSetColorMethod != null)
+			{
+				playerSetColorMethod.Invoke(colorControllerInstance, new object[1] { savedOriginalColorIndex });
+			}
+		}
+		catch { }
+		finally
+		{
+			savedOriginalColorIndex = -1;
+		}
+	}
+
 	public static void Reset()
 	{
 		isInitialized = false;
@@ -138,5 +202,6 @@ internal class playerColor
 		colorControllerInstance = null;
 		playerSetColorMethod = null;
 		playerPhotonView = null;
+		savedOriginalColorIndex = -1;
 	}
 }

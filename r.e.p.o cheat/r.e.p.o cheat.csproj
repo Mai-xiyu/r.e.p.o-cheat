@@ -377,10 +377,15 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="*.cs" />
+    <Compile Include="Cheats\*.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Cheats\ChamsShader.shader" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="i18n\zh.txt" />
+    <EmbeddedResource Include="i18n\en.txt" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

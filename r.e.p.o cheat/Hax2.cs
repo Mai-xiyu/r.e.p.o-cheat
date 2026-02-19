@@ -51,6 +51,8 @@ public class Hax2 : MonoBehaviour
 
 	private static List<string> cachedEnemySetupNames = null;
 
+	private static float lastEnemyCacheTime = 0f;
+
 	public string spawnCountText = "1";
 
 	public int spawnEnemyIndex;
@@ -61,7 +63,7 @@ public class Hax2 : MonoBehaviour
 
 	public static bool ChatDropdownVisible = false;
 
-	public static string ChatDropdownVisibleName = "全部";
+	public static string ChatDropdownVisibleName = L.T("common.all");
 
 	public static float fieldOfView = 70f;
 
@@ -207,7 +209,7 @@ public class Hax2 : MonoBehaviour
 
 	private bool spoofNameEnabled;
 
-	private string spoofTargetVisibleName = "全部";
+	private string spoofTargetVisibleName = L.T("common.all");
 
 	private bool spoofDropdownVisible;
 
@@ -225,7 +227,7 @@ public class Hax2 : MonoBehaviour
 
 	public static bool hasAlreadySpoofed = false;
 
-	private string colorTargetVisibleName = "全部";
+	private string colorTargetVisibleName = L.T("common.all");
 
 	private bool colorDropdownVisible;
 
@@ -243,45 +245,18 @@ public class Hax2 : MonoBehaviour
 
 	private const float PLAYER_RAINBOW_DELAY = 0.1f;
 
-	private Dictionary<int, string> colorNameMapping = new Dictionary<int, string>
+	private Dictionary<int, string> colorNameMapping = null;
+
+	private Dictionary<int, string> GetColorNames()
 	{
-		{ 0, "白色" },
-		{ 1, "灰色" },
-		{ 2, "黑色" },
-		{ 3, "浅红" },
-		{ 4, "红色" },
-		{ 5, "深红1" },
-		{ 6, "深红2" },
-		{ 7, "亮粉1" },
-		{ 8, "亮粉2" },
-		{ 9, "亮紫" },
-		{ 10, "浅紫1" },
-		{ 11, "浅紫2" },
-		{ 12, "紫色" },
-		{ 13, "深紫1" },
-		{ 14, "深紫2" },
-		{ 15, "深蓝" },
-		{ 16, "蓝色" },
-		{ 17, "浅蓝1" },
-		{ 18, "浅蓝2" },
-		{ 19, "青色" },
-		{ 20, "浅绿1" },
-		{ 21, "浅绿2" },
-		{ 22, "浅绿3" },
-		{ 23, "绿色" },
-		{ 24, "绿色2" },
-		{ 25, "深绿1" },
-		{ 26, "深绿2" },
-		{ 27, "深绿3" },
-		{ 28, "浅黄" },
-		{ 29, "黄色" },
-		{ 30, "深黄" },
-		{ 31, "橙色" },
-		{ 32, "深橙" },
-		{ 33, "棕色" },
-		{ 34, "橄榄" },
-		{ 35, "肤色" }
-	};
+		if (colorNameMapping == null)
+		{
+			colorNameMapping = new Dictionary<int, string>();
+			for (int i = 0; i <= 35; i++)
+				colorNameMapping[i] = LanguageManager.GetColorName(i);
+		}
+		return colorNameMapping;
+	}
 
 	private int previousItemCount;
 
@@ -365,7 +340,7 @@ public class Hax2 : MonoBehaviour
 
 	private Vector2 scrollPos;
 
-	private string[] tabs = new string[12] { "自身", "视觉", "战斗", "杂项", "敌人", "物品", "热键", "恶搞", "配置", "服务器", "创造", "传送" };
+	private string[] tabs = LanguageManager.GetTabNames();
 
 	private Vector2 waypointScrollPos = Vector2.zero;
 	private int espPresetIndex = 0;
@@ -374,7 +349,7 @@ public class Hax2 : MonoBehaviour
 
 	public static Texture2D toggleBackground;
 
-	public string configstatus = "等待操作...";
+	public string configstatus = L.T("common.status_wait");
 
 	private float toggleAnimationSpeed = 8f;
 
@@ -476,6 +451,19 @@ public class Hax2 : MonoBehaviour
 
 	private static Texture2D rowBgSelected;
 
+	private static Texture2D enemyBgSelected;
+	private static Texture2D enemyBgNormal;
+	private static Texture2D itemBgSelected;
+	private static Texture2D itemBgNormal;
+	private static GUIStyle cachedPlayerListStyle;
+	private static GUIStyle cachedEnemyListStyle;
+	private static GUIStyle cachedItemListStyle;
+	private static GUIStyle cachedServerRowStyle;
+	private static bool listStylesInitialized;
+	private static List<Lobby> cachedSortedLobbies;
+	private static SortMode cachedSortMode = (SortMode)(-1);
+	private static int cachedLobbyCount = -1;
+
 	public static bool grabThroughWallsEnabled = false;
 
 	private bool showTextEditorPopup;
@@ -488,6 +476,21 @@ public class Hax2 : MonoBehaviour
 
 	private static Vector2 textboxscroll;
 
+	// 菜单设置页 fields
+	private float menuBgR = 15f;
+	private float menuBgG = 18f;
+	private float menuBgB = 25f;
+	private float menuBgA = 230f;
+	private string customBgImagePath = "";
+	private Texture2D customBgTexture;
+	private bool confirmUnload = false;
+	private bool confirmQuit = false;
+	private float confirmTimer = 0f;
+
+	// 语言下拉 fields
+	private bool showLangDropdown = false;
+	private Vector2 langDropdownScroll;
+
 	private void CheckIfHost()
 	{
 		isHost = !SemiFunc.IsMultiplayer() || PhotonNetwork.IsMasterClient;
@@ -496,12 +499,12 @@ public class Hax2 : MonoBehaviour
 	private void UpdateTeleportOptions()
 	{
 		List<string> list = new List<string>();
-		list.Add("所有玩家");
+		list.Add(L.T("common.all_players"));
 		list.AddRange(playerNames);
 		teleportPlayerSourceOptions = list.ToArray();
 		List<string> list2 = new List<string>();
 		list2.AddRange(playerNames);
-		list2.Add("虚空");
+		list2.Add(L.T("common.void"));
 		teleportPlayerDestOptions = list2.ToArray();
 		teleportPlayerSourceIndex = 0;
 		teleportPlayerDestIndex = teleportPlayerDestOptions.Length - 1;
@@ -604,9 +607,8 @@ public class Hax2 : MonoBehaviour
 		{
 			Players.playerMaxHealthInstance = Object.FindObjectOfType(type2);
 		}
-		toggleBgTexture = TextureLoader.LoadEmbeddedTexture("r.e.p.o_cheat.images.toggle_bg.png");
-		toggleKnobOffTexture = TextureLoader.LoadEmbeddedTexture("r.e.p.o_cheat.images.toggle_knobOff.png");
-		toggleKnobOnTexture = TextureLoader.LoadEmbeddedTexture("r.e.p.o_cheat.images.toggle_knobOn.png");
+		// Toggle textures are now generated programmatically in DrawCustomToggle
+		// No external PNG files needed
 		ConfigManager.LoadAllToggles();
 		GameObject val2 = new GameObject("LobbyCoroutineHost");
 		Object.DontDestroyOnLoad((Object)val2);
@@ -679,14 +681,14 @@ public class Hax2 : MonoBehaviour
 				}
 			}
 		}
-		if ((Object)(object)RunManager.instance.levelCurrent != (Object)null && levelsToSearchItems.Contains(((Object)RunManager.instance.levelCurrent).name))
+		if ((Object)(object)RunManager.instance != (Object)null && (Object)(object)RunManager.instance.levelCurrent != (Object)null && levelsToSearchItems.Contains(((Object)RunManager.instance.levelCurrent).name))
 		{
 			if (Time.time >= nextUpdateTime)
 			{
 				UpdateEnemyList();
 				UpdateItemList();
 				itemList = ItemTeleport.GetItemList();
-				nextUpdateTime = Time.time + 10f;
+				nextUpdateTime = Time.time + 3f;
 			}
 			if (playerColor.isRandomizing)
 			{
@@ -704,6 +706,9 @@ public class Hax2 : MonoBehaviour
 			AutoPickup.UpdateAutoPickup();
 			AutoDodge.UpdateAutoDodge();
 			CreativeMode.UpdateCreativeFlight();
+			PlayerPossession.UpdatePossession();
+			Enemies.UpdateFreeze();
+			Aimbot.UpdateAimbot();
 		}
 		foreach (KeyValuePair<int, bool> playerRainbowState in playerRainbowStates)
 		{
@@ -723,6 +728,11 @@ public class Hax2 : MonoBehaviour
 				}
 			}
 		}
+	}
+
+	public void LateUpdate()
+	{
+		ThirdPersonCamera.LateUpdateCamera();
 	}
 
 	private void TryLockCamera()
@@ -814,24 +824,24 @@ public class Hax2 : MonoBehaviour
 		{
 			if ((Object)(object)enemy != (Object)null && ((Component)enemy).gameObject.activeInHierarchy)
 			{
-				string text = "敌人";
+				string text = L.T("common.enemy");
 				Component componentInParent = ((Component)enemy).GetComponentInParent(Type.GetType("EnemyParent, Assembly-CSharp"));
 				if ((Object)(object)componentInParent != (Object)null)
 				{
-					text = (((object)componentInParent).GetType().GetField("enemyName", BindingFlags.Instance | BindingFlags.Public)?.GetValue(componentInParent) as string) ?? "敌人";
+					text = (((object)componentInParent).GetType().GetField("enemyName", BindingFlags.Instance | BindingFlags.Public)?.GetValue(componentInParent) as string) ?? L.T("common.enemy");
 				}
 				int enemyHealth = Enemies.GetEnemyHealth(enemy);
 				DebugCheats.enemyHealthCache[enemy] = enemyHealth;
 				int enemyMaxHealth = Enemies.GetEnemyMaxHealth(enemy);
 				float num = ((enemyMaxHealth > 0) ? ((float)enemyHealth / (float)enemyMaxHealth) : 0f);
 				string arg = ((num > 0.66f) ? "<color=green>" : ((num > 0.33f) ? "<color=yellow>" : "<color=red>"));
-				string text2 = ((enemyHealth >= 0) ? $"{arg}HP: {enemyHealth}/{enemyMaxHealth}</color>" : "<color=gray>HP: 未知</color>");
+				string text2 = ((enemyHealth >= 0) ? $"{arg}HP: {enemyHealth}/{enemyMaxHealth}</color>" : "<color=gray>" + L.T("common.hp_unknown") + "</color>");
 				enemyNames.Add(text + " [" + text2 + "]");
 			}
 		}
 		if (enemyNames.Count == 0)
 		{
-			enemyNames.Add("未发现敌人");
+			enemyNames.Add(L.T("common.no_enemies"));
 		}
 	}
 
@@ -844,8 +854,8 @@ public class Hax2 : MonoBehaviour
 		foreach (PlayerAvatar item in SemiFunc.PlayerGetList())
 		{
 			playerList.Add(item);
-			string text = SemiFunc.PlayerGetName(item) ?? "未知玩家";
-			string text2 = (IsPlayerAlive(item, text) ? "<color=green>[存活]</color> " : "<color=red>[死亡]</color> ");
+			string text = SemiFunc.PlayerGetName(item) ?? L.T("common.unknown_player");
+			string text2 = (IsPlayerAlive(item, text) ? "<color=green>" + L.T("common.alive") + "</color> " : "<color=red>" + L.T("common.dead") + "</color> ");
 			playerNames.Add(text2 + text);
 		}
 		for (int num = 0; num < count; num++)
@@ -855,7 +865,7 @@ public class Hax2 : MonoBehaviour
 		}
 		if (playerNames.Count == 0)
 		{
-			playerNames.Add("未发现玩家");
+			playerNames.Add(L.T("common.no_players"));
 		}
 	}
 
@@ -952,17 +962,17 @@ public class Hax2 : MonoBehaviour
 		{
 			if (DebugCheats.drawEspBool || DebugCheats.drawItemEspBool || DebugCheats.drawExtractionPointEspBool || DebugCheats.drawPlayerEspBool)
 			{
-				ModernESP.Render();
+				try { ModernESP.Render(); } catch (System.Exception ex) { Debug.LogWarning((object)("[ESP] ModernESP error: " + ex.Message)); }
 			}
 		}
 		else if (DebugCheats.drawEspBool || DebugCheats.drawItemEspBool || DebugCheats.drawExtractionPointEspBool || DebugCheats.drawPlayerEspBool)
 		{
-			DebugCheats.DrawESP();
+			try { DebugCheats.DrawESP(); } catch (System.Exception ex) { Debug.LogWarning((object)("[ESP] DrawESP error: " + ex.Message)); }
 			ModernESP.ClearItemLabels();
 			ModernESP.ClearEnemyLabels();
 		}
 		// ESP增强：追踪线
-		ESPEnhancements.DrawTraceLines();
+		try { ESPEnhancements.DrawTraceLines(); } catch (System.Exception ex) { Debug.LogWarning((object)("[ESP] TraceLine error: " + ex.Message)); }
 		// 小地图雷达
 		MiniRadar.DrawRadar();
 		GUIStyle val = new GUIStyle(GUI.skin.label)
@@ -971,10 +981,10 @@ public class Hax2 : MonoBehaviour
 		};
 		if (showWatermark)
 		{
-			GUIContent val2 = new GUIContent($"DARK CHEAT | {hotkeyManager.MenuToggleKey} - MENU");
+			GUIContent val2 = new GUIContent(L.T("watermark.main_fmt", hotkeyManager.MenuToggleKey));
 			Vector2 val3 = val.CalcSize(val2);
 			GUI.Label(new Rect(10f, 10f, val3.x, val3.y), val2, val);
-			GUI.Label(new Rect(10f + val3.x + 10f, 10f, 200f, val3.y), "@Github/D4rkks (+collabs)", val);
+			GUI.Label(new Rect(10f + val3.x + 10f, 10f, 300f, val3.y), L.T("watermark.credit"), val);
 		}
 		GUIStyle val4 = new GUIStyle(GUI.skin.label);
 		val4.fontSize = 16;
@@ -995,7 +1005,7 @@ public class Hax2 : MonoBehaviour
 			List<string> list3 = new List<string>();
 			foreach (PlayerAvatar item in list)
 			{
-				string text = SemiFunc.PlayerGetName(item) ?? "未知";
+				string text = SemiFunc.PlayerGetName(item) ?? L.T("server.unknown");
 				FieldInfo field = ((object)item).GetType().GetField("isDisabled", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 				if (field != null)
 				{
@@ -1014,7 +1024,7 @@ public class Hax2 : MonoBehaviour
 				}
 			}
 			GUI.color = Color.green;
-			GUI.Label(new Rect(num, num2 + (float)num4++ * num3, 400f, num3), "存活玩家:", val4);
+			GUI.Label(new Rect(num, num2 + (float)num4++ * num3, 400f, num3), L.T("common.alive_list"), val4);
 			foreach (string item2 in list2)
 			{
 				string text2 = "- " + item2;
@@ -1022,7 +1032,7 @@ public class Hax2 : MonoBehaviour
 			}
 			num4++;
 			GUI.color = Color.red;
-			GUI.Label(new Rect(num, num2 + (float)num4++ * num3, 400f, num3), "死亡玩家:", val4);
+			GUI.Label(new Rect(num, num2 + (float)num4++ * num3, 400f, num3), L.T("common.dead_list"), val4);
 			foreach (string item3 in list3)
 			{
 				string text3 = "- " + item3;
@@ -1036,7 +1046,7 @@ public class Hax2 : MonoBehaviour
 		if (DebugCheats.drawItemEspBool && showTotalValue)
 		{
 			GUI.color = Color.yellow;
-			GUI.Label(new Rect(num, num2 + (float)num4++ * num3, 400f, num3), $"地图总价值 ${totalValuableValue}", val4);
+			GUI.Label(new Rect(num, num2 + (float)num4++ * num3, 400f, num3), L.T("common.map_value_fmt", totalValuableValue), val4);
 			GUI.color = Color.white;
 			num4++;
 		}
@@ -1044,42 +1054,42 @@ public class Hax2 : MonoBehaviour
 
 	private bool DrawCustomToggle(string id, bool state)
 	{
-		//IL_003b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0040: Unknown result type (might be due to invalid IL or missing references)
-		//IL_008c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0092: Invalid comparison between Unknown and I4
-		//IL_00c4: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00de: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0119: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0139: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0147: Unknown result type (might be due to invalid IL or missing references)
-		float num = 46f;
-		float num2 = 22f;
-		float num3 = 18f;
-		float num4 = (num2 - num3) / 2f;
+		float trackW = 46f;
+		float trackH = 22f;
+		float knobSize = 18f;
+		float pad = (trackH - knobSize) / 2f;
 		GUILayout.BeginVertical((GUILayoutOption[])(object)new GUILayoutOption[2]
 		{
-			GUILayout.Width(num),
-			GUILayout.Height(num2)
+			GUILayout.Width(trackW),
+			GUILayout.Height(trackH)
 		});
-		Rect rect = GUILayoutUtility.GetRect(num, num2);
+		Rect rect = GUILayoutUtility.GetRect(trackW, trackH);
 		GUILayout.EndVertical();
-		if (!toggleAnimations.TryGetValue(id, out var value))
+		if (!toggleAnimations.TryGetValue(id, out var anim))
 		{
-			value = (state ? 1f : 0f);
-			toggleAnimations[id] = value;
+			anim = (state ? 1f : 0f);
+			toggleAnimations[id] = anim;
 		}
-		float num5 = (state ? 1f : 0f);
-		if ((int)Event.current.type == 7 && !Mathf.Approximately(value, num5))
+		float target = (state ? 1f : 0f);
+		if ((int)Event.current.type == 7 && !Mathf.Approximately(anim, target))
 		{
-			value = Mathf.MoveTowards(value, num5, Time.deltaTime * toggleAnimationSpeed);
-			toggleAnimations[id] = value;
+			anim = Mathf.MoveTowards(anim, target, Time.deltaTime * toggleAnimationSpeed);
+			toggleAnimations[id] = anim;
 		}
-		GUI.color = Color.white;
-		GUI.DrawTexture(new Rect(rect.x, rect.y, num, num2), (Texture)(object)toggleBgTexture);
-		float num6 = num - num3 - num4 * 2f;
-		float num7 = rect.x + num4 + num6 * value;
-		GUI.DrawTexture(new Rect(num7, rect.y + num4, num3, num3), (Texture)(object)(state ? toggleKnobOnTexture : toggleKnobOffTexture));
+		// Draw track using built-in whiteTexture (never null)
+		Color oldColor = GUI.color;
+		Color trackOff = new Color(0.22f, 0.22f, 0.25f, 1f);
+		Color trackOn = new Color(0.1f, 0.55f, 0.2f, 1f);
+		GUI.color = Color.Lerp(trackOff, trackOn, anim);
+		GUI.DrawTexture(new Rect(rect.x, rect.y, trackW, trackH), (Texture)(object)Texture2D.whiteTexture);
+		// Draw knob
+		float travel = trackW - knobSize - pad * 2f;
+		float knobX = rect.x + pad + travel * anim;
+		Color knobOff = new Color(0.55f, 0.55f, 0.55f, 1f);
+		Color knobOn = new Color(1f, 1f, 1f, 1f);
+		GUI.color = Color.Lerp(knobOff, knobOn, anim);
+		GUI.DrawTexture(new Rect(knobX, rect.y + pad, knobSize, knobSize), (Texture)(object)Texture2D.whiteTexture);
+		GUI.color = oldColor;
 		if ((int)Event.current.type == 0 && rect.Contains(Event.current.mousePosition))
 		{
 			Event.current.Use();
@@ -1091,7 +1101,7 @@ public class Hax2 : MonoBehaviour
 	private bool ToggleLogic(string id, string label, ref bool value, Action onToggle = null)
 	{
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		GUILayout.Label(label, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+		GUILayout.Label(label, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(250f) });
 		bool flag = DrawCustomToggle(id, value);
 		if (flag != value)
 		{
@@ -1137,7 +1147,7 @@ public class Hax2 : MonoBehaviour
 		float num3 = Mathf.Max(200f, menuRect.width - num - num2 * 2f);
 		GUILayout.BeginVertical(Array.Empty<GUILayoutOption>());
 		GUILayout.Space(5f);
-		GUILayout.Label("DARK MENU 1.3 (汉化版", titleStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("menu.title"), titleStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		GUILayout.BeginVertical((GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(num) });
 		for (int i = 0; i < tabs.Length; i++)
@@ -1174,7 +1184,7 @@ public class Hax2 : MonoBehaviour
 			DrawHotkeysTab();
 			break;
 		case 7:
-			DrawTrollingTab();
+			DrawRoomTab();
 			break;
 		case 8:
 			DrawConfigTab();
@@ -1183,10 +1193,10 @@ public class Hax2 : MonoBehaviour
 			DrawServersTab();
 			break;
 		case 10:
-			DrawCreativeTab();
+			DrawTeleportTab();
 			break;
 		case 11:
-			DrawTeleportTab();
+			DrawMenuSettingsTab();
 			break;
 		}
 		GUILayout.EndScrollView();
@@ -1198,33 +1208,39 @@ public class Hax2 : MonoBehaviour
 	private void DrawSelfTab()
 	{
 		//IL_0c4d: Unknown result type (might be due to invalid IL or missing references)
-		GUILayout.Label("生命值", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		ToggleLogic("god_mode", " 上帝模式", ref godModeActive, PlayerController.GodMode);
+		GUILayout.Label(L.T("self.health"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("god_mode", L.T("self.god_mode"), ref godModeActive, () => PlayerController.SetGodMode(godModeActive));
 		GUILayout.Space(5f);
-		ToggleLogic("inf_health", " 无限生命", ref infiniteHealthActive, PlayerController.MaxHealth);
+		ToggleLogic("inf_health", L.T("self.inf_health"), ref infiniteHealthActive, PlayerController.MaxHealth);
+		GUILayout.Space(5f);
+		if (GUILayout.Button(L.T("self.revive_self"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			Players.ReviveSelf();
+		}
 		GUILayout.Space(10f);
-		GUILayout.Label("移动", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		ToggleLogic("No_Clip", " 穿墙模式", ref NoclipController.noclipActive, NoclipController.ToggleNoclip);
+		GUILayout.Label(L.T("self.movement"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("No_Clip", L.T("self.noclip"), ref NoclipController.noclipActive, NoclipController.ToggleNoclip);
 		GUILayout.Space(5f);
-		ToggleLogic("inf_stam", " 无限体力", ref stamineState, PlayerController.MaxStamina);
+		ToggleLogic("inf_stam", L.T("self.inf_stamina"), ref stamineState, PlayerController.MaxStamina);
 		GUILayout.Space(5f);
-		ToggleLogic("auto_dodge", " 自动闪避", ref AutoDodge.isAutoDodgeEnabled);
+		ToggleLogic("auto_dodge", L.T("self.auto_dodge"), ref AutoDodge.isAutoDodgeEnabled);
 		if (AutoDodge.isAutoDodgeEnabled)
 		{
-			GUILayout.Label("闪避距离: " + Mathf.RoundToInt(AutoDodge.dodgeDistance) + "m", labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("self.dodge_dist_fmt", Mathf.RoundToInt(AutoDodge.dodgeDistance)), labelStyle, Array.Empty<GUILayoutOption>());
 			AutoDodge.dodgeDistance = GUILayout.HorizontalSlider(AutoDodge.dodgeDistance, 3f, 20f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		}
 		GUILayout.Space(10f);
-		GUILayout.Label("杂项", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		ToggleLogic("rgb_player", " 玩家RGB颜色", ref playerColor.isRandomizing);
+		GUILayout.Label(L.T("self.misc"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("rgb_player", L.T("self.rgb_player"), ref playerColor.isRandomizing,
+			() => { if (!playerColor.isRandomizing) playerColor.RestoreOriginalColor(); });
 		GUILayout.Space(5f);
-		ToggleLogic("No_Fog", " 去除迷雾", ref MiscFeatures.NoFogEnabled, MiscFeatures.ToggleNoFog);
+		ToggleLogic("No_Fog", L.T("self.no_fog"), ref MiscFeatures.NoFogEnabled, MiscFeatures.ToggleNoFog);
 		GUILayout.Space(5f);
-		ToggleLogic("WaterMark_Toggle", " 显示水印", ref showWatermark);
+		ToggleLogic("WaterMark_Toggle", L.T("self.watermark"), ref showWatermark);
 		GUILayout.Space(5f);
-		ToggleLogic("Grab_Guard", " 防抓取保护", ref debounce);
+		ToggleLogic("Grab_Guard", L.T("self.anti_grab"), ref debounce);
 		GUILayout.Space(5f);
-		if (GUILayout.Button("给予皇冠", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("self.give_crown"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			string localPlayerSteamID = PlayerController.GetLocalPlayerSteamID();
 			Object.FindObjectOfType<SessionManager>();
@@ -1239,21 +1255,21 @@ public class Hax2 : MonoBehaviour
 				Debug.LogError((object)"PhotonView not found on PunManager GameObject!");
 			}
 		}
-		ToggleLogic("no_weapon_recoil", " 无武器后坐力", ref Patches.NoWeaponRecoil._isEnabledForConfig, delegate
+		ToggleLogic("no_weapon_recoil", L.T("self.no_recoil"), ref Patches.NoWeaponRecoil._isEnabledForConfig, delegate
 		{
 			ConfigManager.SaveToggle("no_weapon_recoil", Patches.NoWeaponRecoil._isEnabledForConfig);
 			PlayerPrefs.Save();
 			Debug.Log((object)$"[Self Tab Toggle] Set No Recoil Enabled to: {Patches.NoWeaponRecoil._isEnabledForConfig}");
 		});
 		GUILayout.Space(10f);
-		ToggleLogic("no_weapon_cooldown", " 无武器冷却", ref ConfigManager.NoWeaponCooldownEnabled, delegate
+		ToggleLogic("no_weapon_cooldown", L.T("self.no_cooldown"), ref ConfigManager.NoWeaponCooldownEnabled, delegate
 		{
 			ConfigManager.SaveToggle("no_weapon_cooldown", ConfigManager.NoWeaponCooldownEnabled);
 			PlayerPrefs.Save();
 			Debug.Log((object)$"[GUI Toggle] Set No Cooldown Enabled to: {ConfigManager.NoWeaponCooldownEnabled}");
 		});
 		GUILayout.Space(10f);
-		GUILayout.Label($"扩散倍率: {ConfigManager.CurrentSpreadMultiplier:F2}x " + "(" + ((ConfigManager.CurrentSpreadMultiplier <= 0.01f) ? "无扩散" : (Mathf.Approximately(ConfigManager.CurrentSpreadMultiplier, 1f) ? "正常" : $"{ConfigManager.CurrentSpreadMultiplier * 100f:F0}%")) + ")", labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.spread_fmt", ConfigManager.CurrentSpreadMultiplier, ((ConfigManager.CurrentSpreadMultiplier <= 0.01f) ? L.T("self.spread_none") : (Mathf.Approximately(ConfigManager.CurrentSpreadMultiplier, 1f) ? L.T("self.spread_normal") : $"{ConfigManager.CurrentSpreadMultiplier * 100f:F0}%"))), labelStyle, Array.Empty<GUILayoutOption>());
 		float num = GUILayout.HorizontalSlider(ConfigManager.CurrentSpreadMultiplier, 0f, 2f, Array.Empty<GUILayoutOption>());
 		if (num != ConfigManager.CurrentSpreadMultiplier)
 		{
@@ -1262,15 +1278,15 @@ public class Hax2 : MonoBehaviour
 			PlayerPrefs.Save();
 			Debug.Log((object)$"[GUI Slider] Set Spread Multiplier to: {num}");
 		}
-		grabThroughWallsEnabled = ToggleLogic("grab_through_walls", " 穿墙抓取", ref grabThroughWallsEnabled, delegate
+		grabThroughWallsEnabled = ToggleLogic("grab_through_walls", L.T("self.grab_walls"), ref grabThroughWallsEnabled, delegate
 		{
 			Patches.ToggleGrabThroughWalls(grabThroughWallsEnabled);
 			ConfigManager.SaveToggle("grab_through_walls", grabThroughWallsEnabled);
 			PlayerPrefs.Save();
 		});
 		GUILayout.Space(10f);
-		GUILayout.Label("玩家属性", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Label("力量: " + Mathf.RoundToInt(sliderValueStrength), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.stats"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.strength_fmt", Mathf.RoundToInt(sliderValueStrength)), labelStyle, Array.Empty<GUILayoutOption>());
 		sliderValueStrength = GUILayout.HorizontalSlider(sliderValueStrength, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (sliderValueStrength != oldSliderValueStrength)
 		{
@@ -1287,7 +1303,7 @@ public class Hax2 : MonoBehaviour
 			}
 			oldSliderValueStrength = sliderValueStrength;
 		}
-		GUILayout.Label("投掷力量: " + Mathf.RoundToInt(throwStrength), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.throw_fmt", Mathf.RoundToInt(throwStrength)), labelStyle, Array.Empty<GUILayoutOption>());
 		throwStrength = GUILayout.HorizontalSlider(throwStrength, 0f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (throwStrength != OldthrowStrength)
 		{
@@ -1304,7 +1320,7 @@ public class Hax2 : MonoBehaviour
 			}
 			OldthrowStrength = throwStrength;
 		}
-		GUILayout.Label("速度: " + Mathf.RoundToInt(sliderValue), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.speed_fmt", Mathf.RoundToInt(sliderValue)), labelStyle, Array.Empty<GUILayoutOption>());
 		sliderValue = GUILayout.HorizontalSlider(sliderValue, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (sliderValue != oldSliderValue)
 		{
@@ -1321,7 +1337,7 @@ public class Hax2 : MonoBehaviour
 			}
 			oldSliderValue = sliderValue;
 		}
-		GUILayout.Label("抓取范围: " + Mathf.RoundToInt(grabRange), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.grab_range_fmt", Mathf.RoundToInt(grabRange)), labelStyle, Array.Empty<GUILayoutOption>());
 		grabRange = GUILayout.HorizontalSlider(grabRange, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (grabRange != OldgrabRange)
 		{
@@ -1338,14 +1354,14 @@ public class Hax2 : MonoBehaviour
 			}
 			OldgrabRange = grabRange;
 		}
-		GUILayout.Label("体力恢复延迟: " + Mathf.RoundToInt(staminaRechargeDelay), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.stam_delay_fmt", Mathf.RoundToInt(staminaRechargeDelay)), labelStyle, Array.Empty<GUILayoutOption>());
 		staminaRechargeDelay = GUILayout.HorizontalSlider(staminaRechargeDelay, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (staminaRechargeDelay != oldStaminaRechargeDelay)
 		{
 			oldStaminaRechargeDelay = staminaRechargeDelay;
 			Debug.Log((object)("Stamina Recharge Delay to: " + staminaRechargeDelay));
 		}
-		GUILayout.Label("体力恢复速率: " + Mathf.RoundToInt(staminaRechargeRate), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.stam_rate_fmt", Mathf.RoundToInt(staminaRechargeRate)), labelStyle, Array.Empty<GUILayoutOption>());
 		staminaRechargeRate = GUILayout.HorizontalSlider(staminaRechargeRate, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (staminaRechargeDelay != oldStaminaRechargeDelay || staminaRechargeRate != oldStaminaRechargeRate)
 		{
@@ -1354,7 +1370,7 @@ public class Hax2 : MonoBehaviour
 			oldStaminaRechargeDelay = staminaRechargeDelay;
 			oldStaminaRechargeRate = staminaRechargeRate;
 		}
-		GUILayout.Label("额外跳跃: " + Mathf.RoundToInt((float)extraJumps), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.extra_jump_fmt", Mathf.RoundToInt((float)extraJumps)), labelStyle, Array.Empty<GUILayoutOption>());
 		extraJumps = (int)GUILayout.HorizontalSlider((float)extraJumps, 0f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if ((float)extraJumps != OldextraJumps)
 		{
@@ -1371,7 +1387,7 @@ public class Hax2 : MonoBehaviour
 			}
 			OldextraJumps = extraJumps;
 		}
-		GUILayout.Label("翻滚发射力度: " + Mathf.RoundToInt(tumbleLaunch), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.tumble_fmt", Mathf.RoundToInt(tumbleLaunch)), labelStyle, Array.Empty<GUILayoutOption>());
 		tumbleLaunch = (int)GUILayout.HorizontalSlider(tumbleLaunch, 0f, 20f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (tumbleLaunch != OldtumbleLaunch)
 		{
@@ -1388,42 +1404,68 @@ public class Hax2 : MonoBehaviour
 			}
 			OldtumbleLaunch = tumbleLaunch;
 		}
-		GUILayout.Label("跳跃力度: " + Mathf.RoundToInt(jumpForce), labelStyle, Array.Empty<GUILayoutOption>());
+
+		// ===================== 一键全升级 =====================
+		GUILayout.Space(10f);
+		if (GUILayout.Button(L.T("self.max_all_upgrades"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			UpgradeHelper.MaxAllUpgrades();
+		}
+
+		// ===================== 游戏速度 =====================
+		GUILayout.Label(L.T("self.game_speed_fmt", Time.timeScale.ToString("F1")), labelStyle, Array.Empty<GUILayoutOption>());
+		float newTimeScale = GUILayout.HorizontalSlider(Time.timeScale, 0.1f, 5f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+		if (Mathf.Abs(newTimeScale - Time.timeScale) > 0.01f)
+		{
+			Time.timeScale = newTimeScale;
+		}
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button("0.5x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 0.5f;
+		if (GUILayout.Button("1x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 1f;
+		if (GUILayout.Button("2x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 2f;
+		if (GUILayout.Button("3x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 3f;
+		GUILayout.EndHorizontal();
+
+		// ===================== 网络隐身 =====================
+		GUILayout.Space(5f);
+		ToggleLogic("stealth_mode", L.T("self.stealth_mode"), ref StealthMode.isEnabled, StealthMode.Apply);
+
+		GUILayout.Label(L.T("self.jump_fmt", Mathf.RoundToInt(jumpForce)), labelStyle, Array.Empty<GUILayoutOption>());
 		jumpForce = GUILayout.HorizontalSlider(jumpForce, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (jumpForce != OldjumpForce)
 		{
 			PlayerController.SetJumpForce(17f + jumpForce);
 			OldjumpForce = jumpForce;
 		}
-		GUILayout.Label("重力: " + Mathf.RoundToInt(customGravity), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.gravity_fmt", Mathf.RoundToInt(customGravity)), labelStyle, Array.Empty<GUILayoutOption>());
 		customGravity = GUILayout.HorizontalSlider(customGravity, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (customGravity != OldcustomGravity)
 		{
 			PlayerController.SetCustomGravity(30f + customGravity);
 			OldcustomGravity = customGravity;
 		}
-		GUILayout.Label("蹲下延迟: " + Mathf.RoundToInt(crouchDelay), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.crouch_delay_fmt", Mathf.RoundToInt(crouchDelay)), labelStyle, Array.Empty<GUILayoutOption>());
 		crouchDelay = GUILayout.HorizontalSlider(crouchDelay, 0f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (crouchDelay != OldcrouchDelay)
 		{
 			PlayerController.SetCrouchDelay(crouchDelay);
 			OldcrouchDelay = crouchDelay;
 		}
-		GUILayout.Label("蹲下速度: " + Mathf.RoundToInt(crouchSpeed), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.crouch_speed_fmt", Mathf.RoundToInt(crouchSpeed)), labelStyle, Array.Empty<GUILayoutOption>());
 		crouchSpeed = GUILayout.HorizontalSlider(crouchSpeed, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (crouchSpeed != OldcrouchSpeed)
 		{
 			PlayerController.SetCrouchSpeed(crouchSpeed);
 			OldcrouchSpeed = crouchSpeed;
 		}
-		GUILayout.Label("滑行减速 " + Mathf.RoundToInt(slideDecay), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.slide_fmt", Mathf.RoundToInt(slideDecay)), labelStyle, Array.Empty<GUILayoutOption>());
 		slideDecay = GUILayout.HorizontalSlider(slideDecay, 0f, 20f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (slideDecay != OldslideDecay)
 		{
 			PlayerController.SetSlideDecay(slideDecay);
 			OldslideDecay = slideDecay;
 		}
-		GUILayout.Label("手电筒亮度 " + Mathf.RoundToInt(flashlightIntensity), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("self.flashlight_fmt", Mathf.RoundToInt(flashlightIntensity)), labelStyle, Array.Empty<GUILayoutOption>());
 		flashlightIntensity = GUILayout.HorizontalSlider(flashlightIntensity, 1f, 20f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (flashlightIntensity != OldflashlightIntensity)
 		{
@@ -1437,7 +1479,7 @@ public class Hax2 : MonoBehaviour
 		if ((Object)(object)FOVEditor.Instance != (Object)null)
 		{
 			float fOV = FOVEditor.Instance.GetFOV();
-			GUILayout.Label("视野FOV: " + Mathf.RoundToInt(fOV), labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("self.fov_fmt", Mathf.RoundToInt(fOV)), labelStyle, Array.Empty<GUILayoutOption>());
 			float num8 = GUILayout.HorizontalSlider(fOV, 60f, 120f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 			if (num8 != fOV)
 			{
@@ -1447,130 +1489,163 @@ public class Hax2 : MonoBehaviour
 		}
 		else
 		{
-			GUILayout.Label("加载FOV编辑器中...", labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("self.fov_loading"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
+
+		// ===================== 第三人称相机 =====================
+		GUILayout.Space(10f);
+		ToggleLogic("third_person", L.T("self.third_person"), ref ThirdPersonCamera.isEnabled,
+			() => { if (ThirdPersonCamera.isEnabled) ThirdPersonCamera.Enable(); else ThirdPersonCamera.Disable(); });
+		if (ThirdPersonCamera.isEnabled)
+		{
+			GUILayout.Label(L.T("self.tp_cam_dist_fmt", ThirdPersonCamera.cameraDistance), labelStyle, Array.Empty<GUILayoutOption>());
+			ThirdPersonCamera.cameraDistance = GUILayout.HorizontalSlider(ThirdPersonCamera.cameraDistance, 1f, 15f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			GUILayout.Label(L.T("self.tp_cam_height_fmt", ThirdPersonCamera.cameraHeight), labelStyle, Array.Empty<GUILayoutOption>());
+			ThirdPersonCamera.cameraHeight = GUILayout.HorizontalSlider(ThirdPersonCamera.cameraHeight, 0f, 5f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+		}
+
+		// ===================== 创造模式 (内嵌到自身页) =====================
+		GUILayout.Space(15f);
+		GUILayout.Label(L.T("creative.title"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(5f);
+		GUILayout.Label(L.T("creative.desc"), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(5f);
+		ToggleLogic("creative_mode", L.T("creative.toggle"), ref CreativeMode.isCreativeMode, CreativeMode.ToggleCreativeMode);
+		GUILayout.Space(5f);
+		if (CreativeMode.isCreativeMode)
+		{
+			GUILayout.Label(L.T("creative.status_on"), warningStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("creative.controls"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("creative.wasd"), labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("creative.shift"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		else
+		{
+			GUILayout.Label(L.T("creative.status_off"), labelStyle, Array.Empty<GUILayoutOption>());
 		}
 	}
 
 	private void DrawVisualsTab()
 	{
 		GUILayout.Space(5f);
-		ToggleLogic("modern_esp", " 使用现代ESP", ref useModernESP);
-		GUILayout.Label("敌人透视", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		ToggleLogic("enable_en_esp", " 启用敌人透视", ref DebugCheats.drawEspBool);
+		ToggleLogic("modern_esp", L.T("vis.modern_esp"), ref useModernESP);
+		GUILayout.Label(L.T("vis.enemy_esp"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("enable_en_esp", L.T("vis.enemy_toggle"), ref DebugCheats.drawEspBool);
 		if (DebugCheats.drawEspBool)
 		{
 			GUILayout.BeginVertical(GUI.skin.box, Array.Empty<GUILayoutOption>());
 			GUILayout.Space(5f);
-			ToggleLogic("show_2d_box_enemy", " 显示2D方框", ref DebugCheats.showEnemyBox);
+			ToggleLogic("show_2d_box_enemy", L.T("vis.show_2d_box"), ref DebugCheats.showEnemyBox);
 			GUILayout.Space(5f);
 			bool value = DebugCheats.drawChamsBool;
-			ToggleLogic("show_chams_enemy", " 显示发光模型", ref value);
+			ToggleLogic("show_chams_enemy", L.T("vis.show_chams"), ref value);
 			DebugCheats.drawChamsBool = value;
 			GUILayout.Space(5f);
-			ToggleLogic("show_names_enemy", " 显示名称", ref DebugCheats.showEnemyNames);
+			ToggleLogic("show_names_enemy", L.T("vis.show_name"), ref DebugCheats.showEnemyNames);
 			GUILayout.Space(5f);
-			ToggleLogic("show_distance_enemy", " 显示距离", ref DebugCheats.showEnemyDistance);
+			ToggleLogic("show_distance_enemy", L.T("vis.show_distance"), ref DebugCheats.showEnemyDistance);
 			GUILayout.Space(5f);
-			ToggleLogic("show_health_enemy", " 显示血量", ref DebugCheats.showEnemyHP);
+			ToggleLogic("show_health_enemy", L.T("vis.show_health"), ref DebugCheats.showEnemyHP);
 			GUILayout.EndVertical();
 		}
 		GUILayout.Space(10f);
-		GUILayout.Label("物品透视", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		ToggleLogic("enable_item_esp", " 启用物品透视", ref DebugCheats.drawItemEspBool);
+		GUILayout.Label(L.T("vis.item_esp"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("enable_item_esp", L.T("vis.item_toggle"), ref DebugCheats.drawItemEspBool);
 		if (DebugCheats.drawItemEspBool)
 		{
 			GUILayout.BeginVertical(GUI.skin.box, Array.Empty<GUILayoutOption>());
 			GUILayout.Space(5f);
-			ToggleLogic("show_3d_box_item", " 显示3D方框", ref DebugCheats.draw3DItemEspBool);
+			ToggleLogic("show_3d_box_item", L.T("vis.show_3d_box"), ref DebugCheats.draw3DItemEspBool);
 			GUILayout.Space(5f);
 			bool value2 = DebugCheats.drawItemChamsBool;
-			ToggleLogic("show_chams_item", " 显示发光模型", ref value2);
+			ToggleLogic("show_chams_item", L.T("vis.item_chams"), ref value2);
 			DebugCheats.drawItemChamsBool = value2;
 			if (DebugCheats.drawChamsBool || DebugCheats.drawItemChamsBool)
 			{
 				GUILayout.Space(10f);
-				if (GUILayout.Button("发光颜色设置", buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(30f) }))
+				if (GUILayout.Button(L.T("vis.chams_color"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(30f) }))
 				{
 					showChamsWindow = !showChamsWindow;
 				}
 			}
 			GUILayout.Space(5f);
-			ToggleLogic("show_names_item", " 显示名称", ref DebugCheats.showItemNames);
+			ToggleLogic("show_names_item", L.T("vis.item_name"), ref DebugCheats.showItemNames);
 			GUILayout.Space(5f);
-			ToggleLogic("show_distance_item", " 显示距离", ref DebugCheats.showItemDistance);
+			ToggleLogic("show_distance_item", L.T("vis.item_distance"), ref DebugCheats.showItemDistance);
 			if (DebugCheats.showItemDistance)
 			{
-				GUILayout.Label($"最大距离 {DebugCheats.maxItemEspDistance:F0}米", labelStyle, Array.Empty<GUILayoutOption>());
+				GUILayout.Label(L.T("vis.max_dist_fmt", DebugCheats.maxItemEspDistance), labelStyle, Array.Empty<GUILayoutOption>());
 				DebugCheats.maxItemEspDistance = GUILayout.HorizontalSlider(DebugCheats.maxItemEspDistance, 0f, 1000f, Array.Empty<GUILayoutOption>());
 			}
 			GUILayout.Space(5f);
-			ToggleLogic("show_value_item", " 显示价值", ref DebugCheats.showItemValue);
+			ToggleLogic("show_value_item", L.T("vis.show_value"), ref DebugCheats.showItemValue);
 			if (DebugCheats.showItemValue)
 			{
-				GUILayout.Label($"最小价值 ${DebugCheats.minItemValue}", labelStyle, Array.Empty<GUILayoutOption>());
+				GUILayout.Label(L.T("vis.min_value_fmt", DebugCheats.minItemValue), labelStyle, Array.Empty<GUILayoutOption>());
 				DebugCheats.minItemValue = Mathf.RoundToInt(GUILayout.HorizontalSlider((float)DebugCheats.minItemValue, 0f, 50000f, Array.Empty<GUILayoutOption>()));
 			}
 			GUILayout.Space(5f);
-			ToggleLogic("show_dead_heads", " 显示死亡玩家头颅", ref DebugCheats.showPlayerDeathHeads);
+			ToggleLogic("show_dead_heads", L.T("vis.show_skulls"), ref DebugCheats.showPlayerDeathHeads);
 			GUILayout.EndVertical();
 		}
 		GUILayout.Space(10f);
-		GUILayout.Label("撤离点透视", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		ToggleLogic("enable_extract_esp", " 启用撤离点透视", ref DebugCheats.drawExtractionPointEspBool);
+		GUILayout.Label(L.T("vis.extract_esp"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("enable_extract_esp", L.T("vis.extract_toggle"), ref DebugCheats.drawExtractionPointEspBool);
 		if (DebugCheats.drawExtractionPointEspBool)
 		{
 			GUILayout.BeginVertical(GUI.skin.box, Array.Empty<GUILayoutOption>());
 			GUILayout.Space(5f);
-			ToggleLogic("show_extract_names", " 显示名称/状态", ref DebugCheats.showExtractionNames);
+			ToggleLogic("show_extract_names", L.T("vis.show_name_status"), ref DebugCheats.showExtractionNames);
 			GUILayout.Space(5f);
-			ToggleLogic("show_extract_distance", " 显示距离", ref DebugCheats.showExtractionDistance);
+			ToggleLogic("show_extract_distance", L.T("vis.extract_dist"), ref DebugCheats.showExtractionDistance);
 			GUILayout.EndVertical();
 		}
 		GUILayout.Space(10f);
-		GUILayout.Label("玩家透视", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		ToggleLogic("enable_player_esp", " 启用玩家透视", ref DebugCheats.drawPlayerEspBool);
+		GUILayout.Label(L.T("vis.player_esp"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("enable_player_esp", L.T("vis.player_toggle"), ref DebugCheats.drawPlayerEspBool);
 		if (DebugCheats.drawPlayerEspBool)
 		{
 			GUILayout.BeginVertical(GUI.skin.box, Array.Empty<GUILayoutOption>());
 			GUILayout.Space(5f);
-			ToggleLogic("show_2d_box_player", " 显示2D方框", ref DebugCheats.draw2DPlayerEspBool);
+			ToggleLogic("show_2d_box_player", L.T("vis.player_2d"), ref DebugCheats.draw2DPlayerEspBool);
 			GUILayout.Space(5f);
-			ToggleLogic("show_3d_box_player", " 显示3D方框", ref DebugCheats.draw3DPlayerEspBool);
+			ToggleLogic("show_3d_box_player", L.T("vis.player_3d"), ref DebugCheats.draw3DPlayerEspBool);
 			GUILayout.Space(5f);
-			ToggleLogic("show_names_player", " 显示名称", ref DebugCheats.showPlayerNames);
+			ToggleLogic("show_names_player", L.T("vis.player_name"), ref DebugCheats.showPlayerNames);
 			GUILayout.Space(5f);
-			ToggleLogic("show_distance_player", " 显示距离", ref DebugCheats.showPlayerDistance);
+			ToggleLogic("show_distance_player", L.T("vis.player_dist"), ref DebugCheats.showPlayerDistance);
 			GUILayout.Space(5f);
-			ToggleLogic("show_health_player", " 显示血量", ref DebugCheats.showPlayerHP);
+			ToggleLogic("show_health_player", L.T("vis.player_hp"), ref DebugCheats.showPlayerHP);
 			GUILayout.Space(5f);
-			ToggleLogic("show_alive_dead_list", " 显示存活/死亡列表", ref showPlayerStatus);
+			ToggleLogic("show_alive_dead_list", L.T("vis.player_list"), ref showPlayerStatus);
 			GUILayout.EndVertical();
 		}
 		GUILayout.Space(10f);
-		GUILayout.Label("追踪线", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		ToggleLogic("trace_enemy", " 敌人追踪线", ref ESPEnhancements.showTraceLinesEnemy);
+		GUILayout.Label(L.T("vis.trace"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("trace_enemy", L.T("vis.trace_enemy"), ref ESPEnhancements.showTraceLinesEnemy);
 		GUILayout.Space(5f);
-		ToggleLogic("trace_item", " 物品追踪线", ref ESPEnhancements.showTraceLinesItem);
+		ToggleLogic("trace_item", L.T("vis.trace_item"), ref ESPEnhancements.showTraceLinesItem);
 		GUILayout.Space(5f);
-		ToggleLogic("trace_player", " 玩家追踪线", ref ESPEnhancements.showTraceLinesPlayer);
+		ToggleLogic("trace_player", L.T("vis.trace_player"), ref ESPEnhancements.showTraceLinesPlayer);
 		GUILayout.Space(10f);
-		GUILayout.Label("ESP预设", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("vis.esp_presets"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		for (int pi = 0; pi < ESPEnhancements.presetNames.Length; pi++)
+		var presetDisplayNames = ESPEnhancements.GetPresetNames();
+		for (int pi = 0; pi < presetDisplayNames.Length; pi++)
 		{
 			GUIStyle presetBtnStyle = ((int)ESPEnhancements.currentPreset == pi) ? tabSelectedStyle : buttonStyle;
-			if (GUILayout.Button(ESPEnhancements.presetNames[pi], presetBtnStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(70f) }))
+			if (GUILayout.Button(presetDisplayNames[pi], presetBtnStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(85f) }))
 			{
 				ESPEnhancements.ApplyPreset((ESPEnhancements.ESPPreset)pi);
 			}
 		}
 		GUILayout.EndHorizontal();
 		GUILayout.Space(10f);
-		GUILayout.Label("雷达", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		ToggleLogic("mini_radar", " 小地图雷达", ref MiniRadar.isRadarEnabled);
+		GUILayout.Label(L.T("vis.radar"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("mini_radar", L.T("vis.radar_toggle"), ref MiniRadar.isRadarEnabled);
 		if (MiniRadar.isRadarEnabled)
 		{
-			GUILayout.Label("扫描范围: " + Mathf.RoundToInt(MiniRadar.radarRange), labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("vis.radar_range_fmt", Mathf.RoundToInt(MiniRadar.radarRange)), labelStyle, Array.Empty<GUILayoutOption>());
 			MiniRadar.radarRange = GUILayout.HorizontalSlider(MiniRadar.radarRange, 10f, 200f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		}
 	}
@@ -1596,36 +1671,29 @@ public class Hax2 : MonoBehaviour
 		//IL_00c4: Unknown result type (might be due to invalid IL or missing references)
 		//IL_00c9: Unknown result type (might be due to invalid IL or missing references)
 		UpdatePlayerList();
-		GUILayout.Label("选择玩家:", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		EnsureListStylesInitialized();
+		GUILayout.Label(L.T("combat.select"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		for (int i = 0; i < playerNames.Count; i++)
 		{
-			GUIStyle val = new GUIStyle(GUI.skin.button);
-			val.alignment = (TextAnchor)4;
-			val.fontSize = 14;
-			val.fontStyle = (FontStyle)1;
-			val.fixedHeight = 28f;
-			val.margin = new RectOffset(2, 2, 2, 2);
-			val.padding = new RectOffset(8, 8, 4, 4);
-			val.border = new RectOffset(4, 4, 4, 4);
 			if (i == selectedPlayerIndex)
 			{
-				val.normal.background = MakeSolidBackground((Color)(new Color32((byte)50, (byte)50, (byte)70, byte.MaxValue)));
-				val.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
+				cachedPlayerListStyle.normal.background = rowBgSelected;
+				cachedPlayerListStyle.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
 			}
 			else
 			{
-				val.normal.background = MakeSolidBackground((Color)(new Color32((byte)30, (byte)30, (byte)30, byte.MaxValue)));
-				val.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
-				val.hover.background = MakeSolidBackground((Color)(new Color32((byte)40, (byte)40, (byte)50, byte.MaxValue)));
-				val.hover.textColor = Color.white;
+				cachedPlayerListStyle.normal.background = rowBgNormal;
+				cachedPlayerListStyle.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
+				cachedPlayerListStyle.hover.background = rowBgHover;
+				cachedPlayerListStyle.hover.textColor = Color.white;
 			}
-			if (GUILayout.Button(playerNames[i], val, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(playerNames[i], cachedPlayerListStyle, Array.Empty<GUILayoutOption>()))
 			{
 				selectedPlayerIndex = i;
 			}
 		}
 		GUILayout.Space(40f);
-		if (GUILayout.Button("-1 伤害", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("combat.damage"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			if (selectedPlayerIndex >= 0 && selectedPlayerIndex < playerList.Count)
 			{
@@ -1637,7 +1705,7 @@ public class Hax2 : MonoBehaviour
 				Debug.Log((object)"No valid player selected to damage!");
 			}
 		}
-		if (GUILayout.Button("最大治疗", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("combat.heal"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			if (selectedPlayerIndex >= 0 && selectedPlayerIndex < playerList.Count)
 			{
@@ -1649,22 +1717,30 @@ public class Hax2 : MonoBehaviour
 				Debug.Log((object)"No valid player selected to heal!");
 			}
 		}
-		if (GUILayout.Button("击杀", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("combat.kill"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Players.KillSelectedPlayer(selectedPlayerIndex, playerList, playerNames);
 			Debug.Log((object)("Player killed: " + playerNames[selectedPlayerIndex]));
 		}
-		if (GUILayout.Button("复活", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("combat.revive"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Players.ReviveSelectedPlayer(selectedPlayerIndex, playerList, playerNames);
 			Debug.Log((object)("Player revived: " + playerNames[selectedPlayerIndex]));
 		}
-		if (GUILayout.Button("翻滚 (10秒", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("combat.heal_revive"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			if (selectedPlayerIndex >= 0 && selectedPlayerIndex < playerList.Count)
+			{
+				string name = (selectedPlayerIndex < playerNames.Count) ? playerNames[selectedPlayerIndex] : "Unknown";
+				Players.HealRevivePlayer(playerList[selectedPlayerIndex], name);
+			}
+		}
+		if (GUILayout.Button(L.T("combat.tumble"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Players.ForcePlayerTumble();
 			Debug.Log((object)("Player tumbled: " + playerNames[selectedPlayerIndex]));
 		}
-		if (GUILayout.Button(showTeleportUI ? "隐藏传送选项" : "显示传送选项", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(showTeleportUI ? L.T("combat.hide_tp") : L.T("combat.show_tp"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			showTeleportUI = !showTeleportUI;
 			if (showTeleportUI)
@@ -1675,6 +1751,35 @@ public class Hax2 : MonoBehaviour
 		if (showTeleportUI)
 		{
 			DrawTeleportOptions();
+		}
+		GUILayout.Space(15f);
+		// 附身功能
+		if (PlayerPossession.isPossessing)
+		{
+			GUILayout.Label(L.T("combat.possess_active", PlayerPossession.possessTargetName), warningStyle, Array.Empty<GUILayoutOption>());
+			if (GUILayout.Button(L.T("combat.unpossess"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				PlayerPossession.StopPossession();
+			}
+		}
+		else
+		{
+			if (GUILayout.Button(L.T("combat.possess"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				PlayerPossession.StartPossession(playerList, playerNames, selectedPlayerIndex);
+			}
+		}
+
+		// ===================== 自动瞄准 =====================
+		GUILayout.Space(15f);
+		GUILayout.Label(L.T("combat.aimbot_title"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("aimbot_enabled", L.T("combat.aimbot_toggle"), ref Aimbot.isEnabled);
+		if (Aimbot.isEnabled)
+		{
+			GUILayout.Label(L.T("combat.aimbot_smooth_fmt", Aimbot.smoothness.ToString("F0")), labelStyle, Array.Empty<GUILayoutOption>());
+			Aimbot.smoothness = GUILayout.HorizontalSlider(Aimbot.smoothness, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			GUILayout.Label(L.T("combat.aimbot_range_fmt", Aimbot.maxDistance.ToString("F0")), labelStyle, Array.Empty<GUILayoutOption>());
+			Aimbot.maxDistance = GUILayout.HorizontalSlider(Aimbot.maxDistance, 10f, 200f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		}
 	}
 
@@ -1709,36 +1814,29 @@ public class Hax2 : MonoBehaviour
 		//IL_06cc: Unknown result type (might be due to invalid IL or missing references)
 		//IL_06d1: Unknown result type (might be due to invalid IL or missing references)
 		UpdatePlayerList();
-		GUILayout.Label("选择玩家:", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		EnsureListStylesInitialized();
+		GUILayout.Label(L.T("misc.select"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		for (int i = 0; i < playerNames.Count; i++)
 		{
-			GUIStyle val = new GUIStyle(GUI.skin.button);
-			val.alignment = (TextAnchor)4;
-			val.fontSize = 14;
-			val.fontStyle = (FontStyle)1;
-			val.fixedHeight = 28f;
-			val.margin = new RectOffset(2, 2, 2, 2);
-			val.padding = new RectOffset(8, 8, 4, 4);
-			val.border = new RectOffset(4, 4, 4, 4);
 			if (i == selectedPlayerIndex)
 			{
-				val.normal.background = MakeSolidBackground((Color)(new Color32((byte)50, (byte)50, (byte)70, byte.MaxValue)));
-				val.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
+				cachedPlayerListStyle.normal.background = rowBgSelected;
+				cachedPlayerListStyle.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
 			}
 			else
 			{
-				val.normal.background = MakeSolidBackground((Color)(new Color32((byte)30, (byte)30, (byte)30, byte.MaxValue)));
-				val.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
-				val.hover.background = MakeSolidBackground((Color)(new Color32((byte)40, (byte)40, (byte)50, byte.MaxValue)));
-				val.hover.textColor = Color.white;
+				cachedPlayerListStyle.normal.background = rowBgNormal;
+				cachedPlayerListStyle.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
+				cachedPlayerListStyle.hover.background = rowBgHover;
+				cachedPlayerListStyle.hover.textColor = Color.white;
 			}
-			if (GUILayout.Button(playerNames[i], val, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(playerNames[i], cachedPlayerListStyle, Array.Empty<GUILayoutOption>()))
 			{
 				selectedPlayerIndex = i;
 			}
 		}
 		GUILayout.Space(40f);
-		if (GUILayout.Button("[主机] 生成金钱", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("misc.spawn_money"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			GameObject localPlayer = DebugCheats.GetLocalPlayer();
 			if ((Object)(object)localPlayer != (Object)null)
@@ -1763,9 +1861,9 @@ public class Hax2 : MonoBehaviour
 			GUILayout.EndScrollView();
 		}
 		GUILayout.Space(10f);
-		GUILayout.Label("伪造名字", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("misc.spoof_name"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("伪造", buttonStyle, Array.Empty<GUILayoutOption>()) && !string.IsNullOrEmpty(spoofedNameText))
+		if (GUILayout.Button(L.T("misc.spoof_btn"), buttonStyle, Array.Empty<GUILayoutOption>()) && !string.IsNullOrEmpty(spoofedNameText))
 		{
 			ChatHijack.ToggleNameSpoofing(enable: true, spoofedNameText, spoofTargetVisibleName, playerList, playerNames);
 		}
@@ -1788,7 +1886,7 @@ public class Hax2 : MonoBehaviour
 		{
 			for (int k = 0; k < playerNames.Count + 1; k++)
 			{
-				string text2 = ((k == 0) ? "All" : playerNames[k - 1]);
+				string text2 = ((k == 0) ? L.T("common.all") : playerNames[k - 1]);
 				if (GUILayout.Button(text2, buttonStyle, Array.Empty<GUILayoutOption>()))
 				{
 					spoofTargetVisibleName = text2;
@@ -1800,13 +1898,52 @@ public class Hax2 : MonoBehaviour
 				}
 			}
 		}
-		if (GUILayout.Button("重置伪造名称", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("misc.reset_spoof"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			ChatHijack.ToggleNameSpoofing(enable: false, "", spoofTargetVisibleName, playerList, playerNames);
 			spoofedNameText = "Text";
 		}
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button(L.T("misc.random_player_name"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			try
+			{
+				// 从房间玩家中随机选一个名字（排除自己）
+				GameObject localP = DebugCheats.GetLocalPlayer();
+				string localName = (localP != null) ? ((UnityEngine.Object)localP).name : "";
+				List<string> otherNames = new List<string>();
+				for (int ri = 0; ri < playerNames.Count; ri++)
+				{
+					string stripped = System.Text.RegularExpressions.Regex.Replace(playerNames[ri], "<.*?>", "").Trim();
+					string clean = System.Text.RegularExpressions.Regex.Replace(stripped, "\\[(LIVE|DEAD|\u5b58\u6d3b|\u6b7b\u4ea1)\\]\\s*", "").Trim();
+					if (!string.IsNullOrEmpty(clean) && !clean.Contains("FakePlayer") && !clean.Contains(localName))
+					{
+						otherNames.Add(clean);
+					}
+				}
+				if (otherNames.Count > 0)
+				{
+					string randomName = otherNames[new System.Random().Next(otherNames.Count)];
+					ChatHijack.SpoofLocalPlayerName(randomName);
+				}
+			}
+			catch { }
+		}
+		if (GUILayout.Button(L.T("misc.random_string"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			try
+			{
+				const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+				System.Random rng = new System.Random();
+				char[] buf = new char[8];
+				for (int ci = 0; ci < 8; ci++) buf[ci] = chars[rng.Next(chars.Length)];
+				ChatHijack.SpoofLocalPlayerName(new string(buf));
+			}
+			catch { }
+		}
+		GUILayout.EndHorizontal();
 		GUILayout.Space(10f);
-		ToggleLogic("persistent_spoof_name", " 持久伪造名称", ref spoofNameActive);
+		ToggleLogic("persistent_spoof_name", L.T("misc.persist_spoof"), ref spoofNameActive);
 		if (spoofNameActive)
 		{
 			text = "PersistentSpoofNameField";
@@ -1821,9 +1958,9 @@ public class Hax2 : MonoBehaviour
 			}
 		}
 		GUILayout.Space(10f);
-		GUILayout.Label("伪造颜色", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("misc.spoof_color"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("伪造颜色", buttonStyle, Array.Empty<GUILayoutOption>()) && int.TryParse(colorIndexText, out var result) && colorNameMapping.ContainsKey(result))
+		if (GUILayout.Button(L.T("misc.spoof_color"), buttonStyle, Array.Empty<GUILayoutOption>()) && int.TryParse(colorIndexText, out var result) && GetColorNames().ContainsKey(result))
 		{
 			ChatHijack.ChangePlayerColor(result, colorTargetVisibleName, playerList, playerNames);
 		}
@@ -1831,7 +1968,7 @@ public class Hax2 : MonoBehaviour
 		{
 			colorDropdownVisible = !colorDropdownVisible;
 		}
-		if (GUILayout.Button(colorNameMapping.TryGetValue(int.Parse(colorIndexText), out var value) ? value : "选择颜色", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(GetColorNames().TryGetValue(int.Parse(colorIndexText), out var value) ? value : L.T("misc.select_color"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			showColorIndexDropdown = !showColorIndexDropdown;
 		}
@@ -1841,7 +1978,7 @@ public class Hax2 : MonoBehaviour
 			playerRainbowStates[selectedPlayerIndex] = false;
 		}
 		bool rainbowState = playerRainbowStates[selectedPlayerIndex];
-		ToggleLogic("rainbow_spoof_" + selectedPlayerIndex, " 彩虹模式", ref rainbowState, delegate
+		ToggleLogic("rainbow_spoof_" + selectedPlayerIndex, L.T("misc.rainbow"), ref rainbowState, delegate
 		{
 			if (rainbowState)
 			{
@@ -1854,7 +1991,7 @@ public class Hax2 : MonoBehaviour
 		{
 			for (int num = 0; num < playerNames.Count + 1; num++)
 			{
-				string text3 = ((num == 0) ? "All" : playerNames[num - 1]);
+				string text3 = ((num == 0) ? L.T("common.all") : playerNames[num - 1]);
 				if (GUILayout.Button(text3, buttonStyle, Array.Empty<GUILayoutOption>()))
 				{
 					colorTargetVisibleName = text3;
@@ -1865,7 +2002,7 @@ public class Hax2 : MonoBehaviour
 		if (showColorIndexDropdown)
 		{
 			colorIndexScrollPosition = GUILayout.BeginScrollView(colorIndexScrollPosition, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(150f) });
-			foreach (KeyValuePair<int, string> item in colorNameMapping)
+			foreach (KeyValuePair<int, string> item in GetColorNames())
 			{
 				if (GUILayout.Button(item.Value, buttonStyle, Array.Empty<GUILayoutOption>()))
 				{
@@ -1876,9 +2013,9 @@ public class Hax2 : MonoBehaviour
 			GUILayout.EndScrollView();
 		}
 		GUILayout.Space(10f);
-		GUILayout.Label("聊天刷屏", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("misc.chat_spam"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("发送", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("misc.send"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			ChatHijack.MakeChat(chatMessageText, ChatDropdownVisibleName, playerList, playerNames);
 		}
@@ -1901,7 +2038,7 @@ public class Hax2 : MonoBehaviour
 		{
 			for (int num2 = 0; num2 < playerNames.Count + 1; num2++)
 			{
-				string text4 = ((num2 == 0) ? "All" : playerNames[num2 - 1]);
+				string text4 = ((num2 == 0) ? L.T("common.all") : playerNames[num2 - 1]);
 				if (GUILayout.Button(text4, buttonStyle, Array.Empty<GUILayoutOption>()))
 				{
 					ChatDropdownVisibleName = text4;
@@ -1910,19 +2047,46 @@ public class Hax2 : MonoBehaviour
 			}
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("Activate All Extraction Points", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("misc.activate_extraction"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			MiscFeatures.ForceActivateAllExtractionPoints();
 		}
 		GUILayout.Space(10f);
-		GUILayout.Label("Map Tweaks (can't be undone in level):", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("Disable '?' Overlay", buttonStyle, Array.Empty<GUILayoutOption>()))
+		GUILayout.Label(L.T("misc.map_tweaks"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button(L.T("misc.disable_overlay"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			MapTools.changeOverlayStatus(status: true);
 		}
-		if (GUILayout.Button("Discover Map Valuables", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("misc.discover_valuables"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			MapTools.DiscoveryMapValuables();
+		}
+
+		// ===================== 搬运目标归零 =====================
+		GUILayout.Space(10f);
+		GUILayout.Label(L.T("misc.round_tools"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button(L.T("misc.zero_haul"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			HaulGoalZero.ZeroHaulGoal();
+		}
+		if (!string.IsNullOrEmpty(HaulGoalZero.statusMessage))
+		{
+			GUILayout.Label(HaulGoalZero.statusMessage, labelStyle, Array.Empty<GUILayoutOption>());
+		}
+
+		// ===================== 自动完成回合 =====================
+		if (GUILayout.Button(L.T("misc.auto_complete"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			AutoCompleteRound.Execute();
+		}
+
+		// ===================== 聊天命令 =====================
+		GUILayout.Space(10f);
+		GUILayout.Label(L.T("misc.chat_commands"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("misc.chat_commands_desc"), labelStyle, Array.Empty<GUILayoutOption>());
+		if (!string.IsNullOrEmpty(ChatCommands.GetFeedback()))
+		{
+			GUILayout.Label(ChatCommands.GetFeedback(), warningStyle, Array.Empty<GUILayoutOption>());
 		}
 	}
 
@@ -1957,8 +2121,15 @@ public class Hax2 : MonoBehaviour
 		//IL_0536: Unknown result type (might be due to invalid IL or missing references)
 		try
 		{
+			// 允许重新缓存：如果为空且超过30秒重试
+			if (cachedFilteredEnemySetups != null && cachedFilteredEnemySetups.Count == 0 && Time.time - lastEnemyCacheTime > 30f)
+			{
+				cachedFilteredEnemySetups = null;
+				cachedEnemySetupNames = null;
+			}
 			if (cachedFilteredEnemySetups == null || cachedEnemySetupNames == null)
 			{
+				lastEnemyCacheTime = Time.time;
 				List<EnemySetup> list = new List<EnemySetup>();
 				// 通过反射调用EnemySpawner（当前游戏版本可能已移除该类型）
 				var enemySpawnerType = typeof(RunManager).Assembly.GetType("EnemySpawner");
@@ -1977,6 +2148,16 @@ public class Hax2 : MonoBehaviour
 						}
 					}
 				}
+				// Fallback: 如果反射获取为空，使用 Resources 搜索所有 EnemySetup 资源
+				if (list.Count == 0)
+				{
+					var allSetups = Resources.FindObjectsOfTypeAll<EnemySetup>();
+					if (allSetups != null && allSetups.Length > 0)
+					{
+						list.AddRange(allSetups);
+						Debug.Log("[Hax2] EnemySpawner fallback: found " + allSetups.Length + " EnemySetup via Resources");
+					}
+				}
 				cachedFilteredEnemySetups = new List<EnemySetup>();
 				cachedEnemySetupNames = new List<string>();
 				if (list != null)
@@ -1985,37 +2166,30 @@ public class Hax2 : MonoBehaviour
 					{
 						if ((Object)(object)item2 != (Object)null && !((Object)item2).name.Contains("Enemy Group"))
 						{
-							string item = (((Object)item2).name.StartsWith("Enemy -") ? ((Object)item2).name.Substring("Enemy -".Length).Trim() : ((Object)item2).name);
+							string displayName = LanguageManager.GetEnemyName(((Object)item2).name);
 							cachedFilteredEnemySetups.Add(item2);
-							cachedEnemySetupNames.Add(item);
+							cachedEnemySetupNames.Add(displayName);
 						}
 					}
 				}
 			}
 			UpdateEnemyList();
-			scrollPos = GUILayout.BeginScrollView(scrollPos, Array.Empty<GUILayoutOption>());
-			GUILayout.Label("选择敌人:", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("enemies.select"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+			EnsureListStylesInitialized();
 			enemyScrollPosition = GUILayout.BeginScrollView(enemyScrollPosition, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height((float)Mathf.Min(200, enemyNames.Count * 35)) });
 			for (int i = 0; i < enemyNames.Count; i++)
 			{
-				GUIStyle val = new GUIStyle(GUI.skin.button);
-				val.fontSize = 13;
-				val.fontStyle = (FontStyle)1;
-				val.alignment = (TextAnchor)4;
-				val.margin = new RectOffset(4, 4, 2, 2);
-				val.padding = new RectOffset(6, 6, 4, 4);
-				val.border = new RectOffset(4, 4, 4, 4);
 				if (i == selectedEnemyIndex)
 				{
-					val.normal.background = MakeSolidBackground((Color)(new Color32((byte)60, (byte)30, (byte)10, (byte)200)));
-					val.normal.textColor = new Color(1f, 0.55f, 0.1f);
+					cachedEnemyListStyle.normal.background = enemyBgSelected;
+					cachedEnemyListStyle.normal.textColor = new Color(1f, 0.55f, 0.1f);
 				}
 				else
 				{
-					val.normal.background = MakeSolidBackground((Color)(new Color32((byte)30, (byte)30, (byte)35, (byte)180)));
-					val.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
+					cachedEnemyListStyle.normal.background = enemyBgNormal;
+					cachedEnemyListStyle.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
 				}
-				if (GUILayout.Button(enemyNames[i], val, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(30f) }))
+				if (GUILayout.Button(enemyNames[i], cachedEnemyListStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(30f) }))
 				{
 					selectedEnemyIndex = i;
 				}
@@ -2024,12 +2198,12 @@ public class Hax2 : MonoBehaviour
 			GUI.color = Color.white;
 			GUILayout.Space(40f);
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-			if (GUILayout.Button("[主机] 生成", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("enemies.spawn"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				TrySpawnEnemy();
 			}
 			spawnCountText = GUILayout.TextField(spawnCountText, textFieldStyle, Array.Empty<GUILayoutOption>());
-			if (GUILayout.Button((spawnEnemyIndex >= 0 && spawnEnemyIndex < cachedEnemySetupNames.Count) ? cachedEnemySetupNames[spawnEnemyIndex] : "选择敌人", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button((spawnEnemyIndex >= 0 && spawnEnemyIndex < cachedEnemySetupNames.Count) ? cachedEnemySetupNames[spawnEnemyIndex] : L.T("enemies.select_fallback"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				showSpawnDropdown = !showSpawnDropdown;
 			}
@@ -2048,15 +2222,31 @@ public class Hax2 : MonoBehaviour
 				GUILayout.EndScrollView();
 			}
 			GUILayout.Space(10f);
-			if (GUILayout.Button("击杀敌人", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("enemies.kill"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				Enemies.KillSelectedEnemy(selectedEnemyIndex, enemyList, enemyNames);
 			}
-			if (GUILayout.Button("击杀所有敌人", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("enemies.kill_all"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				Enemies.KillAllEnemies();
 			}
-			ToggleLogic("blind_enemies", " 致盲敌人", ref blindEnemies, delegate
+
+			// ===================== 冻结所有敌人 =====================
+			GUILayout.Space(5f);
+			if (GUILayout.Button(Enemies.freezeAllEnemies ? L.T("enemies.unfreeze") : L.T("enemies.freeze"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				if (Enemies.freezeAllEnemies) Enemies.UnfreezeAllEnemies();
+				else Enemies.FreezeAllEnemies();
+			}
+
+			// ===================== 禁用陷阱 =====================
+			if (GUILayout.Button(L.T("enemies.disable_traps"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				int count = TrapDisabler.DisableAllTraps();
+				Debug.Log("[Hax2] Disabled " + count + " traps");
+			}
+
+			ToggleLogic("blind_enemies", L.T("enemies.blind"), ref blindEnemies, delegate
 			{
 				//IL_0000: Unknown result type (might be due to invalid IL or missing references)
 				//IL_0006: Expected O, but got Unknown
@@ -2065,7 +2255,7 @@ public class Hax2 : MonoBehaviour
 				PhotonNetwork.LocalPlayer.SetCustomProperties(val2, (Hashtable)null, (WebFlags)null);
 				ConfigManager.SaveToggle("blind_enemies", blindEnemies);
 			});
-			if (GUILayout.Button(showEnemyTeleportUI ? "隐藏传送选项" : "显示传送选项", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(showEnemyTeleportUI ? L.T("enemies.hide_tp") : L.T("enemies.show_tp"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				showEnemyTeleportUI = !showEnemyTeleportUI;
 				if (showEnemyTeleportUI)
@@ -2076,8 +2266,8 @@ public class Hax2 : MonoBehaviour
 			if (showEnemyTeleportUI)
 			{
 				GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-				GUILayout.Label("传送敌人到 ↓", labelStyle, Array.Empty<GUILayoutOption>());
-				if (GUILayout.Button((enemyTeleportDestIndex >= 0 && enemyTeleportDestIndex < enemyTeleportDestOptions.Length) ? enemyTeleportDestOptions[enemyTeleportDestIndex] : "无玩家可用", buttonStyle, Array.Empty<GUILayoutOption>()))
+				GUILayout.Label(L.T("enemies.tp_to"), labelStyle, Array.Empty<GUILayoutOption>());
+				if (GUILayout.Button((enemyTeleportDestIndex >= 0 && enemyTeleportDestIndex < enemyTeleportDestOptions.Length) ? enemyTeleportDestOptions[enemyTeleportDestIndex] : L.T("enemies.no_player"), buttonStyle, Array.Empty<GUILayoutOption>()))
 				{
 					showEnemyTeleportDropdown = !showEnemyTeleportDropdown;
 				}
@@ -2095,7 +2285,7 @@ public class Hax2 : MonoBehaviour
 					GUILayout.EndScrollView();
 				}
 				GUILayout.Space(10f);
-				if (GUILayout.Button("执行传送", buttonStyle, Array.Empty<GUILayoutOption>()))
+				if (GUILayout.Button(L.T("enemies.execute_tp"), buttonStyle, Array.Empty<GUILayoutOption>()))
 				{
 					int num2 = enemyTeleportDestIndex;
 					if (num2 >= 0 && num2 < playerList.Count)
@@ -2112,7 +2302,6 @@ public class Hax2 : MonoBehaviour
 					}
 				}
 			}
-			GUILayout.EndScrollView();
 		}
 		catch (Exception arg)
 		{
@@ -2167,65 +2356,85 @@ public class Hax2 : MonoBehaviour
 		//IL_06ce: Unknown result type (might be due to invalid IL or missing references)
 		//IL_06bd: Unknown result type (might be due to invalid IL or missing references)
 		GUILayout.BeginVertical(Array.Empty<GUILayoutOption>());
-		GUILayout.Label("自动功能", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		ToggleLogic("auto_pickup", " 自动拾取", ref AutoPickup.isAutoPickupEnabled);
+		GUILayout.Label(L.T("items.auto"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("auto_pickup", L.T("items.auto_pickup"), ref AutoPickup.isAutoPickupEnabled);
 		if (AutoPickup.isAutoPickupEnabled)
 		{
-			GUILayout.Label("拾取范围: " + Mathf.RoundToInt(AutoPickup.pickupRadius) + "m", labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("items.pickup_range_fmt", Mathf.RoundToInt(AutoPickup.pickupRadius)), labelStyle, Array.Empty<GUILayoutOption>());
 			AutoPickup.pickupRadius = GUILayout.HorizontalSlider(AutoPickup.pickupRadius, 5f, 100f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-			GUILayout.Label("最小价值: " + AutoPickup.minPickupValue, labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("items.min_value_fmt", AutoPickup.minPickupValue), labelStyle, Array.Empty<GUILayoutOption>());
 			AutoPickup.minPickupValue = (int)GUILayout.HorizontalSlider((float)AutoPickup.minPickupValue, 0f, 5000f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		}
 		GUILayout.Space(5f);
-		ToggleLogic("auto_sell", " 自动卖出（传送到撤离点）", ref AutoPickup.isAutoSellEnabled);
+		ToggleLogic("auto_sell", L.T("items.auto_sell"), ref AutoPickup.isAutoSellEnabled);
 		GUILayout.Space(10f);
-		GUILayout.Label("选择物品:", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("items.select"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		List<ItemTeleport.GameItem> list = itemList.OrderByDescending((ItemTeleport.GameItem item) => item.Value).ToList();
 		itemScroll = GUILayout.BeginScrollView(itemScroll, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(200f) });
+		EnsureListStylesInitialized();
 		for (int num = 0; num < list.Count; num++)
 		{
-			GUIStyle val = new GUIStyle(GUI.skin.button);
-			val.fontSize = 13;
-			val.fontStyle = (FontStyle)1;
-			val.alignment = (TextAnchor)4;
-			val.margin = new RectOffset(4, 4, 2, 2);
-			val.padding = new RectOffset(6, 6, 4, 4);
-			val.border = new RectOffset(4, 4, 4, 4);
 			if (num == selectedItemIndex)
 			{
-				val.normal.background = MakeSolidBackground((Color)(new Color32((byte)45, (byte)25, (byte)5, (byte)220)));
-				val.normal.textColor = new Color(1f, 0.55f, 0.1f);
+				cachedItemListStyle.normal.background = itemBgSelected;
+				cachedItemListStyle.normal.textColor = new Color(1f, 0.55f, 0.1f);
 			}
 			else
 			{
-				val.normal.background = MakeSolidBackground((Color)(new Color32((byte)28, (byte)28, (byte)30, (byte)180)));
-				val.normal.textColor = new Color(0.85f, 0.85f, 0.85f);
+				cachedItemListStyle.normal.background = itemBgNormal;
+				cachedItemListStyle.normal.textColor = new Color(0.85f, 0.85f, 0.85f);
 			}
-			if (GUILayout.Button($"{list[num].Name}   [价值 ${list[num].Value}]", val, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(30f) }))
+			if (GUILayout.Button($"{list[num].Name}   {L.T("items.value_fmt", list[num].Value)}", cachedItemListStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(30f) }))
 			{
 				selectedItemIndex = num;
 			}
 		}
 		GUILayout.EndScrollView();
 		GUI.color = Color.white;
-		if (GUILayout.Button("将物品传送到我", buttonStyle, Array.Empty<GUILayoutOption>()) && selectedItemIndex >= 0 && selectedItemIndex < list.Count)
+		if (GUILayout.Button(L.T("items.tp_to_me"), buttonStyle, Array.Empty<GUILayoutOption>()) && selectedItemIndex >= 0 && selectedItemIndex < list.Count)
 		{
 			ItemTeleport.TeleportItemToMe(list[selectedItemIndex]);
 		}
-		if (GUILayout.Button("将所有物品传送到我", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("items.tp_all"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			ItemTeleport.TeleportAllItemsToMe();
 		}
 		GUILayout.Space(10f);
-		GUILayout.Label("修改物品价值", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("items.modify_value"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		int num2 = (int)Mathf.Pow(10f, itemValueSliderPos);
 		GUILayout.Label($"${num2:N0}", labelStyle, Array.Empty<GUILayoutOption>());
 		itemValueSliderPos = GUILayout.HorizontalSlider(itemValueSliderPos, 3f, 9f, Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("应用价值修改", buttonStyle, Array.Empty<GUILayoutOption>()) && selectedItemIndex >= 0 && selectedItemIndex < list.Count)
+		if (GUILayout.Button(L.T("items.apply_value"), buttonStyle, Array.Empty<GUILayoutOption>()) && selectedItemIndex >= 0 && selectedItemIndex < list.Count)
 		{
 			ItemTeleport.SetItemValue(list[selectedItemIndex], num2);
 		}
-		if (GUILayout.Button(showItemSpawner ? "隐藏物品生成器" : "显示物品生成器", buttonStyle, Array.Empty<GUILayoutOption>()))
+
+		// ===================== 物品价值膨胀 =====================
+		GUILayout.Space(10f);
+		GUILayout.Label(L.T("items.inflate_title"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button(L.T("items.inflate_10x"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			ItemInflater.MultiplyAll(10f);
+		}
+		if (GUILayout.Button(L.T("items.inflate_100x"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			ItemInflater.MultiplyAll(100f);
+		}
+		if (GUILayout.Button(L.T("items.inflate_max"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			ItemInflater.InflateAll(99999f);
+		}
+		GUILayout.EndHorizontal();
+
+		// ===================== 复制手持物品 =====================
+		GUILayout.Space(5f);
+		if (GUILayout.Button(L.T("items.duplicate"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			ItemDuplicator.DuplicateHeldItem();
+		}
+
+		if (GUILayout.Button(showItemSpawner ? L.T("items.hide_spawner") : L.T("items.show_spawner"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			showItemSpawner = !showItemSpawner;
 			if (showItemSpawner && availableItemsList.Count == 0)
@@ -2237,31 +2446,24 @@ public class Hax2 : MonoBehaviour
 		{
 			GUILayout.Space(10f);
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-			GUILayout.Label("选择要生成的物品:", labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(160f) });
+			GUILayout.Label(L.T("items.select_spawn"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(180f) });
 			itemSpawnSearch = GUILayout.TextField(itemSpawnSearch, textFieldStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 			GUILayout.EndHorizontal();
 			List<string> list2 = (string.IsNullOrWhiteSpace(itemSpawnSearch) ? availableItemsList : availableItemsList.Where((string item) => item.ToLower().Contains(itemSpawnSearch.ToLower())).ToList());
 			itemSpawnerScroll = GUILayout.BeginScrollView(itemSpawnerScroll, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(150f) });
 			for (int num3 = 0; num3 < list2.Count; num3++)
 			{
-				GUIStyle val2 = new GUIStyle(GUI.skin.button);
-				val2.fontSize = 13;
-				val2.fontStyle = (FontStyle)1;
-				val2.alignment = (TextAnchor)4;
-				val2.margin = new RectOffset(4, 4, 2, 2);
-				val2.padding = new RectOffset(6, 6, 4, 4);
-				val2.border = new RectOffset(4, 4, 4, 4);
 				if (num3 == selectedItemToSpawnIndex)
 				{
-					val2.normal.background = MakeSolidBackground((Color)(new Color32((byte)45, (byte)25, (byte)5, (byte)220)));
-					val2.normal.textColor = new Color(1f, 0.55f, 0.1f);
+					cachedItemListStyle.normal.background = itemBgSelected;
+					cachedItemListStyle.normal.textColor = new Color(1f, 0.55f, 0.1f);
 				}
 				else
 				{
-					val2.normal.background = MakeSolidBackground((Color)(new Color32((byte)28, (byte)28, (byte)30, (byte)180)));
-					val2.normal.textColor = new Color(0.85f, 0.85f, 0.85f);
+					cachedItemListStyle.normal.background = itemBgNormal;
+					cachedItemListStyle.normal.textColor = new Color(0.85f, 0.85f, 0.85f);
 				}
-				if (GUILayout.Button(list2[num3], val2, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(30f) }))
+				if (GUILayout.Button(list2[num3], cachedItemListStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(30f) }))
 				{
 					selectedItemToSpawnIndex = availableItemsList.IndexOf(list2[num3]);
 				}
@@ -2279,7 +2481,7 @@ public class Hax2 : MonoBehaviour
 				}
 			}
 			GUI.enabled = availableItemsList.Count > 0 && selectedItemToSpawnIndex < availableItemsList.Count;
-			if (GUILayout.Button("生成选中物品", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("items.spawn"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				GameObject localPlayer = DebugCheats.GetLocalPlayer();
 				if ((Object)(object)localPlayer != (Object)null)
@@ -2296,7 +2498,7 @@ public class Hax2 : MonoBehaviour
 					}
 				}
 			}
-			if (GUILayout.Button("Spawn 50 of Selected Item", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("items.spawn_50"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				ItemSpawner.SpawnSelectedItemMultiple(50, availableItemsList, selectedItemToSpawnIndex, itemSpawnValue);
 			}
@@ -2336,33 +2538,33 @@ public class Hax2 : MonoBehaviour
 			GUIStyle val2 = val;
 			GUILayout.Label(hotkeyManager.KeyAssignmentError, val2, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(25f) });
 		}
-		GUILayout.Label("热键配置", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("hotkeys.config"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Space(5f);
-		GUILayout.Label("如何设置热键:", labelStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Label("1. 点击按键字段 →按下想要的键", labelStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Label("2. 点击动作字段 →选择功能", labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("hotkeys.how_to"), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("hotkeys.step1"), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("hotkeys.step2"), labelStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Space(10f);
-		GUILayout.Label("警告: 确保每个按键只分配给一个动作", warningStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("hotkeys.warning"), warningStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Space(10f);
-		GUILayout.Label("系统按键", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		DrawHotkeyField("菜单开关", hotkeyManager.MenuToggleKey, delegate
+		GUILayout.Label(L.T("hotkeys.system"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		DrawHotkeyField(L.T("hotkeys.menu_toggle"), hotkeyManager.MenuToggleKey, delegate
 		{
 			hotkeyManager.StartConfigureSystemKey(0);
 		}, 0);
-		DrawHotkeyField("重载:", hotkeyManager.ReloadKey, delegate
+		DrawHotkeyField(L.T("hotkeys.reload"), hotkeyManager.ReloadKey, delegate
 		{
 			hotkeyManager.StartConfigureSystemKey(1);
 		}, 1);
-		DrawHotkeyField("卸载:", hotkeyManager.UnloadKey, delegate
+		DrawHotkeyField(L.T("hotkeys.unload"), hotkeyManager.UnloadKey, delegate
 		{
 			hotkeyManager.StartConfigureSystemKey(2);
 		}, 2);
 		GUILayout.Space(20f);
-		GUILayout.Label("动作热键", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("hotkeys.action"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		for (int num = 0; num < 12; num++)
 		{
 			KeyCode hotkeyForSlot = hotkeyManager.GetHotkeyForSlot(num);
-			string obj = ((hotkeyManager.SelectedHotkeySlot == num && hotkeyManager.ConfiguringHotkey) ? "按下任意键..." : (((int)hotkeyForSlot == 0) ? "未设置" : hotkeyForSlot.ToString()));
+			string obj = ((hotkeyManager.SelectedHotkeySlot == num && hotkeyManager.ConfiguringHotkey) ? L.T("hotkeys.press_key") : (((int)hotkeyForSlot == 0) ? L.T("hotkeys.not_set") : hotkeyForSlot.ToString()));
 			string actionNameForKey = hotkeyManager.GetActionNameForKey(hotkeyForSlot);
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 			if (GUILayout.Button(obj, buttonStyle, Array.Empty<GUILayoutOption>()))
@@ -2378,25 +2580,25 @@ public class Hax2 : MonoBehaviour
 				}
 				else
 				{
-					Debug.Log((object)"请先为此槽位分配一个按键");
+					Debug.Log((object)L.T("hotkeys.need_key"));
 				}
 			}
-			if (GUILayout.Button("清除", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("hotkeys.clear"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				hotkeyManager.ClearHotkeyBinding(num);
 			}
 			GUILayout.EndHorizontal();
 		}
 		GUILayout.Space(10f);
-		if (GUILayout.Button("保存热键设置", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("hotkeys.save"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			hotkeyManager.SaveHotkeySettings();
-			Debug.Log((object)"热键设置已保存");
+			Debug.Log((object)L.T("hotkeys.saved"));
 		}
 		GUILayout.EndVertical();
 	}
 
-	private void DrawTrollingTab()
+	private void DrawRoomTab()
 	{
 		//IL_002c: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0032: Expected O, but got Unknown
@@ -2424,36 +2626,94 @@ public class Hax2 : MonoBehaviour
 		//IL_0427: Unknown result type (might be due to invalid IL or missing references)
 		//IL_042e: Unknown result type (might be due to invalid IL or missing references)
 		UpdatePlayerList();
-		GUILayout.Label("Select a player:", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		EnsureListStylesInitialized();
+
+		// ===================== 强制夺取主机 =====================
+		GUILayout.Label(L.T("room.force_host"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(3f);
+		if (PhotonNetwork.InRoom)
+		{
+			Photon.Realtime.Player master = PhotonNetwork.MasterClient;
+			string masterName = (master != null) ? master.NickName : L.T("server.unknown");
+			bool iAmHost = PhotonNetwork.IsMasterClient;
+			GUILayout.Label(L.T("room.current_host") + " " + masterName + (iAmHost ? " (★)" : ""), labelStyle, Array.Empty<GUILayoutOption>());
+
+			// 状态显示
+			if (!string.IsNullOrEmpty(ForceHost.statusMessage))
+			{
+				GUILayout.Label(ForceHost.statusMessage, labelStyle, Array.Empty<GUILayoutOption>());
+			}
+			GUILayout.Space(3f);
+
+			// 禁用状态下不允许点击
+			bool disabled = ForceHost.IsProcessing;
+
+			// 全自动按钮
+			if (GUILayout.Button(disabled ? L.T("room.forcing") : L.T("room.auto_force"), buttonStyle, Array.Empty<GUILayoutOption>()) && !disabled)
+			{
+				ForceHost.Instance.StartCoroutine(ForceHost.Instance.Method_AutoAll());
+			}
+			GUILayout.Space(3f);
+
+			GUILayout.Label(L.T("room.pick_method"), labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+			if (GUILayout.Button("1: SetMaster", buttonStyle, Array.Empty<GUILayoutOption>()) && !disabled)
+			{
+				ForceHost.Instance.StartCoroutine(ForceHost.Instance.Method_SetMasterClient());
+			}
+			if (GUILayout.Button("2: LowLevel", buttonStyle, Array.Empty<GUILayoutOption>()) && !disabled)
+			{
+				ForceHost.Instance.StartCoroutine(ForceHost.Instance.Method_LowLevelOp());
+			}
+			GUILayout.EndHorizontal();
+			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+			if (GUILayout.Button("3: ActorSpoof", buttonStyle, Array.Empty<GUILayoutOption>()) && !disabled)
+			{
+				ForceHost.Instance.StartCoroutine(ForceHost.Instance.Method_ActorNumberSpoof());
+			}
+			if (GUILayout.Button("4: " + L.T("room.crash_host"), buttonStyle, Array.Empty<GUILayoutOption>()) && !disabled)
+			{
+				ForceHost.Instance.StartCoroutine(ForceHost.Instance.Method_CrashHost());
+			}
+			GUILayout.EndHorizontal();
+			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+			if (GUILayout.Button("5: " + L.T("room.local_fake"), buttonStyle, Array.Empty<GUILayoutOption>()) && !disabled)
+			{
+				ForceHost.Method_LocalMasterFake();
+			}
+			GUILayout.EndHorizontal();
+		}
+		else
+		{
+			GUILayout.Label(L.T("room.not_in_room"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		GUILayout.Space(15f);
+
+		// ===================== 恶搞功能 =====================
+		GUILayout.Label(L.T("room.trolling"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(5f);
+		GUILayout.Label(L.T("room.select"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		for (int i = 0; i < playerNames.Count; i++)
 		{
-			GUIStyle val = new GUIStyle(GUI.skin.button);
-			val.alignment = (TextAnchor)4;
-			val.fontSize = 14;
-			val.fontStyle = (FontStyle)1;
-			val.fixedHeight = 28f;
-			val.margin = new RectOffset(2, 2, 2, 2);
-			val.padding = new RectOffset(8, 8, 4, 4);
-			val.border = new RectOffset(4, 4, 4, 4);
 			if (i == selectedPlayerIndex)
 			{
-				val.normal.background = MakeSolidBackground((Color)(new Color32((byte)50, (byte)50, (byte)70, byte.MaxValue)));
-				val.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
+				cachedPlayerListStyle.normal.background = rowBgSelected;
+				cachedPlayerListStyle.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
 			}
 			else
 			{
-				val.normal.background = MakeSolidBackground((Color)(new Color32((byte)30, (byte)30, (byte)30, byte.MaxValue)));
-				val.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
-				val.hover.background = MakeSolidBackground((Color)(new Color32((byte)40, (byte)40, (byte)50, byte.MaxValue)));
-				val.hover.textColor = Color.white;
+				cachedPlayerListStyle.normal.background = rowBgNormal;
+				cachedPlayerListStyle.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
+				cachedPlayerListStyle.hover.background = rowBgHover;
+				cachedPlayerListStyle.hover.textColor = Color.white;
 			}
-			if (GUILayout.Button(playerNames[i], val, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(playerNames[i], cachedPlayerListStyle, Array.Empty<GUILayoutOption>()))
 			{
 				selectedPlayerIndex = i;
 			}
 		}
 		GUILayout.Space(40f);
-		if (GUILayout.Button("激活冲气泡泡", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.bubble"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			ToiletFun[] array = Object.FindObjectsOfType<ToiletFun>();
 			Cauldron[] array2 = Object.FindObjectsOfType<Cauldron>();
@@ -2469,7 +2729,7 @@ public class Hax2 : MonoBehaviour
 			}
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("触摸小丑鼻子", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.clown"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			ClownTrap[] array5 = Object.FindObjectsOfType<ClownTrap>();
 			for (int j = 0; j < array5.Length; j++)
@@ -2482,42 +2742,42 @@ public class Hax2 : MonoBehaviour
 			}
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("强制故障", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.glitch"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Troll.ForcePlayerGlitch();
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("强制取消静音", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.unmute"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			MiscFeatures.ForcePlayerMicVolume(100);
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("强制静音", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.mute"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			MiscFeatures.ForcePlayerMicVolume(-1);
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("强制无限翻滚", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.inf_tumble"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Players.ForcePlayerTumble(9999999f);
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("无限加载屏幕", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.inf_loading"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Troll.InfiniteLoadingSelectedPlayer();
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("移除无限加载屏幕", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.remove_loading"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Troll.SceneRecovery();
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("崩溃选中玩家", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.crash_player"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			MiscFeatures.CrashSelectedPlayerNew();
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("引爆所有爆炸物", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.detonate"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Object.FindObjectOfType<ItemMine>();
 			typeof(ItemGrenade).GetMethod("TickStartRPC", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -2525,7 +2785,7 @@ public class Hax2 : MonoBehaviour
 			Debug.Log((object)"Detonated All Grenades/Mines");
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button("崩溃大厅", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("trolling.crash_lobby"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			GameObject localPlayer = DebugCheats.GetLocalPlayer();
 			if ((Object)(object)localPlayer == (Object)null)
@@ -2541,44 +2801,36 @@ public class Hax2 : MonoBehaviour
 
 	private void DrawConfigTab()
 	{
-		GUILayout.Label("配置", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("config.title"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Label(configstatus, titleStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Label("PlayerPrefs 配置", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("config.prefs"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("保存配置", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("config.save"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			ConfigManager.SaveAllToggles();
-			configstatus = "配置已保存";
+			configstatus = L.T("config.saved");
 		}
-		if (GUILayout.Button("加载配置", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("config.load"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			ConfigManager.LoadAllToggles();
-			configstatus = "配置已加载";
+			configstatus = L.T("config.loaded");
 		}
 		GUILayout.EndHorizontal();
 		GUILayout.Space(10f);
-		GUILayout.Label("JSON 配置文件", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("config.json"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("保存为JSON文件", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("config.save_json"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			JsonConfig.SaveToFile();
-			configstatus = "JSON已保存: " + JsonConfig.GetConfigPath();
+			configstatus = L.T("config.json_saved_fmt", JsonConfig.GetConfigPath());
 		}
-		if (GUILayout.Button("从JSON文件加载", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("config.load_json"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			JsonConfig.LoadFromFile();
-			configstatus = "JSON已加载";
+			configstatus = L.T("config.json_loaded");
 		}
 		GUILayout.EndHorizontal();
-		GUILayout.Label("路径: " + JsonConfig.GetConfigPath(), labelStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Space(15f);
-		GUILayout.Label("语言/Language", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button(LanguageManager.Get("switch_lang"), buttonStyle, Array.Empty<GUILayoutOption>()))
-		{
-			LanguageManager.ToggleLanguage();
-			tabs = LanguageManager.GetTabNames();
-			configstatus = "语言已切换 / Language switched";
-		}
+		GUILayout.Label(L.T("config.json_path_fmt", JsonConfig.GetConfigPath()), labelStyle, Array.Empty<GUILayoutOption>());
 	}
 
 	private void DrawFeatureSelectionWindow(int id)
@@ -2587,7 +2839,7 @@ public class Hax2 : MonoBehaviour
 		//IL_003c: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0041: Unknown result type (might be due to invalid IL or missing references)
 		//IL_00d1: Unknown result type (might be due to invalid IL or missing references)
-		GUILayout.Label("选择要绑定的功能", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("common.select_feature"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		actionScroll = GUILayout.BeginScrollView(actionScroll, false, true, (GUILayoutOption[])(object)new GUILayoutOption[2]
 		{
 			GUILayout.Width(380f),
@@ -2604,7 +2856,7 @@ public class Hax2 : MonoBehaviour
 		}
 		GUILayout.EndScrollView();
 		GUILayout.Space(5f);
-		if (GUILayout.Button("取消", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("common.cancel"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			showingActionSelector = false;
 		}
@@ -2615,7 +2867,7 @@ public class Hax2 : MonoBehaviour
 	{
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		GUILayout.Label(label, buttonStyle, Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button((hotkeyManager.ConfiguringSystemKey && hotkeyManager.SystemKeyConfigIndex == index && hotkeyManager.WaitingForAnyKey) ? "Press any key..." : key.ToString(), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button((hotkeyManager.ConfiguringSystemKey && hotkeyManager.SystemKeyConfigIndex == index && hotkeyManager.WaitingForAnyKey) ? L.T("hotkeys.press_key") : key.ToString(), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			configureCallback();
 		}
@@ -2667,7 +2919,7 @@ public class Hax2 : MonoBehaviour
 		GUI.DragWindow(new Rect(0f, 0f, chamsWindowRect.width, 25f));
 		GUILayout.BeginVertical(Array.Empty<GUILayoutOption>());
 		GUILayout.Space(5f);
-		GUILayout.Label("Chams 颜色选择器", titleStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("common.chams_picker"), titleStyle, Array.Empty<GUILayoutOption>());
 		string[] array = new string[4] { "Enemy Visible", "Enemy Hidden", "Item Visible", "Item Hidden" };
 		for (int i = 0; i < array.Length; i++)
 		{
@@ -2843,68 +3095,75 @@ public class Hax2 : MonoBehaviour
 			rowBgHover = MakeSolidBackground((Color)(new Color32((byte)40, (byte)40, (byte)50, byte.MaxValue)));
 			rowBgSelected = MakeSolidBackground((Color)(new Color32((byte)50, (byte)50, (byte)70, byte.MaxValue)));
 		}
-		GUILayout.Label("服务器浏览器", titleStyle, Array.Empty<GUILayoutOption>());
+		EnsureListStylesInitialized();
+		GUILayout.Label(L.T("server.title"), titleStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("刷新房间", buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(160f) }))
+		if (GUILayout.Button(L.T("server.refresh"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(160f) }))
 		{
 			LobbyHostCache.Clear();
 			LobbyMemberCache.Clear();
 			LobbyFinder.AlreadyTriedLobbies.Clear();
 			LobbyFinder.RefreshLobbies();
 		}
-		ToggleLogic("hide_full_lobbies", " 隐藏满员房间", ref hideFullLobbies);
-		ToggleLogic("show_lobby_members", " 显示房间成员", ref showMemberWindow);
+		ToggleLogic("hide_full_lobbies", L.T("server.hide_full"), ref hideFullLobbies);
+		ToggleLogic("show_lobby_members", L.T("server.show_members"), ref showMemberWindow);
 		GUILayout.EndHorizontal();
 		GUILayout.Space(10f);
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		GUILayout.Label("搜索:", labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(60f) });
+		GUILayout.Label(L.T("server.search"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(70f) });
 		lobbySearchTerm = GUILayout.TextField(lobbySearchTerm, textFieldStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(260f) });
-		if (GUILayout.Button("区域 A-Z", buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(100f) }))
+		if (GUILayout.Button(L.T("server.sort_az"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(100f) }))
 		{
 			sortMode = SortMode.RegionAZ;
 		}
-		if (GUILayout.Button("区域 Z-A", buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(100f) }))
+		if (GUILayout.Button(L.T("server.sort_za"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(100f) }))
 		{
 			sortMode = SortMode.RegionZA;
 		}
-		if (GUILayout.Button("最多玩家", buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(110f) }))
+		if (GUILayout.Button(L.T("server.sort_most"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(110f) }))
 		{
 			sortMode = SortMode.MostPlayers;
 		}
-		if (GUILayout.Button("最少玩家", buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(120f) }))
+		if (GUILayout.Button(L.T("server.sort_least"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(120f) }))
 		{
 			sortMode = SortMode.LeastPlayers;
 		}
 		GUILayout.EndHorizontal();
 		GUILayout.Space(10f);
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		GUILayout.Label("房间名称", labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(280f) });
+		GUILayout.Label(L.T("server.col_name"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(280f) });
 		GUILayout.Space(10f);
-		GUILayout.Label("玩家数", labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
+		GUILayout.Label(L.T("server.col_players"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
 		GUILayout.Space(10f);
-		GUILayout.Label("区域", labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
+		GUILayout.Label(L.T("server.col_region"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
 		GUILayout.Space(50f);
-		GUILayout.Label("主机", labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.ExpandWidth(true) });
+		GUILayout.Label(L.T("server.col_host"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.ExpandWidth(true) });
 		GUILayout.EndHorizontal();
 		GUILayout.Space(6f);
 		serverListScroll = GUILayout.BeginScrollView(serverListScroll, boxStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(500f) });
-		List<Lobby> list = new List<Lobby>(LobbyFinder.FoundLobbies);
-		switch (sortMode)
+		int currentLobbyCount = (LobbyFinder.FoundLobbies != null) ? LobbyFinder.FoundLobbies.Count : 0;
+		if (cachedSortedLobbies == null || cachedSortMode != sortMode || cachedLobbyCount != currentLobbyCount)
 		{
-		case SortMode.RegionAZ:
-			list.Sort((Lobby a, Lobby b) => string.Compare(a.GetData("Region"), b.GetData("Region")));
-			break;
-		case SortMode.RegionZA:
-			list.Sort((Lobby a, Lobby b) => string.Compare(b.GetData("Region"), a.GetData("Region")));
-			break;
-		case SortMode.MostPlayers:
-			list.Sort((Lobby a, Lobby b) => b.MemberCount.CompareTo(a.MemberCount));
-			break;
-		case SortMode.LeastPlayers:
-			list.Sort((Lobby a, Lobby b) => a.MemberCount.CompareTo(b.MemberCount));
-			break;
+			cachedSortedLobbies = new List<Lobby>(LobbyFinder.FoundLobbies);
+			switch (sortMode)
+			{
+			case SortMode.RegionAZ:
+				cachedSortedLobbies.Sort((Lobby a, Lobby b) => string.Compare(a.GetData("Region"), b.GetData("Region")));
+				break;
+			case SortMode.RegionZA:
+				cachedSortedLobbies.Sort((Lobby a, Lobby b) => string.Compare(b.GetData("Region"), a.GetData("Region")));
+				break;
+			case SortMode.MostPlayers:
+				cachedSortedLobbies.Sort((Lobby a, Lobby b) => b.MemberCount.CompareTo(a.MemberCount));
+				break;
+			case SortMode.LeastPlayers:
+				cachedSortedLobbies.Sort((Lobby a, Lobby b) => a.MemberCount.CompareTo(b.MemberCount));
+				break;
+			}
+			cachedSortMode = sortMode;
+			cachedLobbyCount = currentLobbyCount;
 		}
-		foreach (Lobby item in list)
+		foreach (Lobby item in cachedSortedLobbies)
 		{
 			Lobby current = item;
 			if ((hideFullLobbies && current.MemberCount >= current.MaxMembers) || !LobbyHostCache.ContainsKey(current.Id) || current.MemberCount < 3)
@@ -2912,43 +3171,33 @@ public class Hax2 : MonoBehaviour
 				continue;
 			}
 			string value;
-			string text = (LobbyHostCache.TryGetValue(current.Id, out value) ? value : "获取中..");
+			string text = (LobbyHostCache.TryGetValue(current.Id, out value) ? value : L.T("server.fetching"));
 			if (!text.Contains("Failed (0)") && (string.IsNullOrWhiteSpace(lobbySearchTerm) || ((object)current.Id/*cast due to .constrained prefix*/).ToString().IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0 || (LobbyMemberCache.TryGetValue(current.Id, out var value2) && value2.Exists((string m) => m.IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0))))
 			{
-				GUIStyle val = new GUIStyle(GUI.skin.button)
-				{
-					alignment = (TextAnchor)3,
-					fontSize = 14,
-					fontStyle = (FontStyle)1,
-					fixedHeight = 32f,
-					margin = new RectOffset(2, 2, 2, 2),
-					padding = new RectOffset(8, 8, 4, 4),
-					border = new RectOffset(4, 4, 4, 4)
-				};
 				if (current.Id.Value == selectedLobbyId.Value)
 				{
-					val.normal.background = rowBgSelected;
-					val.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
+					cachedServerRowStyle.normal.background = rowBgSelected;
+					cachedServerRowStyle.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
 				}
 				else
 				{
-					val.normal.background = rowBgNormal;
-					val.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
-					val.hover.background = rowBgHover;
-					val.hover.textColor = Color.white;
+					cachedServerRowStyle.normal.background = rowBgNormal;
+					cachedServerRowStyle.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
+					cachedServerRowStyle.hover.background = rowBgHover;
+					cachedServerRowStyle.hover.textColor = Color.white;
 				}
 				GUILayout.BeginVertical(Array.Empty<GUILayoutOption>());
 				GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 				string text2 = (text.Contains("(") ? text.Substring(0, text.IndexOf("(")).Trim() : text);
-				string text3 = "房间: " + (string.IsNullOrWhiteSpace(text2) ? "未知" : text2);
+				string text3 = L.T("server.room_fmt", string.IsNullOrWhiteSpace(text2) ? L.T("server.unknown") : text2);
 				if (current.MaxMembers > 6)
 				{
-					text3 += " <color=red>(模组)</color>";
+					text3 += " <color=red>" + L.T("server.modded") + "</color>";
 				}
 				string data = current.GetData("Region");
 				int num = Mathf.Max(0, current.MemberCount - 1);
 				int maxMembers = current.MaxMembers;
-				if (GUILayout.Button(text3, val, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(280f) }))
+				if (GUILayout.Button(text3, cachedServerRowStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(280f) }))
 				{
 					selectedLobbyId = current.Id;
 				}
@@ -2967,7 +3216,7 @@ public class Hax2 : MonoBehaviour
 		GUILayout.EndScrollView();
 		GUILayout.Space(10f);
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("加入房间", buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(120f) }))
+		if (GUILayout.Button(L.T("server.join"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(120f) }))
 		{
 			Lobby lobby = LobbyFinder.FoundLobbies.Find((Lobby l) => l.Id.Value == selectedLobbyId.Value);
 			if (lobby.Id.Value != 0uL)
@@ -2981,11 +3230,11 @@ public class Hax2 : MonoBehaviour
 			Lobby val2 = LobbyFinder.FoundLobbies.Find((Lobby l) => l.Id.Value == selectedLobbyId.Value);
 			string data2 = val2.GetData("Region");
 			string value3;
-			string arg = (LobbyHostCache.TryGetValue(selectedLobbyId, out value3) ? value3 : "未知");
-			GUILayout.Label($"选中: {selectedLobbyId} | 主机: {arg} | 区域: {data2}", labelStyle, Array.Empty<GUILayoutOption>());
+			string arg = (LobbyHostCache.TryGetValue(selectedLobbyId, out value3) ? value3 : L.T("server.unknown"));
+			GUILayout.Label(L.T("server.selected_fmt", selectedLobbyId, arg, data2), labelStyle, Array.Empty<GUILayoutOption>());
 		}
 		GUILayout.FlexibleSpace();
-		if (GUILayout.Button("获取邀请链接", buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(150f) }))
+		if (GUILayout.Button(L.T("server.invite"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(150f) }))
 		{
 			Lobby val3 = LobbyFinder.FoundLobbies.Find((Lobby l) => l.Id.Value == selectedLobbyId.Value);
 			Friend owner = val3.Owner;
@@ -3018,7 +3267,7 @@ public class Hax2 : MonoBehaviour
 			chatMessageText = largeTextBoxContent;
 		}
 		GUILayout.Space(10f);
-		if (GUILayout.Button("关闭", buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(25f) }))
+		if (GUILayout.Button(L.T("common.close"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(25f) }))
 		{
 			showTextEditorPopup = false;
 			activeTextFieldId = null;
@@ -3034,7 +3283,7 @@ public class Hax2 : MonoBehaviour
 		//IL_004e: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0058: Unknown result type (might be due to invalid IL or missing references)
 		GUILayout.BeginVertical(boxStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Label("房间成员", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("server.members"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Space(4f);
 		memberWindowScroll = GUILayout.BeginScrollView(memberWindowScroll, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(150f) });
 		if (LobbyMemberCache.TryGetValue(selectedLobbyId, out var value))
@@ -3050,11 +3299,11 @@ public class Hax2 : MonoBehaviour
 		}
 		else
 		{
-			GUILayout.Label("Fetching players...", warningStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("common.fetching_players"), warningStyle, Array.Empty<GUILayoutOption>());
 		}
 		GUILayout.EndScrollView();
 		GUILayout.Space(8f);
-		if (GUILayout.Button("Close", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("common.close"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			showMemberWindow = false;
 		}
@@ -3287,6 +3536,16 @@ public class Hax2 : MonoBehaviour
 		//IL_0c78: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0c95: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0c9f: Expected O, but got Unknown
+		// Check if textures were destroyed by Unity scene transition
+		if (titleStyle != null && buttonStyle != null)
+		{
+			if ((Object)(object)buttonStyle.normal.background == (Object)null ||
+			    (Object)(object)tabStyle?.normal?.background == (Object)null)
+			{
+				titleStyle = null;
+				listStylesInitialized = false;
+			}
+		}
 		if (titleStyle == null)
 		{
 			GUIStyle val = new GUIStyle(GUI.skin.label)
@@ -3591,14 +3850,14 @@ public class Hax2 : MonoBehaviour
 		int num = 25;
 		int num2 = 6;
 		GUILayout.Space(10f);
-		GUILayout.Label("Teleport Options", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("common.tp_options"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button((teleportPlayerSourceIndex >= 0 && teleportPlayerSourceIndex < teleportPlayerSourceOptions.Length) ? teleportPlayerSourceOptions[teleportPlayerSourceIndex] : "No source available", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button((teleportPlayerSourceIndex >= 0 && teleportPlayerSourceIndex < teleportPlayerSourceOptions.Length) ? teleportPlayerSourceOptions[teleportPlayerSourceIndex] : L.T("enemies.no_player"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			showSourceDropdown = !showSourceDropdown;
 		}
-		GUILayout.Label("to", labelStyle, Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button((teleportPlayerDestIndex >= 0 && teleportPlayerDestIndex < teleportPlayerDestOptions.Length) ? teleportPlayerDestOptions[teleportPlayerDestIndex] : "No destination available", buttonStyle, Array.Empty<GUILayoutOption>()))
+		GUILayout.Label(L.T("common.to"), labelStyle, Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button((teleportPlayerDestIndex >= 0 && teleportPlayerDestIndex < teleportPlayerDestOptions.Length) ? teleportPlayerDestOptions[teleportPlayerDestIndex] : L.T("enemies.no_player"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			showDestDropdown = !showDestDropdown;
 		}
@@ -3632,13 +3891,70 @@ public class Hax2 : MonoBehaviour
 			GUILayout.EndScrollView();
 		}
 		GUILayout.Space(10f);
-		if (GUILayout.Button("Execute Teleport", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("common.execute_tp"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Teleport.ExecuteTeleportWithSeparateOptions(teleportPlayerSourceIndex, teleportPlayerDestIndex, teleportPlayerSourceOptions, teleportPlayerDestOptions, playerList);
 			Debug.Log((object)"Teleport executed successfully");
 			showSourceDropdown = false;
 			showDestDropdown = false;
 		}
+	}
+
+	private void EnsureListStylesInitialized()
+	{
+		// Also check if textures were destroyed by Unity
+		if (listStylesInitialized && (Object)(object)rowBgNormal != (Object)null)
+			return;
+		listStylesInitialized = false;
+		if ((Object)(object)rowBgNormal == (Object)null)
+		{
+			rowBgNormal = MakeSolidBackground((Color)(new Color32((byte)30, (byte)30, (byte)30, byte.MaxValue)));
+			rowBgHover = MakeSolidBackground((Color)(new Color32((byte)40, (byte)40, (byte)50, byte.MaxValue)));
+			rowBgSelected = MakeSolidBackground((Color)(new Color32((byte)50, (byte)50, (byte)70, byte.MaxValue)));
+		}
+		enemyBgSelected = MakeSolidBackground((Color)(new Color32((byte)60, (byte)30, (byte)10, (byte)200)));
+		enemyBgNormal = MakeSolidBackground((Color)(new Color32((byte)30, (byte)30, (byte)35, (byte)180)));
+		itemBgSelected = MakeSolidBackground((Color)(new Color32((byte)45, (byte)25, (byte)5, (byte)220)));
+		itemBgNormal = MakeSolidBackground((Color)(new Color32((byte)28, (byte)28, (byte)30, (byte)180)));
+		cachedPlayerListStyle = new GUIStyle(GUI.skin.button)
+		{
+			alignment = (TextAnchor)4,
+			fontSize = 14,
+			fontStyle = (FontStyle)1,
+			fixedHeight = 28f,
+			margin = new RectOffset(2, 2, 2, 2),
+			padding = new RectOffset(8, 8, 4, 4),
+			border = new RectOffset(4, 4, 4, 4)
+		};
+		cachedEnemyListStyle = new GUIStyle(GUI.skin.button)
+		{
+			fontSize = 13,
+			fontStyle = (FontStyle)1,
+			alignment = (TextAnchor)4,
+			margin = new RectOffset(4, 4, 2, 2),
+			padding = new RectOffset(6, 6, 4, 4),
+			border = new RectOffset(4, 4, 4, 4)
+		};
+		cachedItemListStyle = new GUIStyle(GUI.skin.button)
+		{
+			fontSize = 13,
+			fontStyle = (FontStyle)1,
+			alignment = (TextAnchor)4,
+			margin = new RectOffset(4, 4, 2, 2),
+			padding = new RectOffset(6, 6, 4, 4),
+			border = new RectOffset(4, 4, 4, 4)
+		};
+		cachedServerRowStyle = new GUIStyle(GUI.skin.button)
+		{
+			alignment = (TextAnchor)3,
+			fontSize = 14,
+			fontStyle = (FontStyle)1,
+			fixedHeight = 32f,
+			margin = new RectOffset(2, 2, 2, 2),
+			padding = new RectOffset(8, 8, 4, 4),
+			border = new RectOffset(4, 4, 4, 4)
+		};
+		listStylesInitialized = true;
 	}
 
 	private Texture2D MakeSolidBackground(Color color)
@@ -3690,42 +4006,177 @@ public class Hax2 : MonoBehaviour
 	}
 
 	// =====================================================
-	// 创造模式 Tab
+	// 菜单设置 Tab
 	// =====================================================
-	private void DrawCreativeTab()
+	private void DrawMenuSettingsTab()
 	{
-		GUILayout.Label("创造模式", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("menupage.title"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(10f);
+
+		// 背景颜色设置
+		GUILayout.Label(L.T("menupage.bg_color"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Space(5f);
-		GUILayout.Label("类似Minecraft创造模式:", labelStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Label("• 无敌 + 飞行 + 无限体力", labelStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Label("• 穿墙抓取 + 无武器冷却", labelStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Label("• 去除迷雾", labelStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Space(10f);
-
-		bool prevCreative = CreativeMode.isCreativeMode;
-		ToggleLogic("creative_mode", " 创造模式", ref CreativeMode.isCreativeMode, CreativeMode.ToggleCreativeMode);
-
-		GUILayout.Space(10f);
-		if (CreativeMode.isCreativeMode)
+		GUILayout.Label(L.T("menupage.bg_r") + " " + Mathf.RoundToInt(menuBgR), labelStyle, Array.Empty<GUILayoutOption>());
+		menuBgR = GUILayout.HorizontalSlider(menuBgR, 0f, 255f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+		GUILayout.Label(L.T("menupage.bg_g") + " " + Mathf.RoundToInt(menuBgG), labelStyle, Array.Empty<GUILayoutOption>());
+		menuBgG = GUILayout.HorizontalSlider(menuBgG, 0f, 255f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+		GUILayout.Label(L.T("menupage.bg_b") + " " + Mathf.RoundToInt(menuBgB), labelStyle, Array.Empty<GUILayoutOption>());
+		menuBgB = GUILayout.HorizontalSlider(menuBgB, 0f, 255f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+		GUILayout.Label(L.T("menupage.bg_a") + " " + Mathf.RoundToInt(menuBgA), labelStyle, Array.Empty<GUILayoutOption>());
+		menuBgA = GUILayout.HorizontalSlider(menuBgA, 0f, 255f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+		GUILayout.Space(5f);
+		// 颜色预览
+		Color previewColor = new Color(menuBgR / 255f, menuBgG / 255f, menuBgB / 255f, menuBgA / 255f);
+		Color oldGUIColor = GUI.color;
+		GUI.color = previewColor;
+		GUILayout.Box("", (GUILayoutOption[])(object)new GUILayoutOption[2] { GUILayout.Width(200f), GUILayout.Height(30f) });
+		GUI.color = oldGUIColor;
+		GUILayout.Space(5f);
+		if (GUILayout.Button(L.T("menupage.apply_color"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			GUILayout.Label("状态: 创造模式已启用", warningStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Space(10f);
-			GUILayout.Label("飞行控制", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Label("WASD - 移动    Space - 上升    Ctrl - 下降", labelStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Label("Shift - 加速飞行", labelStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Space(10f);
-			GUILayout.Label("已激活功能:", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Label("  ✓ 上帝模式", labelStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Label("  ✓ 无限生命", labelStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Label("  ✓ 穿墙飞行", labelStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Label("  ✓ 无限体力", labelStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Label("  ✓ 穿墙抓取", labelStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Label("  ✓ 无武器冷却", labelStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Label("  ✓ 去除迷雾", labelStyle, Array.Empty<GUILayoutOption>());
+			Texture2D newBg = MakeSolidBackground(new Color(menuBgR / 255f, menuBgG / 255f, menuBgB / 255f, menuBgA / 255f));
+			backgroundStyle.normal.background = newBg;
+			backgroundStyle.onNormal.background = newBg;
+			backgroundStyle.focused.background = newBg;
+			backgroundStyle.onFocused.background = newBg;
+			customBgTexture = null;
+		}
+		GUILayout.Space(15f);
+
+		// 自定义背景图片
+		GUILayout.Label(L.T("menupage.bg_image"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(5f);
+		GUILayout.Label(L.T("menupage.image_path"), labelStyle, Array.Empty<GUILayoutOption>());
+		customBgImagePath = GUILayout.TextField(customBgImagePath, textFieldStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(5f);
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button(L.T("menupage.load_image"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			try
+			{
+				if (System.IO.File.Exists(customBgImagePath))
+				{
+					byte[] imgData = System.IO.File.ReadAllBytes(customBgImagePath);
+					Texture2D tex = new Texture2D(2, 2, (TextureFormat)5, false);
+					if (ImageConversion.LoadImage(tex, imgData))
+					{
+						customBgTexture = tex;
+						backgroundStyle.normal.background = tex;
+						backgroundStyle.onNormal.background = tex;
+						backgroundStyle.focused.background = tex;
+						backgroundStyle.onFocused.background = tex;
+						configstatus = L.T("menupage.image_loaded");
+					}
+					else
+					{
+						configstatus = L.T("menupage.image_failed");
+					}
+				}
+				else
+				{
+					configstatus = L.T("menupage.image_failed");
+				}
+			}
+			catch
+			{
+				configstatus = L.T("menupage.image_failed");
+			}
+		}
+		if (GUILayout.Button(L.T("menupage.clear_image"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			customBgTexture = null;
+			Texture2D newBg = MakeSolidBackground(new Color(menuBgR / 255f, menuBgG / 255f, menuBgB / 255f, menuBgA / 255f));
+			backgroundStyle.normal.background = newBg;
+			backgroundStyle.onNormal.background = newBg;
+			backgroundStyle.focused.background = newBg;
+			backgroundStyle.onFocused.background = newBg;
+			configstatus = L.T("menupage.image_cleared");
+		}
+		GUILayout.EndHorizontal();
+		GUILayout.Space(20f);
+
+		// 语言切换
+		GUILayout.Label(L.T("menupage.language"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("menupage.lang_current") + " " + LanguageManager.GetLanguageDisplayName(LanguageManager.currentLanguage), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(5f);
+		string[] availLangs = LanguageManager.GetAvailableLanguages();
+		if (GUILayout.Button(showLangDropdown ? "▲ " + LanguageManager.GetLanguageDisplayName(LanguageManager.currentLanguage) : "▼ " + LanguageManager.GetLanguageDisplayName(LanguageManager.currentLanguage), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			showLangDropdown = !showLangDropdown;
+		}
+		if (showLangDropdown)
+		{
+			GUILayout.BeginVertical(GUI.skin.box, Array.Empty<GUILayoutOption>());
+			langDropdownScroll = GUILayout.BeginScrollView(langDropdownScroll, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(Mathf.Min(150f, availLangs.Length * 30f)) });
+			foreach (string lang in availLangs)
+			{
+				string displayName = LanguageManager.GetLanguageDisplayName(lang);
+				GUIStyle style = (lang == LanguageManager.currentLanguage) ? tabSelectedStyle : buttonStyle;
+				if (GUILayout.Button(displayName + " (" + lang + ")", style, Array.Empty<GUILayoutOption>()))
+				{
+					LanguageManager.SetLanguage(lang);
+					tabs = LanguageManager.GetTabNames();
+					colorNameMapping = null;
+					configstatus = L.T("menupage.lang_switched");
+					showLangDropdown = false;
+				}
+			}
+			GUILayout.EndScrollView();
+			GUILayout.EndVertical();
+		}
+		GUILayout.Space(20f);
+
+		// 菜单控制
+		GUILayout.Label(L.T("menupage.controls"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(5f);
+		if (GUILayout.Button(L.T("menupage.reload"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			titleStyle = null;
+			listStylesInitialized = false;
+			configstatus = L.T("config.loaded");
+		}
+		GUILayout.Space(5f);
+		// 卸载菜单（二次确认）
+		if (confirmUnload && Time.time - confirmTimer < 3f)
+		{
+			if (GUILayout.Button(L.T("menupage.confirm_unload"), warningStyle, Array.Empty<GUILayoutOption>()))
+			{
+				showMenu = false;
+				Object.Destroy(((Component)this).gameObject);
+			}
 		}
 		else
 		{
-			GUILayout.Label("状态: 生存模式", labelStyle, Array.Empty<GUILayoutOption>());
+			confirmUnload = false;
+			if (GUILayout.Button(L.T("menupage.unload"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				confirmUnload = true;
+				confirmTimer = Time.time;
+			}
+		}
+		GUILayout.Space(5f);
+		if (GUILayout.Button(L.T("menupage.main_menu"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			showMenu = false;
+			UnityEngine.SceneManagement.SceneManager.LoadScene(0);
+		}
+		GUILayout.Space(5f);
+		// 退出游戏（二次确认）
+		if (confirmQuit && Time.time - confirmTimer < 3f)
+		{
+			if (GUILayout.Button(L.T("menupage.confirm_quit"), warningStyle, Array.Empty<GUILayoutOption>()))
+			{
+				Application.Quit();
+			}
+		}
+		else
+		{
+			confirmQuit = false;
+			if (GUILayout.Button(L.T("menupage.quit_game"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				confirmQuit = true;
+				confirmTimer = Time.time;
+			}
 		}
 	}
 
@@ -3734,34 +4185,34 @@ public class Hax2 : MonoBehaviour
 	// =====================================================
 	private void DrawTeleportTab()
 	{
-		GUILayout.Label("快速传送", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("tp.quick"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Space(5f);
 
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("传送到准心位置", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("tp.crosshair"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			TeleportPlus.TeleportToCrosshair();
 		}
-		if (GUILayout.Button("传送到最近撤离点", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("tp.extraction"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			TeleportPlus.TeleportToExtraction();
 		}
 		GUILayout.EndHorizontal();
 		GUILayout.Space(5f);
 
-		if (GUILayout.Button("随机传送 (50m范围)", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("tp.random"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			TeleportPlus.TeleportRandom(50f);
 		}
 
 		GUILayout.Space(15f);
-		GUILayout.Label("传送点管理", sectionHeaderStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("tp.waypoints"), sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Space(5f);
 
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		GUILayout.Label("名称:", labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(40f) });
+		GUILayout.Label(L.T("tp.name"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(55f) });
 		TeleportPlus.newWaypointName = GUILayout.TextField(TeleportPlus.newWaypointName, textFieldStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(160f) });
-		if (GUILayout.Button("保存当前位置", buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("tp.save"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			TeleportPlus.SaveCurrentPosition(TeleportPlus.newWaypointName);
 			TeleportPlus.newWaypointName = "";
@@ -3771,7 +4222,7 @@ public class Hax2 : MonoBehaviour
 		GUILayout.Space(5f);
 		if (TeleportPlus.savedWaypoints.Count == 0)
 		{
-			GUILayout.Label("暂无保存的传送点", labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("tp.no_waypoints"), labelStyle, Array.Empty<GUILayoutOption>());
 		}
 		else
 		{
@@ -3793,11 +4244,11 @@ public class Hax2 : MonoBehaviour
 
 			GUILayout.Space(5f);
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-			if (GUILayout.Button("传送到选中点", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("tp.goto"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				TeleportPlus.TeleportToWaypoint(TeleportPlus.selectedWaypointIndex);
 			}
-			if (GUILayout.Button("删除选中点", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("tp.delete"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				TeleportPlus.RemoveWaypoint(TeleportPlus.selectedWaypointIndex);
 			}

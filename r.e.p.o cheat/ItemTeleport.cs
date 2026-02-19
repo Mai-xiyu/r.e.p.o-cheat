@@ -158,7 +158,7 @@ public static class ItemTeleport
 		}
 		if (list.Count == 0)
 		{
-			list.Add(new GameItem("No items found", 0));
+			list.Add(new GameItem(L.T("items.no_items"), 0));
 		}
 		return list;
 	}
@@ -222,16 +222,6 @@ public static class ItemTeleport
 		//IL_004d: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0052: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0057: Unknown result type (might be due to invalid IL or missing references)
-		//IL_005e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0063: Unknown result type (might be due to invalid IL or missing references)
-		//IL_006f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_012d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0134: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01fe: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0205: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0216: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0247: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0250: Unknown result type (might be due to invalid IL or missing references)
 		try
 		{
 			GameObject localPlayer = DebugCheats.GetLocalPlayer();
@@ -272,47 +262,14 @@ public static class ItemTeleport
 				val2.rotation = rotation;
 				return;
 			}
-			if (PhotonNetwork.IsConnected && !component.IsMine)
+			// 使用 ItemTeleportComponent 处理所有权和传送
+			ItemTeleportComponent teleportComp = ((Component)val2).GetComponent<ItemTeleportComponent>();
+			if ((Object)(object)teleportComp == (Object)null)
 			{
-				component.RequestOwnership();
-				Debug.Log((object)$"Requested ownership of item '{item.Name}' (ViewID: {component.ViewID})");
+				teleportComp = ((Component)val2).gameObject.AddComponent<ItemTeleportComponent>();
 			}
-			PhotonTransformView component2 = ((Component)val2).GetComponent<PhotonTransformView>();
-			bool flag = false;
-			if ((Object)(object)component2 != (Object)null && ((Behaviour)component2).enabled)
-			{
-				flag = true;
-				((Behaviour)component2).enabled = false;
-				Debug.Log((object)("PhotonTransformView temporarily disabled on item '" + item.Name + "'"));
-			}
-			Rigidbody component3 = ((Component)val2).GetComponent<Rigidbody>();
-			bool flag2 = false;
-			if ((Object)(object)component3 != (Object)null)
-			{
-				flag2 = !component3.isKinematic;
-				component3.isKinematic = true;
-				Debug.Log((object)("Rigidbody of item '" + item.Name + "' temporarily disabled"));
-			}
-			val2.position = val;
-			val2.rotation = rotation;
-			Debug.Log((object)$"Item '{item.Name}' locally teleported to {val}");
-			if (PhotonNetwork.IsConnected && (Object)(object)component != (Object)null)
-			{
-				component.RPC("SetPositionRPC", (RpcTarget)3, new object[2] { val, rotation });
-				Debug.Log((object)("Sent RPC 'SetPositionRPC' to all for item '" + item.Name + "'"));
-			}
-			if (flag || flag2)
-			{
-				((Component)val2).gameObject.AddComponent<DelayedPhysicsReset>().Setup(component3, component2);
-			}
-			GameObject gameObject = ((Component)val2).gameObject;
-			if ((Object)(object)gameObject != (Object)null)
-			{
-				gameObject.SetActive(false);
-				gameObject.SetActive(true);
-				Debug.Log((object)("Item '" + item.Name + "' reactivated to force rendering."));
-			}
-			Debug.Log((object)("Teleport of item '" + item.Name + "' completed."));
+			teleportComp.RequestTeleport(val, rotation);
+			Debug.Log((object)("Teleport of item '" + item.Name + "' requested via ItemTeleportComponent."));
 		}
 		catch (Exception ex)
 		{

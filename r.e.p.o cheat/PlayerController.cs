@@ -33,6 +33,11 @@ internal class PlayerController
 
 	public static void GodMode()
 	{
+		SetGodMode(!Hax2.godModeActive);
+	}
+
+	public static void SetGodMode(bool enable)
+	{
 		if (PlayerReflectionCache.PlayerHealthInstance == null)
 		{
 			PlayerReflectionCache.CachePlayerControllerData();
@@ -42,9 +47,8 @@ internal class PlayerController
 			FieldInfo field = PlayerReflectionCache.PlayerHealthInstance.GetType().GetField("godMode", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 			if (field != null)
 			{
-				bool flag = !(bool)field.GetValue(PlayerReflectionCache.PlayerHealthInstance);
-				field.SetValue(PlayerReflectionCache.PlayerHealthInstance, flag);
-				Hax2.godModeActive = flag;
+				field.SetValue(PlayerReflectionCache.PlayerHealthInstance, enable);
+				Hax2.godModeActive = enable;
 			}
 		}
 	}
