@@ -6,6 +6,9 @@
 > [!WARNING]
 > 这是一个开源项目！不以出售为目的，也不打算做成终极版 R.E.P.O 作弊工具，任何人都可以使用并随时欢迎贡献代码！
 
+如果你想体验预览版可以进群 865048905 来体验
+该群仅用来测试版体验和反馈，不收费，纯公益
+
 基于 C# Mono 的开源作弊工具，适用于一款类似 Lethal Company 的新游戏 R.E.P.O。
 
 <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/45f59200-fed3-4c40-b13b-5d4c86e12ca8" />
