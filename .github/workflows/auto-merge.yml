@@ -1,0 +1,46 @@
+name: 自动合并特定目录 PR
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 获取变更文件
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+
+      - name: 检查目录并合并
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const allowedDir = "docs/"; // 改成你的目标目录
+            const files = "${{ steps.changed-files.outputs.all_changed_files }}".split(" ");
+            
+            // 检查是否所有文件都在允许目录下
+            const allAllowed = files.every(file => file.startsWith(allowedDir));
+            
+            if (allAllowed) {
+              // 1. 自动批准
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                event: "APPROVE"
+              });
+              // 2. 自动合并
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                merge_method: "squash"
+              });
+            }
