@@ -1,0 +1,111 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore "r.e.p.o cheat.sln"
+
+      - name: Build Release
+        run: dotnet build "r.e.p.o cheat.sln" -c Release --no-restore
+
+      - name: Package artifacts
+        run: |
+          mkdir release-artifacts
+          Copy-Item "r.e.p.o cheat\bin\Release\r.e.p.o cheat.dll" -Destination "release-artifacts\r.e.p.o.cheat.dll"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "${{ github.ref_name }}"
+          body: |
+            ---
+
+            ### 中文详细操作指南
+
+            #### 第一步：以管理员身份打开终端
+            1. 按下键盘上的 `Win + X` 组合键（或者用鼠标右键点击屏幕左下角的 Windows 开始图标）；
+            2. 在弹出的菜单中，选择 **"终端 (管理员)"**（如果是 Windows 10 系统，可能显示为 **"Windows PowerShell (管理员)"** 或 **"命令提示符 (管理员)"**，选择带"管理员"字样的选项即可）；
+            3. 此时屏幕可能会弹出一个蓝色的 **"用户账户控制"** 窗口，问你是否允许此应用更改设备，直接点击 **"是"** 按钮。
+
+
+            #### 第二步：进入 Release 文件所在的文件夹
+            1. 打开电脑上的 **"文件资源管理器"**（就是那个黄色文件夹图标），找到你下载并存放 Release 文件的那个文件夹；
+            2. 点击文件资源管理器最上方的地址栏（显示当前文件夹路径的地方），把里面的路径完整选中，然后按 `Ctrl + C` 复制；
+            3. 回到刚才打开的终端窗口，输入 `cd`（注意 cd 后面要打一个空格），然后按 `Ctrl + V` 把刚才复制的路径粘贴进去，这样就组成了一条命令，例如：
+               ```
+               cd C:\Users\你的用户名\Downloads\Release文件夹
+               ```
+               - ⚠️ 特别注意：如果你的文件夹路径里有空格（比如叫 `Release Files`），必须用英文双引号把整个路径括起来，否则会报错，正确写法：
+                 ```
+                 cd "C:\Users\你的用户名\Downloads\Release Files"
+                 ```
+            4. 按键盘上的 `Enter` 键执行这条命令。如果成功，终端里的光标前面就会变成你刚才进入的文件夹路径。
+
+
+            #### 第三步：运行注入命令
+            1. 完整复制下面这一大段命令（一个字符都不要漏）：
+               ```
+               .\smi.exe inject -p repo -a r.e.p.o.cheat.dll -n r.e.p.o_cheat -c Loader -m Init
+               ```
+            2. 回到终端窗口，按 `Ctrl + V` 把命令粘贴进去；
+            3. 最后按一下 `Enter` 键，等待程序运行即可。
+
+
+            ---
+
+            ### English Detailed Operation Guide
+
+            #### Step 1: Open Terminal as Administrator
+            1. Press the `Win + X` key combination on your keyboard (or right-click the Windows Start icon in the bottom-left corner of the screen);
+            2. In the pop-up menu, select **"Terminal (Admin)"** (on Windows 10, it may show as **"Windows PowerShell (Admin)"** or **"Command Prompt (Admin)"** — just choose the one with "Admin" in the name);
+            3. A blue **"User Account Control"** window may pop up asking if you want to allow this app to make changes to your device. Simply click **"Yes"**.
+
+
+            #### Step 2: Navigate to the Release Folder
+            1. Open **File Explorer** (the yellow folder icon) on your computer and locate the folder where you downloaded and placed the Release files;
+            2. Click the address bar at the top of File Explorer (where the current folder path is displayed), select the entire path, and press `Ctrl + C` to copy it;
+            3. Go back to the terminal window you just opened, type `cd` (make sure to add a space after `cd`), then press `Ctrl + V` to paste the path you just copied. This will form a command like:
+               ```
+               cd C:\Users\YourUsername\Downloads\ReleaseFolder
+               ```
+               - ⚠️ Important Note: If your folder path contains spaces (e.g., `Release Files`), you must enclose the entire path in English double quotes, otherwise it will throw an error. Correct example:
+                 ```
+                 cd "C:\Users\YourUsername\Downloads\Release Files"
+                 ```
+            4. Press the `Enter` key on your keyboard to execute the command. If successful, the text before the cursor in the terminal will change to the folder path you just entered.
+
+
+            #### Step 3: Run the Injection Command
+            1. Fully copy the following command (don't miss a single character):
+               ```
+               .\smi.exe inject -p repo -a r.e.p.o.cheat.dll -n r.e.p.o_cheat -c Loader -m Init
+               ```
+            2. Go back to the terminal window and press `Ctrl + V` to paste the command;
+            3. Finally, press the `Enter` key and wait for the program to run.
+
+
+            ---
+          files: |
+            release-artifacts/r.e.p.o.cheat.dll
+          draft: false
+          prerelease: false
