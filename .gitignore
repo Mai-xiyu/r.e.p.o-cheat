@@ -35,6 +35,7 @@ Desktop.ini
 
 # Game DLL references (users must provide their own)
 *.dll
+!libs/**/*.dll
 !r.e.p.o cheat/Cheats/ChamsShader.shader
 
 # Temp / cache
