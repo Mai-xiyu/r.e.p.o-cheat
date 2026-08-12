@@ -18,13 +18,7 @@ public class UnlimitedBattery : MonoBehaviour
 
 	private const float SCAN_INTERVAL = 2f;
 
-	private Dictionary<Type, FieldInfo> batteryLifeIntCache = new Dictionary<Type, FieldInfo>();
-
-	private Dictionary<Type, FieldInfo> batteryDrainRateCache = new Dictionary<Type, FieldInfo>();
-
-	private Dictionary<Type, FieldInfo> drainTimerCache = new Dictionary<Type, FieldInfo>();
-
-	private Dictionary<Type, MethodInfo> batteryFullPercentChangeCache = new Dictionary<Type, MethodInfo>();
+	private Dictionary<Type, FieldInfo> equippedFieldCache = new Dictionary<Type, FieldInfo>();
 
 	private void Awake()
 	{
@@ -61,7 +55,12 @@ public class UnlimitedBattery : MonoBehaviour
 		ItemEquippable component2 = ((Component)battery).GetComponent<ItemEquippable>();
 		if ((Object)(object)component2 != (Object)null)
 		{
-			FieldInfo field = ((object)component2).GetType().GetField("isEquipped", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			Type type = ((object)component2).GetType();
+			if (!equippedFieldCache.TryGetValue(type, out FieldInfo field))
+			{
+				field = type.GetField("isEquipped", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				equippedFieldCache[type] = field;
+			}
 			if (field != null && (bool)field.GetValue(component2))
 			{
 				if (Inventory.instance != null && Inventory.instance.IsItemEquipped(component2))
@@ -108,44 +107,9 @@ public class UnlimitedBattery : MonoBehaviour
 					}
 					if (IsLocalPlayerHolding(val))
 					{
-						val.batteryLife = 100f;
-						Type type = ((object)val).GetType();
-						if (!batteryLifeIntCache.TryGetValue(type, out var value))
-						{
-							value = type.GetField("batteryLifeInt", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-							batteryLifeIntCache[type] = value;
-						}
-						if (value != null && (int)value.GetValue(val) < 6)
-						{
-							value.SetValue(val, 6);
-						}
-						if (!batteryDrainRateCache.TryGetValue(type, out var value2))
-						{
-							value2 = type.GetField("batteryDrainRate", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-							batteryDrainRateCache[type] = value2;
-						}
-						if (value2 != null)
-						{
-							value2.SetValue(val, 0f);
-						}
-						if (!drainTimerCache.TryGetValue(type, out var value3))
-						{
-							value3 = type.GetField("drainTimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-							drainTimerCache[type] = value3;
-						}
-						if (value3 != null)
-						{
-							value3.SetValue(val, 0f);
-						}
-						if (!batteryFullPercentChangeCache.TryGetValue(type, out var value4))
-						{
-							value4 = type.GetMethod("BatteryFullPercentChange", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-							batteryFullPercentChangeCache[type] = value4;
-						}
-						if (value4 != null && ((value != null) ? ((int)value.GetValue(val)) : 0) < 6)
-						{
-							value4.Invoke(val, new object[2] { 6, true });
-						}
+						// the game's own full-charge path: battery level + int bars + visuals
+						val.SetBatteryLife(100);
+						val.batteryDrainRate = 0f;
 					}
 					if ((i + 1) % 5 == 0)
 					{

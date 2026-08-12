@@ -37,6 +37,10 @@ self.auto_dodge= 自动闪避
 self.dodge_dist_fmt=闪避距离: {0}m
 self.misc=杂项
 self.rgb_player= 玩家RGB颜色
+cos.header=装扮
+cos.unlock_all=解锁全部装扮
+cos.randomize=随机装扮
+cos.rainbow=彩虹装扮循环
 self.no_fog= 去除迷雾
 self.watermark= 显示水印
 self.anti_grab= 防抓取保护
@@ -684,6 +688,14 @@ room.world_tools=世界工具
 room.level_adjust=关卡调整
 room.set_next_level=设置下一关
 room.level_status=当前设置: {0}
+room.complete_level=完成本关
+room.go_shop=去商店
+room.go_lobby=去大厅
+room.go_main_menu=回主菜单
+self.debug_flags=游戏调试旗标
+self.debug_energy=无限能量（调试）
+self.debug_no_overcharge=免疫过载
+self.debug_no_tumble=禁止翻滚
 
 # 游戏汉化（功能，默认关闭）
 localization.header=游戏汉化

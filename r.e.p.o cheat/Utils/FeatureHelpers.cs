@@ -13,7 +13,7 @@ namespace r.e.p.o_cheat;
 public static class UpgradeHelper
 {
     /// <summary>
-    /// 通过 StatsManager 字典直接修改升级属性（绕过无效的 RPC）
+    /// 全部 13 种升级（v0.4.x 的真实升级字典），走游戏的 PunManager 升级 API + UpdateStat 同步。
     /// </summary>
     public static void MaxAllUpgrades()
     {
@@ -22,7 +22,10 @@ public static class UpgradeHelper
             string steamID = PlayerController.GetLocalPlayerSteamID();
             if (string.IsNullOrEmpty(steamID)) return;
 
-            ApplyUpgradeViaDictionary(steamID, 30, 30, 30, 30, 30, 20);
+            foreach (var upgrade in Upgrades)
+            {
+                SetUpgrade(steamID, upgrade.Dict, 6, upgrade.Apply);
+            }
 
             // 也直接设置本地 physGrabber
             try
@@ -44,7 +47,7 @@ public static class UpgradeHelper
             Hax2.extraJumps = 30;
             Hax2.tumbleLaunch = 20f;
 
-            Debug.Log("[UpgradeHelper] All upgrades maxed via StatsManager!");
+            Debug.Log("[UpgradeHelper] All 13 upgrades maxed via PunManager API!");
         }
         catch (Exception ex)
         {
@@ -52,57 +55,92 @@ public static class UpgradeHelper
         }
     }
 
+    /// <summary>v0.4.x 真实升级字典名 + 对应 PunManager 立即生效方法（委托在调用时才读取 instance）。</summary>
+    private static readonly (string Dict, Action<string, int> Apply)[] Upgrades =
+    {
+        ("playerUpgradeHealth", (id, v) => PunManager.instance.UpgradePlayerHealth(id, v)),
+        ("playerUpgradeStamina", (id, v) => PunManager.instance.UpgradePlayerEnergy(id, v)),
+        ("playerUpgradeExtraJump", (id, v) => PunManager.instance.UpgradePlayerExtraJump(id, v)),
+        ("playerUpgradeLaunch", (id, v) => PunManager.instance.UpgradePlayerTumbleLaunch(id, v)),
+        ("playerUpgradeTumbleClimb", (id, v) => PunManager.instance.UpgradePlayerTumbleClimb(id, v)),
+        ("playerUpgradeTumbleWings", (id, v) => PunManager.instance.UpgradePlayerTumbleWings(id, v)),
+        ("playerUpgradeSpeed", (id, v) => PunManager.instance.UpgradePlayerSprintSpeed(id, v)),
+        ("playerUpgradeCrouchRest", (id, v) => PunManager.instance.UpgradePlayerCrouchRest(id, v)),
+        ("playerUpgradeStrength", (id, v) => PunManager.instance.UpgradePlayerGrabStrength(id, v)),
+        ("playerUpgradeThrow", (id, v) => PunManager.instance.UpgradePlayerThrowStrength(id, v)),
+        ("playerUpgradeRange", (id, v) => PunManager.instance.UpgradePlayerGrabRange(id, v)),
+        ("playerUpgradeMapPlayerCount", (id, v) => PunManager.instance.UpgradeMapPlayerCount(id, v)),
+        ("playerUpgradeDeathHeadBattery", (id, v) => PunManager.instance.UpgradeDeathHeadBattery(id, v)),
+    };
+
+    private static readonly Dictionary<string, FieldInfo> DictFields = new Dictionary<string, FieldInfo>();
+
+    /// <summary>幂等升级：先应用差值（立即生效），再用游戏自己的 UpdateStat 同步字典到所有客户端。</summary>
+    private static void SetUpgrade(string steamID, string dictName, int target, Action<string, int> apply)
+    {
+        StatsManager stats = StatsManager.instance;
+        if (stats == null)
+        {
+            return;
+        }
+        Dictionary<string, int> dict = GetDict(stats, dictName);
+        if (dict == null)
+        {
+            return;
+        }
+        int current = dict.TryGetValue(steamID, out int level) ? level : 0;
+        if (current >= target)
+        {
+            return;
+        }
+        apply?.Invoke(steamID, target - current);
+        if (PunManager.instance != null)
+        {
+            PunManager.instance.UpdateStat(dictName, steamID, target);
+        }
+    }
+
+    private static Dictionary<string, int> GetDict(StatsManager stats, string dictName)
+    {
+        if (!DictFields.TryGetValue(dictName, out FieldInfo field) || field == null)
+        {
+            field = typeof(StatsManager).GetField(dictName, BindingFlags.Instance | BindingFlags.Public);
+            DictFields[dictName] = field;
+        }
+        return field?.GetValue(stats) as Dictionary<string, int>;
+    }
+
     /// <summary>
-    /// 核心方法：通过反射直接修改 PunManager.statsManager 中的升级字典
+    /// 核心方法：6 项核心升级走游戏真实 API（幂等，自动同步字典与立即生效）。
     /// </summary>
     public static void ApplyUpgradeViaDictionary(string steamID, int grabStrength, int throwStrength,
         int sprintSpeed, int grabRange, int extraJump, int tumbleLaunch)
     {
-        Type punType = Type.GetType("PunManager, Assembly-CSharp");
-        if (punType == null) return;
-        object punMgr = GameHelper.FindObjectOfType(punType);
-        if (punMgr == null) return;
-
-        object statsManager = punType.GetField("statsManager", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(punMgr);
-        if (statsManager == null) return;
-
-        Type smType = statsManager.GetType();
-        SetDictValue(smType, statsManager, "playerUpgradeStrength", steamID, grabStrength);
-        SetDictValue(smType, statsManager, "playerUpgradeThrowStrength", steamID, throwStrength);
-        SetDictValue(smType, statsManager, "playerUpgradeSprintSpeed", steamID, sprintSpeed);
-        SetDictValue(smType, statsManager, "playerUpgradeGrabRange", steamID, grabRange);
-        SetDictValue(smType, statsManager, "playerUpgradeExtraJump", steamID, extraJump);
-        SetDictValue(smType, statsManager, "playerUpgradeTumbleLaunch", steamID, tumbleLaunch);
-
-        // 直接设置本地物理属性（立即生效，不依赖RPC）
         try
         {
-            ApplyLocalPhysicsUpgrades(grabStrength, sprintSpeed, extraJump);
-        }
-        catch { }
+            if (string.IsNullOrEmpty(steamID)) return;
+            if (PunManager.instance == null || StatsManager.instance == null) return;
 
-        // 通过 RPC 广播给所有人（包括主机和自己）
-        // 无论是否为主机都发送，利用 Photon 的 Trust Client 特性
-        try
-        {
-            PhotonView pv = ((Component)UnityEngine.Object.FindObjectOfType<PunManager>()).GetComponent<PhotonView>();
-            if (pv != null)
+            SetUpgrade(steamID, "playerUpgradeStrength", Mathf.Clamp(grabStrength, 0, 6), (id, v) => PunManager.instance.UpgradePlayerGrabStrength(id, v));
+            SetUpgrade(steamID, "playerUpgradeThrow", Mathf.Clamp(throwStrength, 0, 6), (id, v) => PunManager.instance.UpgradePlayerThrowStrength(id, v));
+            SetUpgrade(steamID, "playerUpgradeSpeed", Mathf.Clamp(sprintSpeed, 0, 6), (id, v) => PunManager.instance.UpgradePlayerSprintSpeed(id, v));
+            SetUpgrade(steamID, "playerUpgradeRange", Mathf.Clamp(grabRange, 0, 6), (id, v) => PunManager.instance.UpgradePlayerGrabRange(id, v));
+            SetUpgrade(steamID, "playerUpgradeExtraJump", Mathf.Clamp(extraJump, 0, 6), (id, v) => PunManager.instance.UpgradePlayerExtraJump(id, v));
+            SetUpgrade(steamID, "playerUpgradeLaunch", Mathf.Clamp(tumbleLaunch, 0, 6), (id, v) => PunManager.instance.UpgradePlayerTumbleLaunch(id, v));
+
+            // 直接设置本地物理属性（立即生效，不依赖RPC）
+            try
             {
-                // AllBuffered(3) 广播给所有人包括自己，确保主机也收到并更新字典
-                pv.RPC("UpgradePlayerGrabStrengthRPC", (RpcTarget)3, new object[] { steamID, grabStrength });
-                pv.RPC("UpgradePlayerThrowStrengthRPC", (RpcTarget)3, new object[] { steamID, throwStrength });
-                pv.RPC("UpgradePlayerSprintSpeedRPC", (RpcTarget)3, new object[] { steamID, sprintSpeed });
-                pv.RPC("UpgradePlayerGrabRangeRPC", (RpcTarget)3, new object[] { steamID, grabRange });
-                pv.RPC("UpgradePlayerExtraJumpRPC", (RpcTarget)3, new object[] { steamID, extraJump });
-                pv.RPC("UpgradePlayerTumbleLaunchRPC", (RpcTarget)3, new object[] { steamID, tumbleLaunch });
+                ApplyLocalPhysicsUpgrades(grabStrength, sprintSpeed, extraJump);
             }
+            catch { }
+
+            Debug.Log($"[Upgrade] Applied for {steamID}: GS={grabStrength} TS={throwStrength} SS={sprintSpeed} GR={grabRange} EJ={extraJump} TL={tumbleLaunch}");
         }
         catch (System.Exception ex)
         {
-            Debug.LogWarning("[Upgrade] RPC broadcast failed: " + ex.Message);
+            Debug.LogWarning("[Upgrade] Apply failed: " + ex.Message);
         }
-
-        Debug.Log($"[Upgrade] Applied for {steamID}: GS={grabStrength} TS={throwStrength} SS={sprintSpeed} GR={grabRange} EJ={extraJump} TL={tumbleLaunch}");
     }
 
     /// <summary>
@@ -153,20 +191,6 @@ public static class UpgradeHelper
         }
     }
 
-    private static void SetDictValue(Type smType, object statsManager, string fieldName, string steamID, int value)
-    {
-        try
-        {
-            FieldInfo fi = smType.GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (fi == null) return;
-            var dict = fi.GetValue(statsManager) as Dictionary<string, int>;
-            if (dict != null)
-            {
-                dict[steamID] = value;
-            }
-        }
-        catch { }
-    }
 }
 
 /// <summary>
@@ -691,65 +715,24 @@ public static class AutoCompleteRound
     {
         try
         {
-            // Step 1: Activate all extraction points
-            MiscFeatures.ForceActivateAllExtractionPoints();
-
-            // Step 2: Teleport all items to nearest extraction point
-            ExtractionPoint[] points = UnityEngine.Object.FindObjectsOfType<ExtractionPoint>();
-            if (points.Length == 0)
+            // 激活所有撤离点（游戏自己的 ExtractionPointActivate → 同步 RPC）
+            foreach (ExtractionPoint ep in UnityEngine.Object.FindObjectsOfType<ExtractionPoint>())
             {
-                Debug.LogWarning("[AutoComplete] No extraction points found");
-                return;
-            }
-
-            GameObject localPlayer = DebugCheats.GetLocalPlayer();
-            Vector3 refPos = localPlayer != null ? localPlayer.transform.position : Vector3.zero;
-
-            // Find nearest extraction point
-            ExtractionPoint nearest = null;
-            float nearestDist = float.MaxValue;
-            foreach (var ep in points)
-            {
-                float dist = Vector3.Distance(refPos, ((Component)ep).transform.position);
-                if (dist < nearestDist) { nearestDist = dist; nearest = ep; }
-            }
-
-            if (nearest == null) return;
-            Vector3 sellPos = ((Component)nearest).transform.position + Vector3.up * 0.5f;
-
-            // Move all valuable objects to extraction
-            var items = DebugCheats.valuableObjects;
-            if (items != null)
-            {
-                foreach (object item in items)
+                if (ep == null) continue;
+                PhotonView pv = ep.GetComponent<PhotonView>();
+                if (pv != null && RoundDirector.instance != null)
                 {
-                    if (item == null) continue;
-                    try
-                    {
-                        UnityEngine.Object unityObj = item as UnityEngine.Object;
-                        if (unityObj != null && unityObj == null) continue;
-
-                        Transform t = null;
-                        if (item is Component comp)
-                            t = comp.transform;
-                        else
-                        {
-                            var prop = item.GetType().GetProperty("transform",
-                                BindingFlags.Instance | BindingFlags.Public);
-                            if (prop != null)
-                                t = prop.GetValue(item) as Transform;
-                        }
-                        if (t != null)
-                            t.position = sellPos;
-                    }
-                    catch { }
+                    RoundDirector.instance.ExtractionPointActivate(pv.ViewID);
                 }
             }
 
-            // Step 3: Zero haul goal
-            HaulGoalZero.ZeroHaulGoal();
+            // 通过游戏自己的通关流程完成关卡（进入下一关/商店）
+            if (RunManager.instance != null)
+            {
+                RunManager.instance.ChangeLevel(_completedLevel: true, _levelFailed: false, RunManager.ChangeLevelType.Normal);
+            }
 
-            Debug.Log("[AutoComplete] Round auto-completed!");
+            Debug.Log("[AutoComplete] Round auto-completed via game API!");
         }
         catch (Exception ex)
         {
@@ -865,19 +848,12 @@ public static class TeamTeleport
                 if ((UnityEngine.Object)(object)avatar == (UnityEngine.Object)null) continue;
                 try
                 {
-                    var field = ((object)avatar).GetType().GetField("photonView",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    PhotonView pv = field?.GetValue(avatar) as PhotonView;
-                    if (pv == null)
-                        pv = ((Component)avatar).GetComponent<PhotonView>();
-                    if (pv == null) continue;
-
                     // 分散位置防止重叠
                     Vector3 offset = new Vector3(UnityEngine.Random.Range(-1.5f, 1.5f), 0, UnityEngine.Random.Range(-1.5f, 1.5f));
                     Vector3 pos = targetPos + offset;
 
-                    ((Component)avatar).transform.position = pos;
-                    pv.RPC("SpawnRPC", (RpcTarget)3, new object[2] { pos, ((Component)avatar).transform.rotation });
+                    // 游戏自己的传送 API（Spawn → SpawnRPC 同步；旧客户端直发 SpawnRPC 被 MasterOnly 守卫丢弃）
+                    avatar.Spawn(pos, ((Component)avatar).transform.rotation);
                     count++;
                 }
                 catch { }
@@ -906,6 +882,8 @@ public static class PlayerAura
 
     /// <summary>
     /// 每帧调用: 持续为目标玩家满血
+    /// （旧实现用 3 参数的伪造 UpdateHealthRPC——真实签名为 4 参数，RPC 被游戏丢弃、功能一直是死的；
+    ///  现在走游戏自己的 PlayerHealth.HealOther，内部自动同步 HealOtherRPC。）
     /// </summary>
     public static void Update()
     {
@@ -923,9 +901,7 @@ public static class PlayerAura
                 if ((UnityEngine.Object)(object)avatar == (UnityEngine.Object)null) continue;
                 try
                 {
-                    var pvField = ((object)avatar).GetType().GetField("photonView",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    PhotonView pv = pvField?.GetValue(avatar) as PhotonView;
+                    PhotonView pv = avatar.photonView;
                     if (pv == null)
                         pv = ((Component)avatar).GetComponent<PhotonView>();
                     if (pv == null) continue;
@@ -934,26 +910,11 @@ public static class PlayerAura
                     if (targetActorNumber != -1 && pv.OwnerActorNr != targetActorNumber)
                         continue;
 
-                    // 获取 playerHealth
-                    var healthField = ((object)avatar).GetType().GetField("playerHealth",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (healthField == null) continue;
-                    var health = healthField.GetValue(avatar);
-                    if (health == null) continue;
-
-                    var hpPV = ((Component)(MonoBehaviour)health).GetComponent<PhotonView>();
-                    if (hpPV == null) continue;
-
-                    // 获取 maxHealth
-                    var maxField = health.GetType().GetField("maxHealth",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    int maxHP = 100;
-                    if (maxField != null)
+                    if (avatar.playerHealth != null)
                     {
-                        try { maxHP = (int)maxField.GetValue(health); } catch { }
+                        // 游戏自己的治疗+同步路径（HealOther → HealOtherRPC）
+                        avatar.playerHealth.HealOther(Players.GetPlayerMaxHealth(avatar.playerHealth), effect: false);
                     }
-
-                    hpPV.RPC("UpdateHealthRPC", (RpcTarget)3, new object[3] { maxHP, maxHP, true });
                 }
                 catch { }
             }

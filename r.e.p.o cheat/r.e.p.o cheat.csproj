@@ -400,6 +400,7 @@
     <Compile Include="Utils\*.cs" />
     <Compile Include="Compatibility\*.cs" />
     <Compile Include="Localization\*.cs" />
+    <Compile Include="Cosmetics\*.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

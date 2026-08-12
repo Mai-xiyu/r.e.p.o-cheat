@@ -78,89 +78,32 @@ public static class ShopHack
     }
 
     /// <summary>
-    /// 尝试设置商店物品免费
-    /// 搜索游戏中的 ShopItem 组件并将价格设为0
+    /// 免费购买：把本轮货币设为极大值，走游戏自己的 SetRunStatSet 同步路径
+    /// （旧的 ShopItem/ItemShop 暴力字段扫描全部无效，已废弃）。
     /// </summary>
     public static int SetAllShopItemsFree()
     {
-        int count = 0;
         try
         {
-            // 搜索所有可能的商店物品类型
-            string[] shopTypeNames = { "ShopItem", "ItemShop", "ShopManager", "Shop" };
-            foreach (string typeName in shopTypeNames)
-            {
-                Type shopType = Type.GetType(typeName + ", Assembly-CSharp");
-                if (shopType == null) continue;
-
-                var items = UnityEngine.Object.FindObjectsOfType(shopType);
-                foreach (var item in items)
-                {
-                    // 尝试常见的价格字段名
-                    string[] priceFields = { "price", "cost", "itemPrice", "shopPrice", "dollarCost" };
-                    foreach (string pf in priceFields)
-                    {
-                        FieldInfo field = shopType.GetField(pf, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (field != null && (field.FieldType == typeof(int) || field.FieldType == typeof(float)))
-                        {
-                            if (field.FieldType == typeof(int)) field.SetValue(item, 0);
-                            else field.SetValue(item, 0f);
-                            count++;
-                        }
-                    }
-                }
-            }
+            SemiFunc.StatSetRunCurrency(9999999);
+            Debug.Log("[ShopHack] Shop effectively free: run currency set to 9,999,999");
+            return 1;
         }
         catch (Exception ex) { Debug.LogWarning("[ShopHack] SetFree error: " + ex.Message); }
-        return count;
+        return 0;
     }
 
     /// <summary>
-    /// 尝试直接修改玩家/团队金币
+    /// 直接修改本轮团队金币（游戏自己的 SetRunStatSet 同步路径，替代旧的暴力字段扫描）。
     /// </summary>
     public static bool AddMoney(int amount)
     {
         try
         {
-            // 尝试通过 SemiFunc 或 RunManager 找到金币字段
-            string[] containerTypes = { "SemiFunc", "RunManager", "StatsManager", "GameDirector" };
-            string[] moneyFields = { "money", "currency", "gold", "teamMoney", "playerMoney", "totalMoney", "haul" };
-
-            foreach (string ct in containerTypes)
-            {
-                Type type = Type.GetType(ct + ", Assembly-CSharp");
-                if (type == null) continue;
-
-                foreach (string mf in moneyFields)
-                {
-                    FieldInfo field = type.GetField(mf, BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (field == null) continue;
-
-                    object target = null;
-                    if (!field.IsStatic)
-                    {
-                        // 尝试获取实例
-                        var instanceField = type.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (instanceField != null) target = instanceField.GetValue(null);
-                        if (target == null) continue;
-                    }
-
-                    if (field.FieldType == typeof(int))
-                    {
-                        int current = (int)field.GetValue(target);
-                        field.SetValue(target, current + amount);
-                        Debug.Log($"[ShopHack] {ct}.{mf}: {current} → {current + amount}");
-                        return true;
-                    }
-                    else if (field.FieldType == typeof(float))
-                    {
-                        float current = (float)field.GetValue(target);
-                        field.SetValue(target, current + (float)amount);
-                        Debug.Log($"[ShopHack] {ct}.{mf}: {current} → {current + amount}");
-                        return true;
-                    }
-                }
-            }
+            int current = SemiFunc.StatGetRunCurrency();
+            SemiFunc.StatSetRunCurrency(current + amount);
+            Debug.Log($"[ShopHack] Run currency: {current} → {current + amount}");
+            return true;
         }
         catch (Exception ex) { Debug.LogWarning("[ShopHack] AddMoney error: " + ex.Message); }
         return false;

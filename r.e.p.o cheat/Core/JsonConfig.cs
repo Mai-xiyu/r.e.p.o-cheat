@@ -140,7 +140,7 @@ public static class JsonConfig
             config.noclip = NoclipController.noclipActive;
             config.infiniteStamina = Hax2.stamineState;
             config.creativeMode = CreativeMode.isCreativeMode;
-            config.rgbPlayer = playerColor.isRandomizing;
+            config.rgbPlayer = CosmeticFeatures.RainbowMode;
             config.noFog = MiscFeatures.NoFogEnabled;
             config.showWatermark = Hax2.showWatermark;
             config.noWeaponRecoil = Patches.NoWeaponRecoil._isEnabledForConfig;
@@ -276,7 +276,7 @@ public static class JsonConfig
             Patches.NoWeaponRecoil._isEnabledForConfig = config.noWeaponRecoil;
             ConfigManager.NoWeaponCooldownEnabled = config.noWeaponCooldown;
             MiscFeatures.NoFogEnabled = config.noFog;
-            playerColor.isRandomizing = config.rgbPlayer;
+            CosmeticFeatures.RainbowMode = config.rgbPlayer;
 
             // 新功能
             AutoPickup.isAutoPickupEnabled = config.autoPickup;

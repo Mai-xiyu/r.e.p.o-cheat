@@ -22,13 +22,14 @@ Compatibility is decided by assembly fingerprint and capability detection, not b
 
 ## Features
 
-- **Self**: god mode, infinite health/stamina, noclip, customizable speed/strength/jump/gravity/grab range, no recoil/cooldown, grab through walls, custom FOV, no fog, auto dodge, self revive, teammate heal/revive, creative mode, one-click max upgrades, game speed control.
+- **Self**: god mode, infinite health/stamina, noclip, customizable speed/strength/jump/gravity/grab range, no recoil/cooldown, grab through walls, custom FOV, no fog, auto dodge, self revive, teammate heal/revive, creative mode, one-click max upgrades (all 13 upgrade kinds), game speed control, game debug flags (infinite energy / no overcharge / no tumble).
 - **Visuals**: TMP-based ESP (enemies, items, players, extraction points) with boxes/names/distance/health/value filters, chams, mini radar, trace lines, ESP presets, map value summary, player status list.
 - **Combat and players**: damage/heal/kill/revive players, teleport players, name spoofing, possession, aimbot with smoothness and range settings.
 - **Enemies**: blind/freeze/kill enemies, disable traps, teleport enemies, enemy spawner (host only).
 - **Items**: item spawner with custom values (host only), item teleport, value inflation, duplicate held item, remote sell, auto pickup, auto sell.
-- **Teleport**: crosshair teleport, extraction teleport, random teleport, named waypoints.
-- **World**: zero haul goal, auto-complete round, chat commands (`!help`), shop tools.
+- **Teleport**: crosshair teleport, extraction teleport, random teleport, named waypoints, synced through the game's own `PlayerAvatar.Spawn` API.
+- **World**: zero haul goal, auto-complete round, chat commands (`!help`), shop tools (run currency via the game's own `SetRunStatSet`), level transitions via `RunManager.ChangeLevel`.
+- **Cosmetics**: unlock all cosmetics (game-native `CosmeticUnlockAll` + save), random outfit, rainbow cosmetics cycle - all through the game's own MetaManager/PlayerCosmetics pipeline with lobby sync.
 - **Room**: host takeover, lobby discovery/creation, RPC injection, anti-kick, anti-crash protection. These network modules are provided as-is; verify them in private lobbies only.
 - **Game localization (new, off by default)**: Simplified Chinese rendering for the game UI through the game's own Unity.Localization string tables, with a CJK font fallback. See [Localization](#game-localization).
 

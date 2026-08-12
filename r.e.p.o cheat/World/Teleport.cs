@@ -53,11 +53,8 @@ public static class Teleport
 			Transform transform = ((Component)val2).transform;
 			if (!((Object)(object)transform == (Object)null))
 			{
-				Vector3 val3 = (transform.position = localPlayer.transform.position + Vector3.up * 1.5f);
-				if (PhotonNetwork.IsConnected && (Object)(object)val != (Object)null)
-				{
-					val.RPC("SpawnRPC", (RpcTarget)3, new object[2] { val3, transform.rotation });
-				}
+				Vector3 val3 = localPlayer.transform.position + Vector3.up * 1.5f;
+				TeleportTo(val2, val3);
 			}
 		}
 		catch (Exception)
@@ -110,15 +107,7 @@ public static class Teleport
 			if (!((Object)(object)transform == (Object)null))
 			{
 				Vector3 val3 = transform.position + Vector3.up * 1.5f;
-				localPlayer.transform.position = val3;
-				if (PhotonNetwork.IsConnected && (Object)(object)val != (Object)null)
-				{
-					val.RPC("SpawnRPC", (RpcTarget)3, new object[2]
-					{
-						val3,
-						localPlayer.transform.rotation
-					});
-				}
+				TeleportTo(localPlayer.transform, val3);
 			}
 		}
 		catch (Exception)
@@ -162,11 +151,7 @@ public static class Teleport
 			if (!((Object)(object)transform == (Object)null))
 			{
 				Vector3 val3 = new Vector3(0f, -10f, 0f);
-				transform.position = val3;
-				if (PhotonNetwork.IsConnected && (Object)(object)val != (Object)null)
-				{
-					val.RPC("SpawnRPC", (RpcTarget)3, new object[2] { val3, transform.rotation });
-				}
+				TeleportTo(val2, val3);
 			}
 		}
 		catch (Exception)
@@ -241,16 +226,7 @@ public static class Teleport
 			if (flag)
 			{
 				GameObject localPlayer = DebugCheats.GetLocalPlayer();
-				PhotonView component = localPlayer.GetComponent<PhotonView>();
-				localPlayer.transform.position = val;
-				if (PhotonNetwork.IsConnected && (Object)(object)component != (Object)null)
-				{
-					component.RPC("SpawnRPC", (RpcTarget)3, new object[2]
-					{
-						val,
-						localPlayer.transform.rotation
-					});
-				}
+				TeleportTo(localPlayer.transform, val);
 				return;
 			}
 			FieldInfo field = obj3.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -272,11 +248,7 @@ public static class Teleport
 			Transform transform = ((Component)val6).transform;
 			if (!((Object)(object)transform == (Object)null))
 			{
-				transform.position = val;
-				if (PhotonNetwork.IsConnected && (Object)(object)val5 != (Object)null)
-				{
-					val5.RPC("SpawnRPC", (RpcTarget)3, new object[2] { val, transform.rotation });
-				}
+				TeleportTo(val6, val);
 			}
 		}
 		catch (Exception)
@@ -344,16 +316,7 @@ public static class Teleport
 				if (CheckIfPlayerIsLocal(obj3))
 				{
 					GameObject localPlayer = DebugCheats.GetLocalPlayer();
-					PhotonView component = localPlayer.GetComponent<PhotonView>();
-					localPlayer.transform.position = val;
-					if (PhotonNetwork.IsConnected && (Object)(object)component != (Object)null)
-					{
-						component.RPC("SpawnRPC", (RpcTarget)3, new object[2]
-						{
-							val,
-							localPlayer.transform.rotation
-						});
-					}
+					TeleportTo(localPlayer.transform, val);
 					return;
 				}
 				FieldInfo field = obj3.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -375,11 +338,7 @@ public static class Teleport
 				Transform transform = ((Component)val4).transform;
 				if (!((Object)(object)transform == (Object)null))
 				{
-					transform.position = val;
-					if (PhotonNetwork.IsConnected && (Object)(object)val3 != (Object)null)
-					{
-						val3.RPC("SpawnRPC", (RpcTarget)3, new object[2] { val, transform.rotation });
-					}
+					TeleportTo(val4, val);
 				}
 			}
 		}
@@ -424,6 +383,24 @@ public static class Teleport
 			catch { }
 		}
 		return false;
+	}
+
+	/// <summary>
+	/// 游戏自己的传送 API：PlayerAvatar.Spawn（单人本地 / 多人 SpawnRPC 同步）。
+	/// 旧的 transform.position + 客户端直发 SpawnRPC 会被游戏 MasterOnly 守卫丢弃，已废弃。
+	/// </summary>
+	private static void TeleportTo(Component target, Vector3 position)
+	{
+		PlayerAvatar avatar = target != null ? target.GetComponent<PlayerAvatar>() : null;
+		if (avatar != null)
+		{
+			avatar.Spawn(position, target.transform.rotation);
+			return;
+		}
+		if (target != null)
+		{
+			target.transform.position = position;
+		}
 	}
 
 	private static void TeleportAllPlayers(int destIndex, string[] destOptions, List<object> playerList)
@@ -497,11 +474,7 @@ public static class Teleport
 				Transform transform = ((Component)val4).transform;
 				if (!((Object)(object)transform == (Object)null))
 				{
-					transform.position = val;
-					if (PhotonNetwork.IsConnected && (Object)(object)val3 != (Object)null)
-					{
-						val3.RPC("SpawnRPC", (RpcTarget)3, new object[2] { val, transform.rotation });
-					}
+					TeleportTo(val4, val);
 					num++;
 					CheckIfPlayerIsLocal(obj2);
 				}

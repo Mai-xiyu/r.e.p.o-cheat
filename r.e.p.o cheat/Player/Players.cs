@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Photon.Pun;
@@ -14,56 +14,12 @@ internal static class Players
 
 	public static void HealPlayer(object targetPlayer, int healAmount, string playerName)
 	{
-		if (targetPlayer == null)
-		{
-			return;
-		}
 		try
 		{
-			FieldInfo field = targetPlayer.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field == null)
+			// 游戏自己的治疗+同步路径（HealOther → HealOtherRPC）；旧的 3 参数 UpdateHealthRPC 是伪造签名，已被游戏丢弃
+			if (targetPlayer is PlayerAvatar avatar && avatar.playerHealth != null)
 			{
-				return;
-			}
-			object value = field.GetValue(targetPlayer);
-			PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-			if ((Object)(object)val == (Object)null)
-			{
-				return;
-			}
-			FieldInfo field2 = targetPlayer.GetType().GetField("playerHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field2 == null)
-			{
-				return;
-			}
-			object value2 = field2.GetValue(targetPlayer);
-			if (value2 == null)
-			{
-				return;
-			}
-			Type type = value2.GetType();
-			MethodInfo method = type.GetMethod("Heal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (method != null)
-			{
-				method.Invoke(value2, new object[2] { healAmount, true });
-			}
-			if (!PhotonNetwork.IsConnected || !((Object)(object)val != (Object)null))
-			{
-				return;
-			}
-			FieldInfo field3 = type.GetField("health", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field3 != null)
-			{
-				_ = (int)field3.GetValue(value2);
-			}
-			int playerMaxHealth = GetPlayerMaxHealth(value2);
-			val.RPC("UpdateHealthRPC", (RpcTarget)3, new object[3] { playerMaxHealth, playerMaxHealth, true });
-			try
-			{
-				val.RPC("HealRPC", (RpcTarget)3, new object[2] { healAmount, true });
-			}
-			catch
-			{
+				avatar.playerHealth.HealOther(healAmount, effect: false);
 			}
 		}
 		catch (Exception)
@@ -146,49 +102,16 @@ internal static class Players
 
 	public static void ReviveSelectedPlayer(object selectedPlayer, List<object> playerList, string playerName)
 	{
-		if (selectedPlayer == null)
-		{
-			return;
-		}
 		try
 		{
-			FieldInfo field = selectedPlayer.GetType().GetField("playerDeathHead", BindingFlags.Instance | BindingFlags.Public);
-			if (field != null)
+			// 游戏自己的复活+同步路径（Revive → ReviveRPC）
+			if (selectedPlayer is PlayerAvatar avatar)
 			{
-				object value = field.GetValue(selectedPlayer);
-				if (value != null)
+				avatar.Revive(false);
+				if (avatar.playerHealth != null)
 				{
-					FieldInfo field2 = value.GetType().GetField("inExtractionPoint", BindingFlags.Instance | BindingFlags.NonPublic);
-					MethodInfo method = value.GetType().GetMethod("Revive", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (field2 != null)
-					{
-						field2.SetValue(value, true);
-					}
-					if (method != null)
-					{
-						method.Invoke(value, null);
-					}
+					avatar.playerHealth.HealOther(GetPlayerMaxHealth(avatar.playerHealth), effect: false);
 				}
-			}
-			FieldInfo field3 = selectedPlayer.GetType().GetField("playerHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (!(field3 != null))
-			{
-				return;
-			}
-			object value2 = field3.GetValue(selectedPlayer);
-			if (value2 != null)
-			{
-				FieldInfo field4 = value2.GetType().GetField("health", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-				int playerMaxHealth = GetPlayerMaxHealth(value2);
-				if (field4 != null)
-				{
-					field4.SetValue(value2, playerMaxHealth);
-				}
-				else
-				{
-					HealPlayer(selectedPlayer, playerMaxHealth, playerName);
-				}
-				GetPlayerHealth(selectedPlayer);
 			}
 		}
 		catch (Exception)
@@ -211,72 +134,12 @@ internal static class Players
 
 	public static void KillSelectedPlayer(object selectedPlayer, List<object> playerList, string playerName)
 	{
-		//IL_018b: Unknown result type (might be due to invalid IL or missing references)
-		if (selectedPlayer == null)
-		{
-			return;
-		}
 		try
 		{
-			FieldInfo field = selectedPlayer.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field == null)
+			// 游戏自己的死亡+同步路径（PlayerHealth.Death 内部处理 RPC）
+			if (selectedPlayer is PlayerAvatar avatar && avatar.playerHealth != null)
 			{
-				return;
-			}
-			object value = field.GetValue(selectedPlayer);
-			PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-			if ((Object)(object)val == (Object)null)
-			{
-				return;
-			}
-			FieldInfo field2 = selectedPlayer.GetType().GetField("playerHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field2 == null)
-			{
-				return;
-			}
-			object value2 = field2.GetValue(selectedPlayer);
-			if (value2 == null)
-			{
-				return;
-			}
-			Type type = value2.GetType();
-			MethodInfo method = type.GetMethod("Death", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (method == null)
-			{
-				return;
-			}
-			method.Invoke(value2, null);
-			FieldInfo field3 = type.GetField("playerAvatar", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field3 != null)
-			{
-				object value3 = field3.GetValue(value2);
-				if (value3 != null)
-				{
-					MethodInfo method2 = value3.GetType().GetMethod("PlayerDeath", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (method2 != null)
-					{
-						method2.Invoke(value3, new object[1] { -1 });
-					}
-				}
-			}
-			if (PhotonNetwork.IsConnected && (Object)(object)val != (Object)null)
-			{
-				int playerMaxHealth = GetPlayerMaxHealth(value2);
-				val.RPC("UpdateHealthRPC", (RpcTarget)3, new object[3] { 0, playerMaxHealth, true });
-				try
-				{
-					val.RPC("PlayerDeathRPC", (RpcTarget)3, new object[1] { -1 });
-				}
-				catch
-				{
-				}
-				val.RPC("HurtOtherRPC", (RpcTarget)3, new object[4]
-				{
-					9999,
-					Vector3.zero,
-					false,
-					-1
-				});
+				avatar.playerHealth.Death();
 			}
 		}
 		catch (Exception)
@@ -389,98 +252,30 @@ internal static class Players
 	{
 		try
 		{
-			// 找到本地玩家的 PlayerAvatar
+			// 游戏自己的复活+同步路径（Revive → ReviveRPC All），替代旧的死亡头反射 + 伪造 RPC
+			PlayerAvatar local = null;
 			List<PlayerAvatar> players = SemiFunc.PlayerGetList();
-			if (players == null || players.Count == 0)
+			if (players != null)
 			{
-				Debug.Log((object)"[ReviveSelf] 没有找到玩家列表");
-				return;
-			}
-
-			object localPlayer = null;
-			foreach (PlayerAvatar avatar in players)
-			{
-				FieldInfo pvField = ((object)avatar).GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-				if (pvField == null) continue;
-				object pvObj = pvField.GetValue(avatar);
-				PhotonView pv = (PhotonView)((pvObj is PhotonView) ? pvObj : null);
-				if ((Object)(object)pv != (Object)null && pv.IsMine)
+				foreach (PlayerAvatar avatar in players)
 				{
-					localPlayer = avatar;
-					break;
+					if (avatar != null && avatar.photonView != null && avatar.photonView.IsMine)
+					{
+						local = avatar;
+						break;
+					}
 				}
 			}
-
-			if (localPlayer == null)
+			if (local == null)
 			{
 				Debug.Log((object)"[ReviveSelf] 无法找到本地玩家");
 				return;
 			}
-
-			// 获取 playerDeathHead
-			FieldInfo deathHeadField = localPlayer.GetType().GetField("playerDeathHead", BindingFlags.Instance | BindingFlags.Public);
-			if (deathHeadField != null)
+			local.Revive(false);
+			if (local.playerHealth != null)
 			{
-				object deathHead = deathHeadField.GetValue(localPlayer);
-				if (deathHead != null)
-				{
-					// 设置 inExtractionPoint = true（跳过撤离点检查）
-					FieldInfo extractField = deathHead.GetType().GetField("inExtractionPoint", BindingFlags.Instance | BindingFlags.NonPublic);
-					if (extractField != null)
-					{
-						extractField.SetValue(deathHead, true);
-					}
-
-					// 调用 Revive() 方法
-					MethodInfo reviveMethod = deathHead.GetType().GetMethod("Revive", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (reviveMethod != null)
-					{
-						reviveMethod.Invoke(deathHead, null);
-					}
-
-					// 通过 RPC 同步 Revive（让其他客户端也看到）
-					FieldInfo deathHeadPvField = deathHead.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (deathHeadPvField != null)
-					{
-						object dpvObj = deathHeadPvField.GetValue(deathHead);
-						PhotonView dpv = (PhotonView)((dpvObj is PhotonView) ? dpvObj : null);
-						if ((Object)(object)dpv != (Object)null)
-						{
-							try { dpv.RPC("ReviveRPC", (RpcTarget)0, Array.Empty<object>()); } catch { }
-						}
-					}
-				}
+				local.playerHealth.HealOther(GetPlayerMaxHealth(local.playerHealth), effect: false);
 			}
-
-			// 恢复血量
-			FieldInfo healthField = localPlayer.GetType().GetField("playerHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (healthField != null)
-			{
-				object healthInstance = healthField.GetValue(localPlayer);
-				if (healthInstance != null)
-				{
-					int maxHP = GetPlayerMaxHealth(healthInstance);
-					// 设置本地血量
-					FieldInfo hpField = healthInstance.GetType().GetField("health", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (hpField != null)
-					{
-						hpField.SetValue(healthInstance, maxHP);
-					}
-					// RPC 同步血量
-					FieldInfo pvField = localPlayer.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (pvField != null)
-					{
-						object pvObj = pvField.GetValue(localPlayer);
-						PhotonView pv = (PhotonView)((pvObj is PhotonView) ? pvObj : null);
-						if ((Object)(object)pv != (Object)null && PhotonNetwork.IsConnected)
-						{
-							try { pv.RPC("UpdateHealthRPC", (RpcTarget)0, new object[] { maxHP, maxHP, true }); } catch { }
-							try { pv.RPC("HealRPC", (RpcTarget)0, new object[] { maxHP, true }); } catch { }
-						}
-					}
-				}
-			}
-
 			Debug.Log((object)"[ReviveSelf] 已复活自己");
 		}
 		catch (Exception ex)
@@ -499,52 +294,16 @@ internal static class Players
 
 		try
 		{
-			// 1. 先尝试复活（如果已死亡）
-			FieldInfo deathHeadField = targetPlayer.GetType().GetField("playerDeathHead", BindingFlags.Instance | BindingFlags.Public);
-			if (deathHeadField != null)
+			// 游戏自己的复活+治疗+同步路径
+			if (targetPlayer is PlayerAvatar avatar)
 			{
-				object deathHead = deathHeadField.GetValue(targetPlayer);
-				if (deathHead != null)
+				avatar.Revive(false);
+				if (avatar.playerHealth != null)
 				{
-					// 设置 inExtractionPoint = true
-					FieldInfo extractField = deathHead.GetType().GetField("inExtractionPoint", BindingFlags.Instance | BindingFlags.NonPublic);
-					if (extractField != null)
-					{
-						extractField.SetValue(deathHead, true);
-					}
-					// 调用 Revive()
-					MethodInfo reviveMethod = deathHead.GetType().GetMethod("Revive", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (reviveMethod != null)
-					{
-						reviveMethod.Invoke(deathHead, null);
-					}
-					// RPC 同步
-					FieldInfo dhPvField = deathHead.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (dhPvField != null)
-					{
-						object dpvObj = dhPvField.GetValue(deathHead);
-						PhotonView dpv = (PhotonView)((dpvObj is PhotonView) ? dpvObj : null);
-						if ((Object)(object)dpv != (Object)null)
-						{
-							try { dpv.RPC("ReviveRPC", (RpcTarget)0, Array.Empty<object>()); } catch { }
-						}
-					}
+					avatar.playerHealth.HealOther(GetPlayerMaxHealth(avatar.playerHealth), effect: false);
 				}
+				Debug.Log((object)("[HealRevive] 已治疗复活: " + playerName));
 			}
-
-			// 2. 恢复满血 (通过已有的 HealPlayer，自带 RPC 同步)
-			FieldInfo healthField = targetPlayer.GetType().GetField("playerHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (healthField != null)
-			{
-				object healthInstance = healthField.GetValue(targetPlayer);
-				if (healthInstance != null)
-				{
-					int maxHP = GetPlayerMaxHealth(healthInstance);
-					HealPlayer(targetPlayer, maxHP, playerName);
-				}
-			}
-
-			Debug.Log((object)("[HealRevive] 已治疗复活: " + playerName));
 		}
 		catch (Exception ex)
 		{

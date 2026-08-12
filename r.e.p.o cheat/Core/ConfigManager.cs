@@ -77,7 +77,7 @@ public static class ConfigManager
 		SaveToggle("inf_health", Hax2.infiniteHealthActive);
 		SaveToggle("No_Clip", NoclipController.noclipActive);
 		SaveToggle("inf_stam", Hax2.stamineState);
-		SaveToggle("rgb_player", playerColor.isRandomizing);
+		SaveToggle("rainbow_cosmetics", CosmeticFeatures.RainbowMode);
 		SaveToggle("No_Fog", MiscFeatures.NoFogEnabled);
 		SaveToggle("WaterMark_Toggle", Hax2.showWatermark);
 		SaveToggle("no_weapon_recoil", Patches.NoWeaponRecoil._isEnabledForConfig);
@@ -168,7 +168,7 @@ public static class ConfigManager
 		{
 			PlayerController.MaxStamina();
 		}
-		playerColor.isRandomizing = LoadToggle("rgb_player");
+		CosmeticFeatures.RainbowMode = LoadToggle("rainbow_cosmetics");
 		MiscFeatures.NoFogEnabled = LoadToggle("No_Fog");
 		Hax2.showWatermark = LoadToggle("WaterMark_Toggle", defaultValue: true);
 		Hax2.debounce = LoadToggle("grab_guard", defaultValue: true);

@@ -37,6 +37,10 @@ self.auto_dodge= Auto Dodge
 self.dodge_dist_fmt=Dodge Distance: {0}m
 self.misc=Misc
 self.rgb_player= RGB Player
+cos.header=Cosmetics
+cos.unlock_all=Unlock All Cosmetics
+cos.randomize=Random Outfit
+cos.rainbow=Rainbow Cosmetics Cycle
 self.no_fog= No Fog
 self.watermark= Show Watermark
 self.anti_grab= Anti-Grab
@@ -684,6 +688,14 @@ room.world_tools=World Tools
 room.level_adjust=Level Adjust
 room.set_next_level=Set Next Level
 room.level_status=Current: {0}
+room.complete_level=Complete Level
+room.go_shop=Go Shop
+room.go_lobby=Go Lobby
+room.go_main_menu=Main Menu
+self.debug_flags=Game Debug Flags
+self.debug_energy=Infinite Energy (Debug)
+self.debug_no_overcharge=No Overcharge
+self.debug_no_tumble=No Tumble
 
 # Game localization (feature, off by default)
 localization.header=Game Chinese

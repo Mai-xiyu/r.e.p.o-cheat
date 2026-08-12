@@ -819,10 +819,7 @@ public class Hax2 : MonoBehaviour
 				itemList = ItemTeleport.GetItemList();
 				nextUpdateTime = Time.time + 3f;
 			}
-			if (playerColor.isRandomizing)
-			{
-				playerColor.colorRandomizer();
-			}
+			CosmeticFeatures.TickRainbow();
 			hotkeyManager.CheckAndExecuteHotkeys();
 			if (showMenu)
 			{
@@ -1631,8 +1628,39 @@ public class Hax2 : MonoBehaviour
 		}
 		GUILayout.Space(10f);
 		DrawSectionHeader(L.T("self.misc"));
-		ToggleLogic("rgb_player", L.T("self.rgb_player"), ref playerColor.isRandomizing,
-			() => { if (!playerColor.isRandomizing) playerColor.RestoreOriginalColor(); });
+		ToggleLogic("rainbow_cosmetics", L.T("cos.rainbow"), ref CosmeticFeatures.RainbowMode);
+		GUILayout.Space(5f);
+		DrawSectionHeader(L.T("cos.header"));
+		if (GUILayout.Button(L.T("cos.unlock_all"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			CosmeticFeatures.UnlockAll();
+		}
+		GUILayout.Space(5f);
+		if (GUILayout.Button(L.T("cos.randomize"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			CosmeticFeatures.RandomizeOutfit(randomizeColors: true);
+		}
+		GUILayout.Space(5f);
+		GUILayout.Label(CosmeticFeatures.LastStatus, labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(5f);
+		DrawSectionHeader(L.T("self.debug_flags"));
+		bool debugEnergy = global::PlayerController.instance != null && global::PlayerController.instance.DebugEnergy;
+		ToggleLogic("debug_energy", L.T("self.debug_energy"), ref debugEnergy, delegate
+		{
+			if (global::PlayerController.instance != null) global::PlayerController.instance.DebugEnergy = debugEnergy;
+		});
+		GUILayout.Space(5f);
+		bool debugNoOvercharge = global::PlayerController.instance != null && global::PlayerController.instance.DebugDisableOvercharge;
+		ToggleLogic("debug_no_overcharge", L.T("self.debug_no_overcharge"), ref debugNoOvercharge, delegate
+		{
+			if (global::PlayerController.instance != null) global::PlayerController.instance.DebugDisableOvercharge = debugNoOvercharge;
+		});
+		GUILayout.Space(5f);
+		bool debugNoTumble = global::PlayerController.instance != null && global::PlayerController.instance.DebugNoTumble;
+		ToggleLogic("debug_no_tumble", L.T("self.debug_no_tumble"), ref debugNoTumble, delegate
+		{
+			if (global::PlayerController.instance != null) global::PlayerController.instance.DebugNoTumble = debugNoTumble;
+		});
 		GUILayout.Space(5f);
 		ToggleLogic("No_Fog", L.T("self.no_fog"), ref MiscFeatures.NoFogEnabled, MiscFeatures.ToggleNoFog);
 		GUILayout.Space(5f);
@@ -3309,37 +3337,25 @@ public class Hax2 : MonoBehaviour
 		GUILayout.Space(5f);
 		DrawSectionHeader(L.T("room.level_adjust"));
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button(L.T("room.level_adjust"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(100f) }))
+		if (GUILayout.Button(L.T("room.complete_level"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			LevelAdjust.RefreshLevels();
-			showLevelAdjustDropdown = !showLevelAdjustDropdown;
+			LevelAdjust.CompleteLevel();
 		}
-		if (levelAdjustIndex < LevelAdjust.availableLevels.Length)
+		if (GUILayout.Button(L.T("room.go_shop"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			GUILayout.Label(LevelAdjust.availableLevels[levelAdjustIndex], labelStyle, Array.Empty<GUILayoutOption>());
+			LevelAdjust.GoShop();
 		}
 		GUILayout.EndHorizontal();
-		if (showLevelAdjustDropdown && LevelAdjust.availableLevels.Length > 0)
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button(L.T("room.go_lobby"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			levelAdjustScroll = GUILayout.BeginScrollView(levelAdjustScroll, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(150f) });
-			for (int lvl = 0; lvl < LevelAdjust.availableLevels.Length; lvl++)
-			{
-				if (GUILayout.Button(LevelAdjust.availableLevels[lvl], buttonStyle, Array.Empty<GUILayoutOption>()))
-				{
-					levelAdjustIndex = lvl;
-					showLevelAdjustDropdown = false;
-				}
-			}
-			GUILayout.EndScrollView();
+			LevelAdjust.GoLobby();
 		}
-		if (GUILayout.Button(L.T("room.set_next_level"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (GUILayout.Button(L.T("room.go_main_menu"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			if (levelAdjustIndex < LevelAdjust.availableLevels.Length)
-			{
-				LevelAdjust.selectedLevelIndex = levelAdjustIndex;
-				LevelAdjust.SetNextLevel();
-			}
+			LevelAdjust.GoMainMenu();
 		}
+		GUILayout.EndHorizontal();
 		if (!string.IsNullOrEmpty(LevelAdjust.statusMessage))
 		{
 			GUILayout.Label(LevelAdjust.statusMessage, warningStyle, Array.Empty<GUILayoutOption>());

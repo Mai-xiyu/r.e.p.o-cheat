@@ -114,10 +114,10 @@ public class HotkeyManager
 			Hax2.stamineState = !Hax2.stamineState;
 			PlayerController.MaxStamina();
 		}, "toggles infinite stamina on/off"));
-		availableActions.Add(new HotkeyAction("RGB Player", delegate
+		availableActions.Add(new HotkeyAction("Rainbow Cosmetics", delegate
 		{
-			playerColor.isRandomizing = !playerColor.isRandomizing;
-		}, "toggles rgb player effect"));
+			CosmeticFeatures.RainbowMode = !CosmeticFeatures.RainbowMode;
+		}, "toggles the rainbow cosmetics cycle"));
 		availableActions.Add(new HotkeyAction("Spawn Money", delegate
 		{
 			//IL_0015: Unknown result type (might be due to invalid IL or missing references)
