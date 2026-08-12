@@ -17,6 +17,17 @@ public static class Aimbot
 
     private static Enemy currentTarget = null;
 
+    // 反射缓存 — 字段按运行时类型解析一次，避免每帧 GetField
+    private static Type _aimPcType;
+    private static FieldInfo _aimAvatarField;
+    private static Type _aimAvatarType;
+    private static FieldInfo _aimGrabberField;
+    private static Type _aimGrabberType;
+    private static FieldInfo _aimGrabbedField;
+    private static FieldInfo _aimGrabbedTransformField;
+    private static Type _centerFieldType;
+    private static FieldInfo _centerField;
+
     /// <summary>
     /// 每帧调用（在 Update 中）
     /// </summary>
@@ -45,30 +56,45 @@ public static class Aimbot
             object pc = PlayerReflectionCache.PlayerControllerInstance;
             if (pc == null) return false;
 
-            FieldInfo avatarField = pc.GetType().GetField("playerAvatarScript",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (avatarField == null) return false;
-            object avatar = avatarField.GetValue(pc);
+            Type pcType = pc.GetType();
+            if (_aimAvatarField == null || pcType != _aimPcType)
+            {
+                _aimAvatarField = pcType.GetField("playerAvatarScript",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _aimPcType = pcType;
+            }
+            if (_aimAvatarField == null) return false;
+            object avatar = _aimAvatarField.GetValue(pc);
             if (avatar == null) return false;
 
-            FieldInfo grabberField = avatar.GetType().GetField("physGrabber",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (grabberField == null) return false;
-            object grabber = grabberField.GetValue(avatar);
+            Type avatarType = avatar.GetType();
+            if (_aimGrabberField == null || avatarType != _aimAvatarType)
+            {
+                _aimGrabberField = avatarType.GetField("physGrabber",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _aimAvatarType = avatarType;
+            }
+            if (_aimGrabberField == null) return false;
+            object grabber = _aimGrabberField.GetValue(avatar);
             if (grabber == null) return false;
 
             // Check if grabbed
-            FieldInfo grabbedField = grabber.GetType().GetField("grabbed",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (grabbedField == null) return false;
-            bool grabbed = (bool)grabbedField.GetValue(grabber);
+            Type grabberType = grabber.GetType();
+            if (_aimGrabbedField == null || grabberType != _aimGrabberType)
+            {
+                _aimGrabbedField = grabberType.GetField("grabbed",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _aimGrabbedTransformField = grabberType.GetField("grabbedObjectTransform",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _aimGrabberType = grabberType;
+            }
+            if (_aimGrabbedField == null) return false;
+            bool grabbed = (bool)_aimGrabbedField.GetValue(grabber);
             if (!grabbed) return false;
 
             // Get grabbed object transform
-            FieldInfo transformField = grabber.GetType().GetField("grabbedObjectTransform",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (transformField == null) return false;
-            Transform grabbedTransform = transformField.GetValue(grabber) as Transform;
+            if (_aimGrabbedTransformField == null) return false;
+            Transform grabbedTransform = _aimGrabbedTransformField.GetValue(grabber) as Transform;
             if (grabbedTransform == null) return false;
 
             // Check if it's a gun
@@ -130,11 +156,16 @@ public static class Aimbot
         // Try to get CenterTransform for more accurate aim
         try
         {
-            FieldInfo centerField = enemy.GetType().GetField("CenterTransform",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (centerField != null)
+            Type enemyType = enemy.GetType();
+            if (_centerField == null || enemyType != _centerFieldType)
             {
-                Transform center = centerField.GetValue(enemy) as Transform;
+                _centerField = enemyType.GetField("CenterTransform",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                _centerFieldType = enemyType;
+            }
+            if (_centerField != null)
+            {
+                Transform center = _centerField.GetValue(enemy) as Transform;
                 if (center != null)
                     targetPos = center.position;
             }

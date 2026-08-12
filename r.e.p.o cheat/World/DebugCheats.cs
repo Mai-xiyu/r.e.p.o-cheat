@@ -158,6 +158,8 @@ internal static class DebugCheats
 
 	private static Dictionary<Renderer, Material[]> enemyOriginalMaterials;
 
+	private static List<Renderer> enemyMaterialsToRemove = new List<Renderer>();
+
 	public static Color enemyVisibleColor;
 
 	public static Color enemyHiddenColor;
@@ -493,7 +495,7 @@ internal static class DebugCheats
 			}
 			if (PhotonNetwork.LocalPlayer != null)
 			{
-				PhotonView[] array = Object.FindObjectsOfType<PhotonView>();
+				PhotonView[] array = SceneCache.GetObjects<PhotonView>(1f);
 				foreach (PhotonView val2 in array)
 				{
 					if (val2.Owner == PhotonNetwork.LocalPlayer && val2.IsMine)
@@ -529,7 +531,8 @@ internal static class DebugCheats
 		Type type = Type.GetType("PlayerAvatar, Assembly-CSharp");
 		if (type != null)
 		{
-			Object obj3 = Object.FindObjectOfType(type);
+			PlayerAvatar[] cachedAvatars = SceneCache.GetObjects<PlayerAvatar>(0.5f);
+			Object obj3 = (cachedAvatars != null && cachedAvatars.Length > 0) ? cachedAvatars[0] : null;
 			MonoBehaviour val4 = (MonoBehaviour)(object)((obj3 is MonoBehaviour) ? obj3 : null);
 			if ((Object)(object)val4 != (Object)null)
 			{
@@ -551,7 +554,7 @@ internal static class DebugCheats
 			}
 			return val5;
 		}
-		GameObject[] array2 = Object.FindObjectsOfType<GameObject>();
+		GameObject[] array2 = SceneCache.GetObjects<GameObject>(1f);
 		foreach (GameObject val6 in array2)
 		{
 			if (((Object)val6).name.Contains("Player") && val6.activeInHierarchy)
@@ -891,16 +894,25 @@ internal static class DebugCheats
 		//IL_00a2: Unknown result type (might be due to invalid IL or missing references)
 		//IL_008a: Unknown result type (might be due to invalid IL or missing references)
 		Collider[] componentsInChildren = obj.GetComponentsInChildren<Collider>(true);
-		List<Collider> list = new List<Collider>();
+		Bounds bounds2 = default(Bounds);
+		int activeColliders = 0;
 		Collider[] array = componentsInChildren;
 		foreach (Collider val in array)
 		{
 			if (val.enabled && ((Component)val).gameObject.activeInHierarchy)
 			{
-				list.Add(val);
+				if (activeColliders == 0)
+				{
+					bounds2 = val.bounds;
+				}
+				else
+				{
+					bounds2.Encapsulate(val.bounds);
+				}
+				activeColliders++;
 			}
 		}
-		if (list.Count == 0)
+		if (activeColliders == 0)
 		{
 			Renderer[] componentsInChildren2 = obj.GetComponentsInChildren<Renderer>(true);
 			if (componentsInChildren2.Length != 0)
@@ -916,11 +928,6 @@ internal static class DebugCheats
 				return bounds;
 			}
 			return new Bounds(obj.transform.position, Vector3.one * 0.5f);
-		}
-		Bounds bounds2 = list[0].bounds;
-		for (int k = 1; k < list.Count; k++)
-		{
-			bounds2.Encapsulate(list[k].bounds);
 		}
 		bounds2.Expand(0.1f);
 		return bounds2;
@@ -1207,10 +1214,12 @@ internal static class DebugCheats
 				main.depthTextureMode = (DepthTextureMode)0;
 				main.useOcclusionCulling = false;
 			}
-			// 使用 ToList() 副本进行遍历，避免修改共享列表
-			var safeEnemyList = enemyList.Where(e => (Object)(object)e != (Object)null && ((Component)e).gameObject.activeInHierarchy && (Object)(object)e.CenterTransform != (Object)null).ToList();
-			foreach (Enemy enemy in safeEnemyList)
+			foreach (Enemy enemy in enemyList)
 			{
+				if ((Object)(object)enemy == (Object)null || !((Component)enemy).gameObject.activeInHierarchy || (Object)(object)enemy.CenterTransform == (Object)null)
+				{
+					continue;
+				}
 				Component componentInParent = ((Component)enemy).GetComponentInParent(Type.GetType("EnemyParent, Assembly-CSharp"));
 				if ((Object)(object)componentInParent == (Object)null)
 				{
@@ -1247,11 +1256,11 @@ internal static class DebugCheats
 		}
 		else
 		{
-			foreach (KeyValuePair<Renderer, Material[]> item in enemyOriginalMaterials.ToList())
+			foreach (KeyValuePair<Renderer, Material[]> item in enemyOriginalMaterials)
 			{
 				if ((Object)(object)item.Key == (Object)null)
 				{
-					enemyOriginalMaterials.Remove(item.Key);
+					enemyMaterialsToRemove.Add(item.Key);
 					continue;
 				}
 				try
@@ -1263,6 +1272,11 @@ internal static class DebugCheats
 					Debug.LogWarning((object)("[EnemyChams] Failed to restore materials: " + ex2.Message));
 				}
 			}
+			for (int i = 0; i < enemyMaterialsToRemove.Count; i++)
+			{
+				enemyOriginalMaterials.Remove(enemyMaterialsToRemove[i]);
+			}
+			enemyMaterialsToRemove.Clear();
 			enemyOriginalMaterials.Clear();
 			if (enemyCachedOriginalCamera)
 			{

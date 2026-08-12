@@ -135,7 +135,8 @@ public static class UpgradeHelper
                     // 尝试设置 extraJump 相关字段
                     var jumpField = pcType.GetField("ExtraJump", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                         ?? pcType.GetField("extraJump", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                        ?? pcType.GetField("jumpExtra", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        ?? pcType.GetField("jumpExtra", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                        ?? pcType.GetField("JumpExtra", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     if (jumpField != null)
                     {
                         if (jumpField.FieldType == typeof(int))

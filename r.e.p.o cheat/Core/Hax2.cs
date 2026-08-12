@@ -9,6 +9,7 @@ using Photon.Realtime;
 using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
+using r.e.p.o_cheat.Localization;
 
 namespace r.e.p.o_cheat;
 
@@ -347,6 +348,18 @@ public class Hax2 : MonoBehaviour
 	private HotkeyManager hotkeyManager;
 
 	public static bool showWatermark = true;
+
+	// cached GUI styles for OnGUI hot paths (allocated once, theme-aware where needed)
+	private static GUIStyle _watermarkStyle;
+	private static GUIStyle _playerListStyle;
+	private static GUIStyle _hotkeyErrorStyle;
+	private static GUIStyle _diamondStyle;
+	private static GUIStyle _sectionHeaderStyle;
+	private static GUIStyle _sectionHeaderSource;
+	private static GUIStyle _pillLabelStyle;
+	private static object _pillLabelThemeOwner;
+	private static GUIStyle _pillDotStyle;
+	private static object _pillDotThemeOwner;
 
 	private float menuX = 100f;
 
@@ -737,6 +750,13 @@ public class Hax2 : MonoBehaviour
 			}
 			UpdateCursorState();
 		}
+		// the game hides/locks the cursor every frame; keep it usable while the menu is open
+		// (UpdateCursorState routes through CursorController's re-entrancy guard so the
+		// Harmony cursor patches never record our own values as the game's intent)
+		if (showMenu)
+		{
+			CursorController.UpdateCursorState();
+		}
 
 		// Smooth ease-out animation
 		float target = _isExpanding ? 1f : 0f;
@@ -1098,8 +1118,13 @@ public class Hax2 : MonoBehaviour
 			GUIStyle pillStyle = UIStyles.GetPillStyle() ?? GUI.skin.box;
 			GUI.Box(pillRect, GUIContent.none, pillStyle);
 			// Title
-			GUIStyle pillLabel = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 13, fontStyle = FontStyle.Bold };
-			pillLabel.normal.textColor = activeTheme != null ? activeTheme.pillText : Color.white;
+			if (_pillLabelStyle == null || !ReferenceEquals(_pillLabelThemeOwner, activeTheme))
+			{
+				_pillLabelStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 13, fontStyle = FontStyle.Bold };
+				_pillLabelStyle.normal.textColor = activeTheme != null ? activeTheme.pillText : Color.white;
+				_pillLabelThemeOwner = activeTheme;
+			}
+			GUIStyle pillLabel = _pillLabelStyle;
 			GUI.Label(new Rect(pillRect.x, pillRect.y, pillRect.width * 0.5f, pillRect.height), "R.E.P.O", pillLabel);
 			// Active cheat dots
 			var activeNames = new System.Collections.Generic.List<string>();
@@ -1110,8 +1135,13 @@ public class Hax2 : MonoBehaviour
 			if (NoclipController.noclipActive) activeNames.Add("FLY");
 			if (activeNames.Count > 0)
 			{
-				GUIStyle dotStyle = new GUIStyle(GUI.skin.label) { fontSize = 9, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-				dotStyle.normal.textColor = activeTheme != null ? activeTheme.pillDotColor : new Color(0.04f, 0.52f, 1f);
+				if (_pillDotStyle == null || !ReferenceEquals(_pillDotThemeOwner, activeTheme))
+				{
+					_pillDotStyle = new GUIStyle(GUI.skin.label) { fontSize = 9, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+					_pillDotStyle.normal.textColor = activeTheme != null ? activeTheme.pillDotColor : new Color(0.04f, 0.52f, 1f);
+					_pillDotThemeOwner = activeTheme;
+				}
+				GUIStyle dotStyle = _pillDotStyle;
 				string dotText = string.Join(" \u2022 ", activeNames.ToArray());
 				GUI.Label(new Rect(pillRect.x + pillRect.width * 0.45f, pillRect.y, pillRect.width * 0.55f, pillRect.height), dotText, dotStyle);
 			}
@@ -1174,10 +1204,14 @@ public class Hax2 : MonoBehaviour
 		try { ESPEnhancements.DrawTraceLines(); } catch (System.Exception ex) { Debug.LogWarning((object)("[ESP] TraceLine error: " + ex.Message)); }
 		// 小地图雷达
 		MiniRadar.DrawRadar();
-		GUIStyle val = new GUIStyle(GUI.skin.label)
+		if (_watermarkStyle == null)
 		{
-			wordWrap = false
-		};
+			_watermarkStyle = new GUIStyle(GUI.skin.label)
+			{
+				wordWrap = false
+			};
+		}
+		GUIStyle val = _watermarkStyle;
 		if (showWatermark)
 		{
 			GUIContent val2 = new GUIContent(L.T("watermark.main_fmt", hotkeyManager.MenuToggleKey));
@@ -1185,10 +1219,14 @@ public class Hax2 : MonoBehaviour
 			GUI.Label(new Rect(10f, 10f, val3.x, val3.y), val2, val);
 			GUI.Label(new Rect(10f + val3.x + 10f, 10f, 300f, val3.y), L.T("watermark.credit"), val);
 		}
-		GUIStyle val4 = new GUIStyle(GUI.skin.label);
-		val4.fontSize = 16;
-		val4.fontStyle = (FontStyle)1;
-		val4.normal.textColor = Color.white;
+		if (_playerListStyle == null)
+		{
+			_playerListStyle = new GUIStyle(GUI.skin.label);
+			_playerListStyle.fontSize = 16;
+			_playerListStyle.fontStyle = (FontStyle)1;
+			_playerListStyle.normal.textColor = Color.white;
+		}
+		GUIStyle val4 = _playerListStyle;
 		float num = 20f;
 		float num2 = 250f;
 		float num3 = 24f;
@@ -1326,11 +1364,15 @@ public class Hax2 : MonoBehaviour
 		Rect lastBox = GUILayoutUtility.GetLastRect();
 		GUI.DrawTexture(lastBox, sectionAccentTex);
 		GUILayout.Space(8f);
-		// Section title - uppercase for macOS feel
-		GUIStyle headerStyle = new GUIStyle(sectionHeaderStyle);
-		headerStyle.fontSize = 12;
-		headerStyle.fontStyle = FontStyle.Bold;
-		GUILayout.Label(text.ToUpper(), headerStyle, Array.Empty<GUILayoutOption>());
+		// Section title - uppercase for macOS feel (cached; rebuilt only when the theme changes)
+		if (_sectionHeaderStyle == null || !ReferenceEquals(_sectionHeaderSource, sectionHeaderStyle))
+		{
+			_sectionHeaderStyle = new GUIStyle(sectionHeaderStyle);
+			_sectionHeaderStyle.fontSize = 12;
+			_sectionHeaderStyle.fontStyle = FontStyle.Bold;
+			_sectionHeaderSource = sectionHeaderStyle;
+		}
+		GUILayout.Label(text.ToUpper(), _sectionHeaderStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.EndHorizontal();
 		GUILayout.Space(2f);
 		// Subtle separator line
@@ -2987,13 +3029,17 @@ public class Hax2 : MonoBehaviour
 		GUILayout.BeginVertical(Array.Empty<GUILayoutOption>());
 		if (!string.IsNullOrEmpty(hotkeyManager.KeyAssignmentError) && Time.time - hotkeyManager.ErrorMessageTime < 3f)
 		{
-			GUIStyle val = new GUIStyle(GUI.skin.label)
+			if (_hotkeyErrorStyle == null)
 			{
-				fontSize = 14,
-				fontStyle = (FontStyle)1
-			};
-			val.normal.textColor = Color.red;
-			val.alignment = (TextAnchor)4;
+				_hotkeyErrorStyle = new GUIStyle(GUI.skin.label)
+				{
+					fontSize = 14,
+					fontStyle = (FontStyle)1
+				};
+				_hotkeyErrorStyle.normal.textColor = Color.red;
+				_hotkeyErrorStyle.alignment = (TextAnchor)4;
+			}
+			GUIStyle val = _hotkeyErrorStyle;
 			GUIStyle val2 = val;
 			GUILayout.Label(hotkeyManager.KeyAssignmentError, val2, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(25f) });
 		}
@@ -4469,13 +4515,17 @@ public class Hax2 : MonoBehaviour
 		GUI.color = (num2 ? val3 : val2);
 		GUI.DrawTexture(val, (Texture)(object)Texture2D.whiteTexture);
 		GUI.color = Color.white;
-		GUIStyle val4 = new GUIStyle(GUI.skin.label)
+		if (_diamondStyle == null)
 		{
-			alignment = (TextAnchor)4,
-			fontSize = 10,
-			fontStyle = (FontStyle)1
-		};
-		val4.normal.textColor = Color.white;
+			_diamondStyle = new GUIStyle(GUI.skin.label)
+			{
+				alignment = (TextAnchor)4,
+				fontSize = 10,
+				fontStyle = (FontStyle)1
+			};
+			_diamondStyle.normal.textColor = Color.white;
+		}
+		GUIStyle val4 = _diamondStyle;
 		GUIStyle val5 = val4;
 		GUI.Label(val, "⧫", val5);
 		if ((int)Event.current.type == 0 && val.Contains(Event.current.mousePosition))
@@ -4929,6 +4979,36 @@ public class Hax2 : MonoBehaviour
 			}
 			GUILayout.EndScrollView();
 			GUILayout.EndVertical();
+		}
+		GUILayout.Space(20f);
+
+		// 游戏汉化（独立功能，默认关闭）
+		DrawSectionHeader(L.T("localization.header"));
+		if (GameLocalizationManager.Instance != null)
+		{
+			bool locEnabled = GameLocalizationManager.Instance.Enabled;
+			ToggleLogic("EnableGameChineseLocalization", L.T("localization.game_chinese"), ref locEnabled, delegate
+			{
+				GameLocalizationManager.Instance.SetEnabled(locEnabled);
+			});
+			GUILayout.Space(5f);
+			GUILayout.Label(L.T("localization.mode_label"), labelStyle, Array.Empty<GUILayoutOption>());
+			int locMode = (int)GameLocalizationManager.Instance.Mode;
+			int newMode = GUILayout.SelectionGrid(locMode, new[] { L.T("localization.mode.auto"), L.T("localization.mode.zhcn"), L.T("localization.mode.english") }, 3, buttonStyle, Array.Empty<GUILayoutOption>());
+			if (newMode != locMode)
+			{
+				GameLocalizationManager.Instance.SetMode((GameLocalizationManager.LanguageMode)newMode);
+			}
+			GUILayout.Space(5f);
+			bool locDebug = GameLocalizationManager.Instance.DebugLog;
+			ToggleLogic("LocalizationDebugLog", L.T("localization.debug_log"), ref locDebug, delegate
+			{
+				GameLocalizationManager.Instance.SetDebugLog(locDebug);
+			});
+		}
+		else
+		{
+			GUILayout.Label(L.T("localization.unavailable"), labelStyle, Array.Empty<GUILayoutOption>());
 		}
 		GUILayout.Space(20f);
 

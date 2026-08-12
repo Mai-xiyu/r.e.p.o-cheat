@@ -59,7 +59,7 @@ public static class AutoPickup
             if ((Object)(object)localPlayer == (Object)null) return;
 
             Vector3 playerPos = localPlayer.transform.position;
-            ValuableObject[] valuables = Object.FindObjectsOfType<ValuableObject>();
+            ValuableObject[] valuables = SceneCache.GetObjects<ValuableObject>(0.5f);
 
             if (valuables == null || valuables.Length == 0) return;
 
@@ -106,7 +106,7 @@ public static class AutoPickup
             if ((Object)(object)localPlayer == (Object)null) return;
 
             // 找到最近的撤离点
-            ExtractionPoint[] points = Object.FindObjectsOfType<ExtractionPoint>();
+            ExtractionPoint[] points = SceneCache.GetObjects<ExtractionPoint>(1f);
             if (points == null || points.Length == 0) return;
 
             ExtractionPoint nearest = null;
@@ -129,7 +129,7 @@ public static class AutoPickup
             Vector3 extractionPos = ((Component)nearest).transform.position;
 
             // 找到玩家附近（很近的）物品并传送到撤离点
-            ValuableObject[] valuables = Object.FindObjectsOfType<ValuableObject>();
+            ValuableObject[] valuables = SceneCache.GetObjects<ValuableObject>(0.5f);
             if (valuables == null) return;
 
             int soldCount = 0;

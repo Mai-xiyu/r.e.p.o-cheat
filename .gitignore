@@ -38,6 +38,9 @@ Desktop.ini
 !libs/**/*.dll
 !r.e.p.o cheat/Cheats/ChamsShader.shader
 
+# Analysis working directory (never committed)
+.analysis/
+
 # Temp / cache
 *.tmp
 *.temp

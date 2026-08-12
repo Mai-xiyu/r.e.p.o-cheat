@@ -89,7 +89,7 @@ public static class ESPEnhancements
             {
                 try
                 {
-                    Enemy[] enemies = UnityEngine.Object.FindObjectsOfType<Enemy>();
+                    Enemy[] enemies = SceneCache.GetObjects<Enemy>(0.25f);
                     if (enemies != null)
                     {
                         foreach (Enemy enemy in enemies)
@@ -112,7 +112,7 @@ public static class ESPEnhancements
             {
                 try
                 {
-                    ValuableObject[] items = UnityEngine.Object.FindObjectsOfType<ValuableObject>();
+                    ValuableObject[] items = SceneCache.GetObjects<ValuableObject>(0.5f);
                     if (items != null)
                     {
                         foreach (ValuableObject item in items)

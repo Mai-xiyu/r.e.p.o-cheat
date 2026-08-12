@@ -63,7 +63,7 @@ public static class ItemTeleport
 			else
 			{
 				Type type = selectedItem.ItemObject.GetType();
-				FieldInfo fieldInfo = type.GetField("dollarValueCurrent", BindingFlags.Instance | BindingFlags.Public) ?? type.GetField("dollarValue", BindingFlags.Instance | BindingFlags.Public);
+				FieldInfo fieldInfo = type.GetField("dollarValueCurrent", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) ?? type.GetField("dollarValue", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 				if (fieldInfo == null)
 				{
 					Debug.Log((object)("错误：在 “" + selectedItem.Name + "” 中未找到 'dollarValueCurrent' 字段"));

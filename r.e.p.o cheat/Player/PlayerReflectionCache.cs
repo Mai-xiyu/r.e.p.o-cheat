@@ -77,7 +77,7 @@ public static class PlayerReflectionCache
 		_ = EnergyCurrentField == null;
 		CrouchTimeMinField = PlayerControllerType.GetField("CrouchTimeMin", BindingFlags.Instance | BindingFlags.Public);
 		_ = CrouchTimeMinField == null;
-		PhotonViewField = PlayerControllerType.GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+		PhotonViewField = PlayerAvatarScriptInstance.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 		_ = PhotonViewField == null;
 		FlashlightControllerField = PlayerAvatarScriptInstance.GetType().GetField("flashlightController", BindingFlags.Instance | BindingFlags.Public);
 		if (FlashlightControllerField != null)

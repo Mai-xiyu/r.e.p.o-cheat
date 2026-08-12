@@ -81,7 +81,7 @@ public static class MiniRadar
             // 绘制敌人
             try
             {
-                Enemy[] enemies = Object.FindObjectsOfType<Enemy>();
+                Enemy[] enemies = SceneCache.GetObjects<Enemy>(0.25f);
                 if (enemies != null)
                 {
                     foreach (Enemy enemy in enemies)
@@ -115,7 +115,7 @@ public static class MiniRadar
             // 绘制高价值物品
             try
             {
-                ValuableObject[] items = Object.FindObjectsOfType<ValuableObject>();
+                ValuableObject[] items = SceneCache.GetObjects<ValuableObject>(0.5f);
                 if (items != null)
                 {
                     foreach (ValuableObject item in items)
@@ -131,7 +131,7 @@ public static class MiniRadar
             // 绘制撤离点
             try
             {
-                ExtractionPoint[] extracts = Object.FindObjectsOfType<ExtractionPoint>();
+                ExtractionPoint[] extracts = SceneCache.GetObjects<ExtractionPoint>(1f);
                 if (extracts != null)
                 {
                     foreach (ExtractionPoint ep in extracts)
@@ -244,11 +244,22 @@ public static class MiniRadar
         GUI.color = prevColor;
     }
 
+    private static GUIStyle legendStyle;
+
+    private static GUIStyle GetLegendStyle()
+    {
+        if (legendStyle == null)
+        {
+            legendStyle = new GUIStyle(GUI.skin.label);
+            legendStyle.fontSize = 10;
+            legendStyle.normal.textColor = Color.white;
+        }
+        return legendStyle;
+    }
+
     private static void DrawLegend(float x, float y)
     {
-        GUIStyle style = new GUIStyle(GUI.skin.label);
-        style.fontSize = 10;
-        style.normal.textColor = Color.white;
+        GUIStyle style = GetLegendStyle();
 
         float spacing = 12f;
         DrawDot(x + 4f, y + 6f, 3f, enemyDotColor);

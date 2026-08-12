@@ -119,9 +119,9 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 		Component val2 = val.AddComponent(Type.GetType("ValuableObject, Assembly-CSharp"));
 		if ((Object)(object)val2 != (Object)null)
 		{
-			FieldInfo fieldInfo = ((object)val2).GetType().GetField("dollarValueCurrent", BindingFlags.Instance | BindingFlags.Public) ?? ((object)val2).GetType().GetField("dollarValue", BindingFlags.Instance | BindingFlags.Public);
-			FieldInfo field = ((object)val2).GetType().GetField("dollarValueOriginal", BindingFlags.Instance | BindingFlags.Public);
-			FieldInfo field2 = ((object)val2).GetType().GetField("dollarValueSet", BindingFlags.Instance | BindingFlags.Public);
+			FieldInfo fieldInfo = ((object)val2).GetType().GetField("dollarValueCurrent", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) ?? ((object)val2).GetType().GetField("dollarValue", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			FieldInfo field = ((object)val2).GetType().GetField("dollarValueOriginal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			FieldInfo field2 = ((object)val2).GetType().GetField("dollarValueSet", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 			if (fieldInfo != null)
 			{
 				fieldInfo.SetValue(val2, (float)value);
@@ -666,9 +666,9 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 			if (type2 != null)
 			{
 				Component obj4 = val.AddComponent(type2);
-				FieldInfo fieldInfo = type2.GetField("dollarValueCurrent", BindingFlags.Instance | BindingFlags.Public) ?? type2.GetField("dollarValue", BindingFlags.Instance | BindingFlags.Public);
-				FieldInfo field3 = type2.GetField("dollarValueOriginal", BindingFlags.Instance | BindingFlags.Public);
-				FieldInfo field4 = type2.GetField("dollarValueSet", BindingFlags.Instance | BindingFlags.Public);
+				FieldInfo fieldInfo = type2.GetField("dollarValueCurrent", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) ?? type2.GetField("dollarValue", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				FieldInfo field3 = type2.GetField("dollarValueOriginal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				FieldInfo field4 = type2.GetField("dollarValueSet", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 				if (fieldInfo != null)
 				{
 					fieldInfo.SetValue(obj4, (float)value);
@@ -940,7 +940,7 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 				return;
 			}
 			string text = "";
-			FieldInfo fieldInfo = ((object)spawnedItem.GetComponent(Type.GetType("ItemAttributes, Assembly-CSharp")))?.GetType().GetField("instanceName");
+			FieldInfo fieldInfo = ((object)spawnedItem.GetComponent(Type.GetType("ItemAttributes, Assembly-CSharp")))?.GetType().GetField("instanceName", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 			if (fieldInfo != null)
 			{
 				text = fieldInfo.GetValue(spawnedItem.GetComponent(Type.GetType("ItemAttributes, Assembly-CSharp"))) as string;

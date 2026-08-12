@@ -131,6 +131,18 @@
     <Reference Include="Unity.InputSystem">
       <HintPath>..\libs\Unity.InputSystem.dll</HintPath>
     </Reference>
+    <Reference Include="Unity.Localization">
+      <HintPath>..\libs\Unity.Localization.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.Addressables">
+      <HintPath>..\libs\Unity.Addressables.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.ResourceManager">
+      <HintPath>..\libs\Unity.ResourceManager.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.InputSystem.ForUI">
       <HintPath>..\libs\Unity.InputSystem.ForUI.dll</HintPath>
     </Reference>
@@ -386,14 +398,23 @@
     <Compile Include="World\*.cs" />
     <Compile Include="Patches\*.cs" />
     <Compile Include="Utils\*.cs" />
+    <Compile Include="Compatibility\*.cs" />
+    <Compile Include="Localization\*.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Visuals\ChamsShader.shader" />
+    <None Include="Localization\Glossary.md" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="i18n\zh.txt" />
     <EmbeddedResource Include="i18n\en.txt" />
+    <EmbeddedResource Include="i18n\game\zh-CN.json" />
+    <!-- Loader's AssemblyResolve loads 0Harmony from embedded resources: the published
+         DLL is a single file and must carry its own Harmony. -->
+    <EmbeddedResource Include="$(NuGetPackageRoot)lib.harmony\2.2.2\lib\net48\0Harmony.dll">
+      <LogicalName>r.e.p.o_cheat.0Harmony.dll</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

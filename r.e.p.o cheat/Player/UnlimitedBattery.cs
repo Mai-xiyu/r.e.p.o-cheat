@@ -64,26 +64,9 @@ public class UnlimitedBattery : MonoBehaviour
 			FieldInfo field = ((object)component2).GetType().GetField("isEquipped", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 			if (field != null && (bool)field.GetValue(component2))
 			{
-				PlayerAvatar val = SemiFunc.PlayerAvatarLocal();
-				if ((Object)(object)val != (Object)null)
+				if (Inventory.instance != null && Inventory.instance.IsItemEquipped(component2))
 				{
-					FieldInfo field2 = ((object)val).GetType().GetField("itemSlots", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (field2 != null && field2.GetValue(val) is IEnumerable enumerable)
-					{
-						foreach (object item2 in enumerable)
-						{
-							FieldInfo field3 = item2.GetType().GetField("item", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-							if (field3 != null)
-							{
-								object value = field3.GetValue(item2);
-								GameObject val2 = (GameObject)((value is GameObject) ? value : null);
-								if ((Object)(object)val2 != (Object)null && (Object)(object)val2 == (Object)(object)((Component)battery).gameObject)
-								{
-									return true;
-								}
-							}
-						}
-					}
+					return true;
 				}
 			}
 		}
@@ -97,7 +80,7 @@ public class UnlimitedBattery : MonoBehaviour
 			return;
 		}
 		batteries.RemoveAll((ItemBattery b) => (Object)(object)b == (Object)null);
-		ItemBattery[] array = Object.FindObjectsOfType<ItemBattery>();
+		ItemBattery[] array = SceneCache.GetObjects<ItemBattery>(1f);
 		foreach (ItemBattery val in array)
 		{
 			if (!batteries.Contains(val) && (Object)(object)val != (Object)null)

@@ -54,7 +54,7 @@ public class MaterialPreserver : MonoBehaviour
 				continue;
 			}
 			bool flag = false;
-			if (key.materials.Length != value.Length)
+			if (key.sharedMaterials.Length != value.Length)
 			{
 				flag = true;
 			}
@@ -62,7 +62,7 @@ public class MaterialPreserver : MonoBehaviour
 			{
 				for (int i = 0; i < value.Length; i++)
 				{
-					if ((Object)(object)key.materials[i] == (Object)null || (Object)(object)key.materials[i].shader != (Object)(object)value[i].shader || ((Object)(object)key.materials[i].mainTexture == (Object)null && (Object)(object)value[i].mainTexture != (Object)null))
+					if ((Object)(object)key.sharedMaterials[i] == (Object)null || (Object)(object)key.sharedMaterials[i].shader != (Object)(object)value[i].shader || ((Object)(object)key.sharedMaterials[i].mainTexture == (Object)null && (Object)(object)value[i].mainTexture != (Object)null))
 					{
 						flag = true;
 						break;

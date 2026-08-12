@@ -72,7 +72,7 @@ public static class AutoDodge
 
             Vector3 playerPos = localPlayer.transform.position;
 
-            Enemy[] enemies = UnityEngine.Object.FindObjectsOfType<Enemy>();
+            Enemy[] enemies = SceneCache.GetObjects<Enemy>(0.25f);
             if (enemies == null || enemies.Length == 0) return;
 
             // 第一优先级：检查是否有敌人在攻击范围内且正在攻击

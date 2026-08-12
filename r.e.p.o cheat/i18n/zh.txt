@@ -684,3 +684,13 @@ room.world_tools=世界工具
 room.level_adjust=关卡调整
 room.set_next_level=设置下一关
 room.level_status=当前设置: {0}
+
+# 游戏汉化（功能，默认关闭）
+localization.header=游戏汉化
+localization.game_chinese=游戏简体中文汉化
+localization.mode_label=游戏语言模式
+localization.mode.auto=自动
+localization.mode.zhcn=简体中文
+localization.mode.english=英文
+localization.debug_log=缺失翻译扫描
+localization.unavailable=汉化模块未就绪（请回到主菜单后重试）

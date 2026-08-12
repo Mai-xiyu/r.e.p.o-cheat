@@ -343,8 +343,8 @@ public static class NoclipController
 				_cachedTumbleType = Type.GetType("PlayerTumble, Assembly-CSharp");
 				if (_cachedTumbleType != null)
 				{
-					_cachedTumbleActiveField = _cachedTumbleType.GetField("tumbleActive", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					_cachedTumbleTimerField = _cachedTumbleType.GetField("tumbleTimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					_cachedTumbleActiveField = _cachedTumbleType.GetField("isTumbling", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					_cachedTumbleTimerField = _cachedTumbleType.GetField("tumbleSetTimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 				}
 			}
 

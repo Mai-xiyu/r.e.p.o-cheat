@@ -233,7 +233,7 @@ public static class AutoPilot
     {
         statusText = L.T("autopilot.finding_sell");
 
-        ExtractionPoint[] points = UnityEngine.Object.FindObjectsOfType<ExtractionPoint>();
+        ExtractionPoint[] points = SceneCache.GetObjects<ExtractionPoint>(1f);
         if (points.Length == 0)
         {
             Debug.LogWarning("[AutoPilot] No sell points found");
@@ -277,7 +277,7 @@ public static class AutoPilot
             if (itemT != null)
             {
                 // 将物品传送到交易点而非搬运（更可靠）
-                ExtractionPoint[] points = UnityEngine.Object.FindObjectsOfType<ExtractionPoint>();
+                ExtractionPoint[] points = SceneCache.GetObjects<ExtractionPoint>(1f);
                 if (points.Length > 0)
                 {
                     ExtractionPoint nearest = null;

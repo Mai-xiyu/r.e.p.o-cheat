@@ -300,11 +300,15 @@ public static class Enemies
 		}
 	}
 
+	// cached reflection for the per-frame ESP/Aimbot health lookups (resolved once per runtime type)
+	private static readonly Dictionary<Type, FieldInfo> HealthFieldCache = new Dictionary<Type, FieldInfo>();
+	private static readonly Dictionary<Type, FieldInfo> HealthValueFieldCache = new Dictionary<Type, FieldInfo>();
+
 	public static int GetEnemyHealth(Enemy enemy)
 	{
 		try
 		{
-			FieldInfo field = ((object)enemy).GetType().GetField("Health", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			FieldInfo field = GetCachedField(HealthFieldCache, ((object)enemy).GetType(), "Health");
 			if (field == null)
 			{
 				return -1;
@@ -314,7 +318,7 @@ public static class Enemies
 			{
 				return -1;
 			}
-			FieldInfo field2 = value.GetType().GetField("healthCurrent", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			FieldInfo field2 = GetCachedField(HealthValueFieldCache, value.GetType(), "healthCurrent");
 			if (field2 == null)
 			{
 				return -1;
@@ -334,11 +338,11 @@ public static class Enemies
 	{
 		try
 		{
-			FieldInfo field = ((object)enemy).GetType().GetField("Health", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			FieldInfo field = GetCachedField(HealthFieldCache, ((object)enemy).GetType(), "Health");
 			if (field == null) return -1;
 			object healthObj = field.GetValue(enemy);
 			if (healthObj == null) return -1;
-			FieldInfo targetField = healthObj.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			FieldInfo targetField = GetCachedField(HealthValueFieldCache, healthObj.GetType(), fieldName);
 			if (targetField == null) return -1;
 			return (int)targetField.GetValue(healthObj);
 		}
@@ -346,6 +350,27 @@ public static class Enemies
 		{
 			return -1;
 		}
+	}
+
+	private static FieldInfo GetCachedField(Dictionary<Type, FieldInfo> cache, Type type, string fieldName)
+	{
+		if (type == null)
+		{
+			return null;
+		}
+		lock (cache)
+		{
+			if (cache.TryGetValue(type, out FieldInfo cached))
+			{
+				return cached;
+			}
+		}
+		FieldInfo resolved = type.GetField(fieldName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+		lock (cache)
+		{
+			cache[type] = resolved;
+		}
+		return resolved;
 	}
 
 	public static int GetEnemyMaxHealth(Enemy enemy)
@@ -362,7 +387,7 @@ public static class Enemies
 			return value;
 		}
 		// 首次观察：尝试读取 healthMax 字段，否则用当前血量
-		int maxHealth = GetEnemyHealthFieldValue(enemy, "healthMax");
+		int maxHealth = GetEnemyHealthFieldValue(enemy, "health");
 		if (maxHealth <= 0)
 		{
 			maxHealth = GetEnemyHealth(enemy);

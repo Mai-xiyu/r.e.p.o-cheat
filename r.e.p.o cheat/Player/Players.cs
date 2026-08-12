@@ -51,7 +51,7 @@ internal static class Players
 			{
 				return;
 			}
-			FieldInfo field3 = type.GetField("currentHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			FieldInfo field3 = type.GetField("health", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 			if (field3 != null)
 			{
 				_ = (int)field3.GetValue(value2);

@@ -17,7 +17,13 @@ internal class playerColor
 
 	private static object colorControllerInstance;
 
-	private static MethodInfo playerSetColorMethod;
+	private static FieldInfo playerCosmeticsField;
+
+	private static object playerCosmeticsInstance;
+
+	private static FieldInfo colorsEquippedField;
+
+	private static MethodInfo setupColorsMethod;
 
 	private static PhotonView playerPhotonView;
 
@@ -82,10 +88,19 @@ internal class playerColor
 		}
 		if (colorControllerInstance != null)
 		{
-			playerSetColorMethod = colorControllerType.GetMethod("PlayerAvatarSetColor", BindingFlags.Instance | BindingFlags.Public);
-			if (!(playerSetColorMethod == null))
+			playerCosmeticsField = colorControllerType.GetField("playerCosmetics", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			if (playerCosmeticsField != null)
 			{
-				isInitialized = true;
+				playerCosmeticsInstance = playerCosmeticsField.GetValue(colorControllerInstance);
+				if (playerCosmeticsInstance != null)
+				{
+					colorsEquippedField = playerCosmeticsInstance.GetType().GetField("colorsEquipped", BindingFlags.Instance | BindingFlags.NonPublic);
+					setupColorsMethod = playerCosmeticsInstance.GetType().GetMethod("SetupColors", BindingFlags.Instance | BindingFlags.Public);
+					if (setupColorsMethod != null)
+					{
+						isInitialized = true;
+					}
+				}
 			}
 		}
 	}
@@ -98,7 +113,7 @@ internal class playerColor
 			Reset();
 			Initialize();
 		}
-		if (!isInitialized || colorControllerInstance == null || playerSetColorMethod == null || !isRandomizing || !(Time.time - lastColorChangeTime >= changeInterval))
+		if (!isInitialized || colorControllerInstance == null || setupColorsMethod == null || !isRandomizing || !(Time.time - lastColorChangeTime >= changeInterval))
 		{
 			return;
 		}
@@ -113,27 +128,12 @@ internal class playerColor
 		{
 			try
 			{
-				// 尝试从 PlayerAvatar 的 playerAvatarVisuals.colorIndex 获取
-				FieldInfo visualsField = colorControllerType.GetField("playerAvatarVisuals", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-				if (visualsField != null)
+				// 从 PlayerCosmetics.colorsEquipped 读取主颜色（索引 5）
+				if (colorsEquippedField != null && colorsEquippedField.GetValue(playerCosmeticsInstance) is int[] colors)
 				{
-					object visuals = visualsField.GetValue(colorControllerInstance);
-					if (visuals != null)
+					if (colors.Length > 5)
 					{
-						FieldInfo colorField = visuals.GetType().GetField("colorIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-						if (colorField != null)
-						{
-							savedOriginalColorIndex = (int)colorField.GetValue(visuals);
-						}
-					}
-				}
-				// 如果上面失败，尝试直接从 PlayerAvatar 获取 colorIndex
-				if (savedOriginalColorIndex == -1)
-				{
-					FieldInfo directColorField = colorControllerType.GetField("colorIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (directColorField != null)
-					{
-						savedOriginalColorIndex = (int)directColorField.GetValue(colorControllerInstance);
+						savedOriginalColorIndex = colors[5];
 					}
 				}
 				// 最终回退：默认 0
@@ -150,12 +150,35 @@ internal class playerColor
 		int num = new System.Random().Next(0, 36);
 		try
 		{
-			playerSetColorMethod.Invoke(colorControllerInstance, new object[1] { num });
+			SetColor(num);
 			lastColorChangeTime = Time.time;
 		}
 		catch (Exception)
 		{
 		}
+	}
+
+	private static void SetColor(int colorIndex)
+	{
+		if (playerCosmeticsInstance == null || setupColorsMethod == null)
+		{
+			return;
+		}
+		int[] colorsArray = null;
+		if (colorsEquippedField != null && colorsEquippedField.GetValue(playerCosmeticsInstance) is int[] currentColors)
+		{
+			colorsArray = (int[])currentColors.Clone();
+		}
+		if (colorsArray == null || colorsArray.Length <= 5)
+		{
+			colorsArray = new int[6];
+			for (int i = 0; i < colorsArray.Length; i++)
+			{
+				colorsArray[i] = -1;
+			}
+		}
+		colorsArray[5] = colorIndex;
+		setupColorsMethod.Invoke(playerCosmeticsInstance, new object[2] { true, colorsArray });
 	}
 
 	private static bool IsPhotonViewValid(PhotonView view)
@@ -183,9 +206,9 @@ internal class playerColor
 		try
 		{
 			Initialize();
-			if (savedOriginalColorIndex >= 0 && isInitialized && colorControllerInstance != null && playerSetColorMethod != null)
+			if (savedOriginalColorIndex >= 0 && isInitialized && playerCosmeticsInstance != null && setupColorsMethod != null)
 			{
-				playerSetColorMethod.Invoke(colorControllerInstance, new object[1] { savedOriginalColorIndex });
+				SetColor(savedOriginalColorIndex);
 			}
 		}
 		catch { }
@@ -200,7 +223,10 @@ internal class playerColor
 		isInitialized = false;
 		colorControllerType = null;
 		colorControllerInstance = null;
-		playerSetColorMethod = null;
+		playerCosmeticsField = null;
+		playerCosmeticsInstance = null;
+		colorsEquippedField = null;
+		setupColorsMethod = null;
 		playerPhotonView = null;
 		savedOriginalColorIndex = -1;
 	}
