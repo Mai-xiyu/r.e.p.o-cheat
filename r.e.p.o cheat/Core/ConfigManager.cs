@@ -77,6 +77,10 @@ public static class ConfigManager
 		SaveToggle("inf_health", Hax2.infiniteHealthActive);
 		SaveToggle("No_Clip", NoclipController.noclipActive);
 		SaveToggle("inf_stam", Hax2.stamineState);
+		SaveToggle("inf_battery", Hax2.unlimitedBatteryActive);
+		SaveToggle("instant_gun_buildup", NativeGameApi.InstantGunBuildup);
+		SaveToggle("no_camera_shake", NativeGameApi.NoCameraShake);
+		SaveToggle("hide_item_labels", NativeGameApi.HideItemLabels);
 		SaveToggle("rainbow_cosmetics", CosmeticFeatures.RainbowMode);
 		SaveToggle("No_Fog", MiscFeatures.NoFogEnabled);
 		SaveToggle("WaterMark_Toggle", Hax2.showWatermark);
@@ -168,6 +172,15 @@ public static class ConfigManager
 		{
 			PlayerController.MaxStamina();
 		}
+		Hax2.unlimitedBatteryActive = LoadToggle("inf_battery");
+		if ((Object)(object)Hax2.unlimitedBatteryComponent != (Object)null)
+		{
+			Hax2.unlimitedBatteryComponent.unlimitedBatteryEnabled = Hax2.unlimitedBatteryActive;
+		}
+		BatteryKeepAlive.ApplyDirectorFlag();
+		NativeGameApi.InstantGunBuildup = LoadToggle("instant_gun_buildup");
+		NativeGameApi.NoCameraShake = LoadToggle("no_camera_shake");
+		NativeGameApi.HideItemLabels = LoadToggle("hide_item_labels");
 		CosmeticFeatures.RainbowMode = LoadToggle("rainbow_cosmetics");
 		MiscFeatures.NoFogEnabled = LoadToggle("No_Fog");
 		Hax2.showWatermark = LoadToggle("WaterMark_Toggle", defaultValue: true);

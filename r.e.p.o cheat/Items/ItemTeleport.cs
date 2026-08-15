@@ -254,6 +254,12 @@ public static class ItemTeleport
 				Debug.Log((object)("Could not get Transform of item '" + item.Name + "'!"));
 				return;
 			}
+			PhysGrabObject body = ((Component)val2).GetComponent<PhysGrabObject>() ?? ((Component)val2).GetComponentInParent<PhysGrabObject>();
+			if ((Object)(object)body != (Object)null)
+			{
+				body.Teleport(val, rotation);
+				return;
+			}
 			PhotonView component = ((Component)val2).GetComponent<PhotonView>();
 			if ((Object)(object)component == (Object)null)
 			{

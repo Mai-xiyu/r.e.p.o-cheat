@@ -140,31 +140,7 @@ public static class ChatHijack
 
 	public static void ChangePlayerColor(int colorIndex, string targetName, List<object> playerList, List<string> playerNames)
 	{
-		if (playerList == null || playerNames == null || playerList.Count != playerNames.Count)
-		{
-			return;
-		}
-		string text = StripStatusTags(targetName);
-		for (int i = 0; i < playerList.Count; i++)
-		{
-			string name = playerNames[i];
-			object obj = playerList[i];
-			string text2 = StripStatusTags(name);
-			if (!IsAllTarget(text) && text2 != text)
-			{
-				continue;
-			}
-			FieldInfo field = obj.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (!(field == null))
-			{
-				object value = field.GetValue(obj);
-				PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-				if (!((Object)(object)val == (Object)null))
-				{
-					val.RPC("SetColorRPC", (RpcTarget)3, new object[1] { colorIndex });
-				}
-			}
-		}
+		CosmeticFeatures.ApplyPaletteColor(colorIndex, sync: true);
 	}
 
 	public static void ClearStoredNames()

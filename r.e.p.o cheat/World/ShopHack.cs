@@ -85,6 +85,11 @@ public static class ShopHack
     {
         try
         {
+            if (!NativeGameApi.IsHost())
+            {
+                Debug.Log("[ShopHack] host only");
+                return 0;
+            }
             SemiFunc.StatSetRunCurrency(9999999);
             Debug.Log("[ShopHack] Shop effectively free: run currency set to 9,999,999");
             return 1;
@@ -100,6 +105,11 @@ public static class ShopHack
     {
         try
         {
+            if (!NativeGameApi.IsHost())
+            {
+                Debug.Log("[ShopHack] host only");
+                return false;
+            }
             int current = SemiFunc.StatGetRunCurrency();
             SemiFunc.StatSetRunCurrency(current + amount);
             Debug.Log($"[ShopHack] Run currency: {current} → {current + amount}");

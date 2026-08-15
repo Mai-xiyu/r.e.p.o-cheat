@@ -1,10 +1,8 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using Photon.Pun;
 using UnityEngine;
-using UnityEngine.AI;
 
 namespace r.e.p.o_cheat;
 
@@ -28,23 +26,7 @@ public static class Enemies
 		}
 		try
 		{
-			FieldInfo field = ((object)val).GetType().GetField("Health", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field != null)
-			{
-				object value = field.GetValue(val);
-				if (value != null)
-				{
-					MethodInfo method = value.GetType().GetMethod("Hurt", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (method != null)
-					{
-						method.Invoke(value, new object[2]
-						{
-							9999,
-							Vector3.zero
-						});
-					}
-				}
-			}
+			NativeGameApi.KillEnemy(val);
 			DebugCheats.UpdateEnemyList();
 		}
 		catch (Exception)
@@ -54,7 +36,11 @@ public static class Enemies
 
 	public static void KillAllEnemies()
 	{
-		//IL_009b: Unknown result type (might be due to invalid IL or missing references)
+		if (NativeGameApi.DestroyAllEnemies() > 0)
+		{
+			DebugCheats.UpdateEnemyList();
+			return;
+		}
 		List<Enemy> list = DebugCheats.enemyList;
 		if (list == null || list.Count == 0)
 		{
@@ -69,25 +55,8 @@ public static class Enemies
 			}
 			try
 			{
-				FieldInfo field = ((object)item).GetType().GetField("Health", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-				if (!(field != null))
-				{
-					continue;
-				}
-				object value = field.GetValue(item);
-				if (value != null)
-				{
-					MethodInfo method = value.GetType().GetMethod("Hurt", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (method != null)
-					{
-						method.Invoke(value, new object[2]
-						{
-							9999,
-							Vector3.zero
-						});
-						num++;
-					}
-				}
+				NativeGameApi.KillEnemy(item);
+				num++;
 			}
 			catch (Exception)
 			{
@@ -134,44 +103,7 @@ public static class Enemies
 			{
 				component.RequestOwnership();
 			}
-			FieldInfo field = ((object)val).GetType().GetField("NavMeshAgent", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			object obj = null;
-			if (field != null)
-			{
-				obj = field.GetValue(val);
-				if (obj != null)
-				{
-					PropertyInfo property = obj.GetType().GetProperty("enabled", BindingFlags.Instance | BindingFlags.Public);
-					if (property != null)
-					{
-						property.SetValue(obj, false);
-					}
-				}
-			}
-			((Component)val).transform.position = val2;
-			_ = ((Component)val).transform.position;
-			if (PhotonNetwork.IsConnected && (Object)(object)component != (Object)null)
-			{
-				MethodInfo method = ((object)val).GetType().GetMethod("EnemyTeleported", BindingFlags.Instance | BindingFlags.Public);
-				if (method != null)
-				{
-					method.Invoke(val, new object[1] { val2 });
-				}
-			}
-			if (obj != null)
-			{
-				MonoBehaviour val3 = (MonoBehaviour)(object)val;
-				if ((Object)(object)val3 != (Object)null)
-				{
-					val3.StartCoroutine(ReEnableNavMeshAgent(obj, 2f));
-				}
-			}
-			GameObject val4 = ((val != null) ? ((Component)val).gameObject : null);
-			if ((Object)(object)val4 != (Object)null && val4.activeInHierarchy)
-			{
-				val4.SetActive(false);
-				val4.SetActive(true);
-			}
+			NativeGameApi.TeleportEnemy(val, val2);
 		}
 		catch (Exception)
 		{
@@ -247,56 +179,10 @@ public static class Enemies
 			{
 				component.RequestOwnership();
 			}
-			FieldInfo field2 = ((object)val).GetType().GetField("NavMeshAgent", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			object obj2 = null;
-			if (field2 != null)
-			{
-				obj2 = field2.GetValue(val);
-				if (obj2 != null)
-				{
-					PropertyInfo property = obj2.GetType().GetProperty("enabled", BindingFlags.Instance | BindingFlags.Public);
-					if (property != null)
-					{
-						property.SetValue(obj2, false);
-					}
-				}
-			}
-			((Component)val).transform.position = val3;
-			if (PhotonNetwork.IsConnected && (Object)(object)component != (Object)null)
-			{
-				MethodInfo method = ((object)val).GetType().GetMethod("EnemyTeleported", BindingFlags.Instance | BindingFlags.Public);
-				if (method != null)
-				{
-					method.Invoke(val, new object[1] { val3 });
-				}
-			}
-			if (obj2 != null)
-			{
-				MonoBehaviour val6 = (MonoBehaviour)(object)val;
-				if ((Object)(object)val6 != (Object)null)
-				{
-					val6.StartCoroutine(ReEnableNavMeshAgent(obj2, 2f));
-				}
-			}
-			GameObject val7 = ((val != null) ? ((Component)val).gameObject : null);
-			if ((Object)(object)val7 != (Object)null && val7.activeInHierarchy)
-			{
-				val7.SetActive(false);
-				val7.SetActive(true);
-			}
+			NativeGameApi.TeleportEnemy(val, val3);
 		}
 		catch (Exception)
 		{
-		}
-	}
-
-	private static IEnumerator ReEnableNavMeshAgent(object navMeshAgent, float delay)
-	{
-		yield return (object)new WaitForSeconds(delay);
-		PropertyInfo property = navMeshAgent.GetType().GetProperty("enabled", BindingFlags.Instance | BindingFlags.Public);
-		if (property != null)
-		{
-			property.SetValue(navMeshAgent, true);
 		}
 	}
 
@@ -308,22 +194,27 @@ public static class Enemies
 	{
 		try
 		{
-			FieldInfo field = GetCachedField(HealthFieldCache, ((object)enemy).GetType(), "Health");
-			if (field == null)
+			EnemyHealth health = ((Component)enemy).GetComponent<EnemyHealth>();
+			object healthObj = health;
+			if (healthObj == null)
+			{
+				FieldInfo field = GetCachedField(HealthFieldCache, ((object)enemy).GetType(), "Health");
+				if (field == null)
+				{
+					return -1;
+				}
+				healthObj = field.GetValue(enemy);
+			}
+			if (healthObj == null)
 			{
 				return -1;
 			}
-			object value = field.GetValue(enemy);
-			if (value == null)
-			{
-				return -1;
-			}
-			FieldInfo field2 = GetCachedField(HealthValueFieldCache, value.GetType(), "healthCurrent");
+			FieldInfo field2 = GetCachedField(HealthValueFieldCache, healthObj.GetType(), "healthCurrent");
 			if (field2 == null)
 			{
 				return -1;
 			}
-			return (int)field2.GetValue(value);
+			return (int)field2.GetValue(healthObj);
 		}
 		catch (Exception)
 		{
@@ -410,33 +301,16 @@ public static class Enemies
 
 	// === 冻结所有敌人 ===
 	public static bool freezeAllEnemies = false;
-	private static Dictionary<Enemy, bool> savedNavMeshState = new Dictionary<Enemy, bool>();
 
 	public static void FreezeAllEnemies()
 	{
 		freezeAllEnemies = true;
 		try
 		{
-			List<EnemyParent> list = EnemyDirector.instance?.enemiesSpawned;
-			if (list == null) return;
-			foreach (var ep in list)
+			List<Enemy> list = DebugCheats.enemyList ?? new List<Enemy>();
+			foreach (Enemy enemy in list)
 			{
-				if ((Object)(object)ep == (Object)null) continue;
-				Enemy enemy = ((Component)ep).GetComponentInChildren<Enemy>();
-				if ((Object)(object)enemy == (Object)null) continue;
-				try
-				{
-					NavMeshAgent agent = ((Component)enemy).GetComponent<NavMeshAgent>();
-					if (agent != null && agent.enabled)
-					{
-						savedNavMeshState[enemy] = true;
-						agent.enabled = false;
-					}
-					// Also try to freeze Rigidbody
-					Rigidbody rb = ((Component)enemy).GetComponent<Rigidbody>();
-					if (rb != null) rb.isKinematic = true;
-				}
-				catch { }
+				NativeGameApi.FreezeEnemy(enemy, 9999f);
 			}
 		}
 		catch (Exception ex) { Debug.LogWarning("[Enemies] FreezeAll: " + ex.Message); }
@@ -447,53 +321,34 @@ public static class Enemies
 		freezeAllEnemies = false;
 		try
 		{
-			foreach (var kvp in savedNavMeshState)
+			List<Enemy> list = DebugCheats.enemyList ?? new List<Enemy>();
+			foreach (Enemy enemy in list)
 			{
-				if ((Object)(object)kvp.Key != (Object)null)
+				NativeGameApi.FreezeEnemy(enemy, 0f);
+				EnemyNavMeshAgent agent = ((Component)enemy).GetComponent<EnemyNavMeshAgent>();
+				if (agent != null)
 				{
-					try
-					{
-						NavMeshAgent agent = ((Component)kvp.Key).GetComponent<NavMeshAgent>();
-						if (agent != null) agent.enabled = true;
-						Rigidbody rb = ((Component)kvp.Key).GetComponent<Rigidbody>();
-						if (rb != null) rb.isKinematic = false;
-					}
-					catch { }
+					agent.Enable();
 				}
 			}
-			savedNavMeshState.Clear();
 		}
 		catch (Exception ex) { Debug.LogWarning("[Enemies] UnfreezeAll: " + ex.Message); }
 	}
 
 	/// <summary>
-	/// 每帧调用: 持续冻结新刷出的敌人
+	/// 每帧调用: 用游戏自己的 Enemy.Freeze 持续冻结新刷出的敌人
 	/// </summary>
 	public static void UpdateFreeze()
 	{
 		if (!freezeAllEnemies) return;
 		try
 		{
-			List<EnemyParent> list = EnemyDirector.instance?.enemiesSpawned;
+			List<Enemy> list = DebugCheats.enemyList;
 			if (list == null) return;
-			foreach (var ep in list)
+			foreach (Enemy enemy in list)
 			{
-				if ((Object)(object)ep == (Object)null) continue;
-				Enemy enemy = ((Component)ep).GetComponentInChildren<Enemy>();
 				if ((Object)(object)enemy == (Object)null) continue;
-				if (savedNavMeshState.ContainsKey(enemy)) continue;
-				try
-				{
-					NavMeshAgent agent = ((Component)enemy).GetComponent<NavMeshAgent>();
-					if (agent != null && agent.enabled)
-					{
-						savedNavMeshState[enemy] = true;
-						agent.enabled = false;
-					}
-					Rigidbody rb = ((Component)enemy).GetComponent<Rigidbody>();
-					if (rb != null) rb.isKinematic = true;
-				}
-				catch { }
+				NativeGameApi.FreezeEnemy(enemy, 30f);
 			}
 		}
 		catch { }
@@ -501,61 +356,45 @@ public static class Enemies
 
 	// === 敌人速度修改 ===
 	public static float enemySpeedMultiplier = 1.0f;
-	private static Dictionary<Enemy, float> originalSpeeds = new Dictionary<Enemy, float>();
 	private static bool speedModifyActive = false;
 
 	public static void SetSpeedMultiplier(float multiplier)
 	{
 		enemySpeedMultiplier = multiplier;
 		speedModifyActive = (multiplier != 1.0f);
-		if (!speedModifyActive) RestoreOriginalSpeeds();
+		if (!speedModifyActive)
+		{
+			RestoreOriginalSpeeds();
+		}
 	}
 
 	public static void RestoreOriginalSpeeds()
 	{
 		try
 		{
-			foreach (var kvp in originalSpeeds)
+			List<Enemy> list = DebugCheats.enemyList ?? new List<Enemy>();
+			foreach (Enemy enemy in list)
 			{
-				if ((Object)(object)kvp.Key == (Object)null) continue;
-				try
-				{
-					NavMeshAgent agent = ((Component)kvp.Key).GetComponent<NavMeshAgent>();
-					if (agent != null && agent.enabled) agent.speed = kvp.Value;
-				}
-				catch { }
+				NativeGameApi.SetEnemySpeed(enemy, 1f);
 			}
-			originalSpeeds.Clear();
 		}
 		catch { }
 	}
 
 	/// <summary>
-	/// 每帧调用: 修改敌人移动速度
+	/// 每帧调用: 用游戏自己的 EnemyNavMeshAgent.OverrideAgent 改速度
 	/// </summary>
 	public static void UpdateSpeedModify()
 	{
 		if (!speedModifyActive) return;
 		try
 		{
-			List<EnemyParent> list = EnemyDirector.instance?.enemiesSpawned;
+			List<Enemy> list = DebugCheats.enemyList;
 			if (list == null) return;
-			foreach (var ep in list)
+			foreach (Enemy enemy in list)
 			{
-				if ((Object)(object)ep == (Object)null) continue;
-				Enemy enemy = ((Component)ep).GetComponentInChildren<Enemy>();
 				if ((Object)(object)enemy == (Object)null) continue;
-				try
-				{
-					NavMeshAgent agent = ((Component)enemy).GetComponent<NavMeshAgent>();
-					if (agent == null || !agent.enabled) continue;
-					if (!originalSpeeds.ContainsKey(enemy))
-					{
-						originalSpeeds[enemy] = agent.speed;
-					}
-					agent.speed = originalSpeeds[enemy] * enemySpeedMultiplier;
-				}
-				catch { }
+				NativeGameApi.SetEnemySpeed(enemy, enemySpeedMultiplier);
 			}
 		}
 		catch { }

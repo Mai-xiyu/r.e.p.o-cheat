@@ -9,11 +9,8 @@ using UnityEngine;
 namespace r.e.p.o_cheat;
 
 /// <summary>
-/// RPC 注入器 — 扫描游戏程序集中所有 [PunRPC] 方法，提供统一调用接口。
-/// 三层策略:
-///   1. 直接调用: 如果我们是 MasterClient，正常发送 RPC
-///   2. 伪装调用: 临时伪造 ActorNumber 后发送 (ForceHost.SendRPCAsHost)
-///   3. 本地调用: 直接反射调用本地方法（仅影响本地客户端）
+/// RPC injector — scan [PunRPC] methods and call them honestly.
+/// Does not spoof ActorNumber / MasterClient. MasterOnly RPCs still need a real host.
 /// </summary>
 public static class RpcInjector
 {
@@ -50,7 +47,14 @@ public static class RpcInjector
     // ─── 高价值 RPC 白名单（快速搜索） ─────────────────────
     public static readonly string[] HighValueRPCs = new string[]
     {
-        // 升级相关
+        "HealOtherRPC",
+        "DiscoverRPC",
+        "SetPositionRPC",
+        "ToggleItemRPC",
+        "RequestExtractionPointActivationRPC",
+        "ReviveRPC",
+        "UpdateHealthRPC",
+        "DollarValueSetRPC",
         "UpgradePlayerGrabStrengthRPC",
         "UpgradePlayerSprintSpeedRPC",
         "UpgradePlayerExtraJumpRPC",
@@ -58,23 +62,6 @@ public static class RpcInjector
         "UpgradePlayerGrabRangeRPC",
         "UpgradePlayerHealthRPC",
         "UpgradePlayerThrowStrengthRPC",
-        "UpgradePlayerGrabThrowRPC",
-        // 生命值
-        "HealRPC",
-        "UpdateHealthRPC",
-        "HurtOtherRPC",
-        // 生成/复活
-        "SpawnRPC",
-        "ReviveRPC",
-        "PlayerDeathRPC",
-        // 经济
-        "DollarValueSetRPC",
-        "CrownPlayerRPC",
-        // 物品
-        "ItemSetup",
-        "SpawnSpecificEnemy",
-        // 提取点
-        "ExtractionPointActivateRPC",
     };
 
     // ─── 扫描 ──────────────────────────────────────────────
@@ -214,23 +201,6 @@ public static class RpcInjector
             }
         }
 
-        // 策略0: 如果 Shadow Host 启用，直接发送（本地认为自己是 MasterClient）
-        if (ShadowHostMode.isEnabled)
-        {
-            try
-            {
-                targetView.RPC(rpcName, target, args);
-                statusMessage = $"✓ [Shadow] 已发送 {rpcName}";
-                Debug.Log($"[RpcInjector] Shadow Host 发送 {rpcName} → {target}");
-                return true;
-            }
-            catch (Exception exS)
-            {
-                Debug.LogWarning($"[RpcInjector] Shadow Host 调用 {rpcName} 失败: {exS.Message}");
-            }
-        }
-
-        // 策略1: 直接调用 (MasterClient 或无需权限的 RPC)
         try
         {
             targetView.RPC(rpcName, target, args);
@@ -243,20 +213,6 @@ public static class RpcInjector
             Debug.LogWarning($"[RpcInjector] 直接调用 {rpcName} 失败: {ex1.Message}");
         }
 
-        // 策略2: 伪装为主机发送
-        try
-        {
-            ForceHost.SendRPCAsHost(targetView, rpcName, target, args);
-            statusMessage = $"✓ 已伪装发送 {rpcName}";
-            Debug.Log($"[RpcInjector] 伪装发送 {rpcName} → {target}");
-            return true;
-        }
-        catch (Exception ex2)
-        {
-            Debug.LogWarning($"[RpcInjector] 伪装调用 {rpcName} 失败: {ex2.Message}");
-        }
-
-        // 策略3: 本地反射调用
         try
         {
             return CallRpcLocal(rpcName, targetView, args);
@@ -401,66 +357,34 @@ public static class RpcInjector
     /// </summary>
     public static bool SetDollarValue(int value)
     {
-        var pv = FindPunManagerView();
-        if ((UnityEngine.Object)(object)pv != (UnityEngine.Object)null)
+        if (!NativeGameApi.IsHost())
         {
-            return CallRpcOnView(pv, "DollarValueSetRPC", (RpcTarget)3, new object[] { value });
+            statusMessage = L.T("role.host_only");
+            return false;
         }
-        return false;
+        bool ok = ShopHack.AddMoney(value);
+        statusMessage = ok ? $"✓ currency +{value}" : L.T("role.host_only");
+        return ok;
     }
 
     /// <summary>
-    /// 激活提取点
+    /// Ask the host to open extraction via the game request API (guest-safe).
     /// </summary>
     public static bool ActivateExtractionPoint()
     {
-        ExtractionPoint[] points = UnityEngine.Object.FindObjectsOfType<ExtractionPoint>();
-        if (points.Length == 0) return false;
-
-        foreach (var point in points)
-        {
-            PhotonView pv = ((Component)point).GetComponent<PhotonView>();
-            if ((UnityEngine.Object)(object)pv != (UnityEngine.Object)null)
-            {
-                CallRpcOnView(pv, "ExtractionPointActivateRPC", (RpcTarget)0);
-            }
-        }
-        return true;
+        NativeGameApi.RequestActivateExtraction();
+        statusMessage = NativeGameApi.LastStatus;
+        return !string.IsNullOrEmpty(NativeGameApi.LastStatus) && NativeGameApi.LastStatus.StartsWith("extraction");
     }
 
     // ─── RPC 队列兜底系统 ────────────────────────────────────
 
     /// <summary>
-    /// 带主机权限兜底的 RPC 调用。
-    /// 如果当前是主机（或 Shadow Host），直接发送；
-    /// 否则入队并触发自动夺权，成功后自动执行队列中的 RPC。
+    /// Honest send only. Does not fake host or auto-run ForceHost.
     /// </summary>
     public static bool CallRpcWithHostFallback(PhotonView targetView, string rpcName, RpcTarget target, params object[] args)
     {
-        // 已经是主机或 Shadow Host，直接发送
-        if (ShadowHostMode.isEnabled || PhotonNetwork.IsMasterClient)
-        {
-            return CallRpcOnView(targetView, rpcName, target, args);
-        }
-
-        // 入队
-        int viewId = ((UnityEngine.Object)(object)targetView != (UnityEngine.Object)null) ? targetView.ViewID : -1;
-        _rpcQueue.Add(new QueuedRpc
-        {
-            RpcName = rpcName,
-            Target = target,
-            Args = args,
-            PhotonViewId = viewId,
-            QueueTime = Time.time
-        });
-
-        statusMessage = $"⏳ {rpcName} 已入队 (共 {_rpcQueue.Count} 个待执行)";
-        Debug.Log($"[RpcInjector] {rpcName} 入队，当前队列: {_rpcQueue.Count}");
-
-        // 注册回调 + 触发自动夺权
-        ForceHost.EnsureHost(() => FlushRpcQueue());
-
-        return true; // queued successfully
+        return CallRpcOnView(targetView, rpcName, target, args);
     }
 
     /// <summary>

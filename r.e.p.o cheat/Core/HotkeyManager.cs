@@ -171,6 +171,7 @@ public class HotkeyManager
 			{
 				Hax2.unlimitedBatteryComponent.unlimitedBatteryEnabled = Hax2.unlimitedBatteryActive;
 			}
+			BatteryKeepAlive.ApplyDirectorFlag();
 		}, "toggles unlimited battery on/off"));
 		for (int num = 0; num < defaultHotkeys.Length; num++)
 		{

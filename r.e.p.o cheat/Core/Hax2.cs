@@ -264,13 +264,7 @@ public class Hax2 : MonoBehaviour
 
 	private Dictionary<int, string> GetColorNames()
 	{
-		if (colorNameMapping == null)
-		{
-			colorNameMapping = new Dictionary<int, string>();
-			for (int i = 0; i <= 35; i++)
-				colorNameMapping[i] = LanguageManager.GetColorName(i);
-		}
-		return colorNameMapping;
+		return CosmeticFeatures.GetPaletteNames();
 	}
 
 	private int previousItemCount;
@@ -590,6 +584,10 @@ public class Hax2 : MonoBehaviour
 	private Vector2 levelAdjustScroll;
 
 	// ===== 敌人速度 fields =====
+	private bool selfShowLook = true;
+	private bool selfShowStats;
+	private bool selfShowExtra;
+
 	private float enemySpeedMult = 1.0f;
 
 	// ===== 升级强制同步 =====
@@ -598,7 +596,7 @@ public class Hax2 : MonoBehaviour
 
 	private void CheckIfHost()
 	{
-		isHost = !SemiFunc.IsMultiplayer() || PhotonNetwork.IsMasterClient;
+		isHost = NativeGameApi.IsHost();
 	}
 
 	private void UpdateTeleportOptions()
@@ -810,35 +808,42 @@ public class Hax2 : MonoBehaviour
 				}
 			}
 		}
-		if ((Object)(object)RunManager.instance != (Object)null && (Object)(object)RunManager.instance.levelCurrent != (Object)null && levelsToSearchItems.Contains(((Object)RunManager.instance.levelCurrent).name))
+		if ((Object)(object)RunManager.instance != (Object)null && (Object)(object)RunManager.instance.levelCurrent != (Object)null)
 		{
-			if (Time.time >= nextUpdateTime)
-			{
-				UpdateEnemyList();
-				UpdateItemList();
-				itemList = ItemTeleport.GetItemList();
-				nextUpdateTime = Time.time + 3f;
-			}
+			bool inPlay = true;
+			try { inPlay = !SemiFunc.IsMainMenu(); } catch { }
 			CosmeticFeatures.TickRainbow();
+			CosmeticFeatures.TickLiveRandom();
+			NativeGameApi.Tick();
 			hotkeyManager.CheckAndExecuteHotkeys();
 			if (showMenu)
 			{
 				TryLockCamera();
 			}
-			if (NoclipController.noclipActive)
+			if (inPlay)
 			{
-				NoclipController.UpdateMovement();
+				if (Time.time >= nextUpdateTime)
+				{
+					UpdateEnemyList();
+					UpdateItemList();
+					itemList = ItemTeleport.GetItemList();
+					nextUpdateTime = Time.time + 3f;
+				}
+				if (NoclipController.noclipActive)
+				{
+					NoclipController.UpdateMovement();
+				}
+				AutoPickup.UpdateAutoPickup();
+				AutoDodge.UpdateAutoDodge();
+				CreativeMode.UpdateCreativeFlight();
+				PlayerPossession.UpdatePossession();
+				Enemies.UpdateFreeze();
+				Enemies.UpdateSpeedModify();
+				PlayerAura.Update();
+				Aimbot.UpdateAimbot();
+				AutoPilot.UpdateAutoPilot();
+				ScaleSync.Update();
 			}
-			AutoPickup.UpdateAutoPickup();
-			AutoDodge.UpdateAutoDodge();
-			CreativeMode.UpdateCreativeFlight();
-			PlayerPossession.UpdatePossession();
-			Enemies.UpdateFreeze();
-			Enemies.UpdateSpeedModify();
-			PlayerAura.Update();
-			Aimbot.UpdateAimbot();
-			AutoPilot.UpdateAutoPilot();
-			ScaleSync.Update();
 		}
 		// 定期强制重新应用升级值（防止主机覆盖）
 		_upgradeEnforceTimer += Time.deltaTime;
@@ -853,24 +858,6 @@ public class Hax2 : MonoBehaviour
 					extraJumps);
 			}
 			catch { }
-		}
-		foreach (KeyValuePair<int, bool> playerRainbowState in playerRainbowStates)
-		{
-			int key = playerRainbowState.Key;
-			if (playerRainbowState.Value)
-			{
-				int colorIndex = rainbowRandom.Next(0, 36);
-				string targetName = colorTargetVisibleName;
-				if (!lastRainbowTimes.ContainsKey(key))
-				{
-					lastRainbowTimes[key] = Time.time;
-				}
-				if (Time.time - lastRainbowTimes[key] >= 0.1f)
-				{
-					ChatHijack.ChangePlayerColor(colorIndex, targetName, playerList, playerNames);
-					lastRainbowTimes[key] = Time.time;
-				}
-			}
 		}
 	}
 
@@ -1378,6 +1365,53 @@ public class Hax2 : MonoBehaviour
 		GUILayout.Space(6f);
 	}
 
+	private void DrawRoleBanner()
+	{
+		GUILayout.Label(L.T(NativeGameApi.RoleKey()), subtitleStyle != null ? subtitleStyle : labelStyle, Array.Empty<GUILayoutOption>());
+		if (NativeGameApi.IsGuest())
+		{
+			GUILayout.Label(L.T("role.guest_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
+	}
+
+	private bool HostOnlyButton(string label)
+	{
+		bool host = NativeGameApi.IsHost();
+		string text = host ? label : (label + " " + L.T("role.host_only_tag"));
+		bool prev = GUI.enabled;
+		GUI.enabled = prev && host;
+		bool clicked = GUILayout.Button(text, buttonStyle, Array.Empty<GUILayoutOption>());
+		GUI.enabled = prev;
+		return clicked && host;
+	}
+
+	private void HostOnlyToggle(string id, string label, ref bool value, Action onToggle = null)
+	{
+		bool host = NativeGameApi.IsHost();
+		bool prev = GUI.enabled;
+		GUI.enabled = prev && host;
+		ToggleLogic(id, host ? label : (label + " " + L.T("role.host_only_tag")), ref value, onToggle);
+		GUI.enabled = prev;
+	}
+
+	private bool DrawFoldout(string key, ref bool open)
+	{
+		string prefix = open ? "▼ " : "▶ ";
+		if (GUILayout.Button(prefix + L.T(key), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			open = !open;
+		}
+		return open;
+	}
+
+	private void DrawNativeStatus()
+	{
+		if (!string.IsNullOrEmpty(NativeGameApi.LastStatus))
+		{
+			GUILayout.Label(NativeGameApi.LastStatus, labelStyle, Array.Empty<GUILayoutOption>());
+		}
+	}
+
 	private bool ToggleLogic(string id, string label, ref bool value, Action onToggle = null)
 	{
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
@@ -1473,7 +1507,7 @@ public class Hax2 : MonoBehaviour
 		//IL_018f: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0072: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0077: Unknown result type (might be due to invalid IL or missing references)
-		if (currentTab == 9 && !wasInServerTab)
+		if (currentTab == 11 && !wasInServerTab)
 		{
 			if (!hasStoredPreviousSize)
 			{
@@ -1484,7 +1518,7 @@ public class Hax2 : MonoBehaviour
 			menuRect.height = 765f;
 			wasInServerTab = true;
 		}
-		else if (currentTab != 9 && wasInServerTab)
+		else if (currentTab != 11 && wasInServerTab)
 		{
 			if (hasStoredPreviousSize)
 			{
@@ -1513,6 +1547,7 @@ public class Hax2 : MonoBehaviour
 			};
 			subtitleStyle.normal.textColor = new Color(0.6f, 0.75f, 1f, 0.85f);
 		}
+		DrawRoleBanner();
 		GUILayout.Label(L.T("menu.qq_group"), subtitleStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Space(4f);
 
@@ -1559,34 +1594,34 @@ public class Hax2 : MonoBehaviour
 			DrawCombatTab();
 			break;
 		case 3:
-			DrawFunTab();
+			DrawItemsTab();
 			break;
 		case 4:
 			DrawEnemiesTab();
 			break;
 		case 5:
-			DrawItemsTab();
+			DrawTeleportTab();
 			break;
 		case 6:
-			DrawHotkeysTab();
+			DrawFunTab();
 			break;
 		case 7:
 			DrawRoomTab();
 			break;
 		case 8:
-			DrawConfigTab();
+			DrawAdminTab();
 			break;
 		case 9:
-			DrawServersTab();
+			DrawHotkeysTab();
 			break;
 		case 10:
-			DrawTeleportTab();
+			DrawConfigTab();
 			break;
 		case 11:
-			DrawMenuSettingsTab();
+			DrawServersTab();
 			break;
 		case 12:
-			DrawAdminTab();
+			DrawMenuSettingsTab();
 			break;
 		}
 		GUILayout.EndScrollView();
@@ -1600,7 +1635,6 @@ public class Hax2 : MonoBehaviour
 
 	private void DrawSelfTab()
 	{
-		//IL_0c4d: Unknown result type (might be due to invalid IL or missing references)
 		DrawSectionHeader(L.T("self.health"));
 		ToggleLogic("god_mode", L.T("self.god_mode"), ref godModeActive, () => PlayerController.SetGodMode(godModeActive));
 		GUILayout.Space(5f);
@@ -1610,11 +1644,25 @@ public class Hax2 : MonoBehaviour
 		{
 			Players.ReviveSelf();
 		}
+		if (NativeGameApi.IsGuest())
+		{
+			GUILayout.Label(L.T("role.revive_guest"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
 		GUILayout.Space(10f);
 		DrawSectionHeader(L.T("self.movement"));
 		ToggleLogic("No_Clip", L.T("self.noclip"), ref NoclipController.noclipActive, NoclipController.ToggleNoclip);
 		GUILayout.Space(5f);
 		ToggleLogic("inf_stam", L.T("self.inf_stamina"), ref stamineState, PlayerController.MaxStamina);
+		GUILayout.Space(5f);
+		ToggleLogic("inf_battery", L.T("self.inf_battery"), ref unlimitedBatteryActive, delegate
+		{
+			if ((Object)(object)unlimitedBatteryComponent != (Object)null)
+			{
+				unlimitedBatteryComponent.unlimitedBatteryEnabled = unlimitedBatteryActive;
+			}
+			BatteryKeepAlive.ApplyDirectorFlag();
+		});
+		GUILayout.Label(L.T("self.inf_battery_hint"), labelStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Space(5f);
 		ToggleLogic("auto_dodge", L.T("self.auto_dodge") + " [传送]", ref AutoDodge.isAutoDodgeEnabled);
 		if (AutoDodge.isAutoDodgeEnabled)
@@ -1626,240 +1674,18 @@ public class Hax2 : MonoBehaviour
 			if (AutoDodge.dodgeCount > 0)
 				GUILayout.Label($"闪避次数: {AutoDodge.dodgeCount} | {AutoDodge.lastDodgeInfo}", labelStyle, Array.Empty<GUILayoutOption>());
 		}
-		GUILayout.Space(10f);
-		DrawSectionHeader(L.T("self.misc"));
-		ToggleLogic("rainbow_cosmetics", L.T("cos.rainbow"), ref CosmeticFeatures.RainbowMode);
 		GUILayout.Space(5f);
-		DrawSectionHeader(L.T("cos.header"));
-		if (GUILayout.Button(L.T("cos.unlock_all"), buttonStyle, Array.Empty<GUILayoutOption>()))
-		{
-			CosmeticFeatures.UnlockAll();
-		}
+		ToggleLogic("feather_fall", L.T("self.feather_fall"), ref NativeGameApi.FeatherFall, NativeGameApi.ApplyFeather);
 		GUILayout.Space(5f);
-		if (GUILayout.Button(L.T("cos.randomize"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		ToggleLogic("slow_walk", L.T("self.slow_walk"), ref NativeGameApi.SlowWalk, NativeGameApi.ApplySlowWalk);
+		GUILayout.Space(5f);
+		ToggleLogic("super_speed", L.T("self.super_speed"), ref NativeGameApi.SuperSpeed, NativeGameApi.ApplySuperSpeed);
+		if (NativeGameApi.SlowWalk && NativeGameApi.SuperSpeed)
 		{
-			CosmeticFeatures.RandomizeOutfit(randomizeColors: true);
+			GUILayout.Label(L.T("self.sprint_priority"), labelStyle, Array.Empty<GUILayoutOption>());
 		}
 		GUILayout.Space(5f);
-		GUILayout.Label(CosmeticFeatures.LastStatus, labelStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Space(5f);
-		DrawSectionHeader(L.T("self.debug_flags"));
-		bool debugEnergy = global::PlayerController.instance != null && global::PlayerController.instance.DebugEnergy;
-		ToggleLogic("debug_energy", L.T("self.debug_energy"), ref debugEnergy, delegate
-		{
-			if (global::PlayerController.instance != null) global::PlayerController.instance.DebugEnergy = debugEnergy;
-		});
-		GUILayout.Space(5f);
-		bool debugNoOvercharge = global::PlayerController.instance != null && global::PlayerController.instance.DebugDisableOvercharge;
-		ToggleLogic("debug_no_overcharge", L.T("self.debug_no_overcharge"), ref debugNoOvercharge, delegate
-		{
-			if (global::PlayerController.instance != null) global::PlayerController.instance.DebugDisableOvercharge = debugNoOvercharge;
-		});
-		GUILayout.Space(5f);
-		bool debugNoTumble = global::PlayerController.instance != null && global::PlayerController.instance.DebugNoTumble;
-		ToggleLogic("debug_no_tumble", L.T("self.debug_no_tumble"), ref debugNoTumble, delegate
-		{
-			if (global::PlayerController.instance != null) global::PlayerController.instance.DebugNoTumble = debugNoTumble;
-		});
-		GUILayout.Space(5f);
-		ToggleLogic("No_Fog", L.T("self.no_fog"), ref MiscFeatures.NoFogEnabled, MiscFeatures.ToggleNoFog);
-		GUILayout.Space(5f);
-		ToggleLogic("WaterMark_Toggle", L.T("self.watermark"), ref showWatermark);
-		GUILayout.Space(5f);
-		ToggleLogic("Grab_Guard", L.T("self.anti_grab"), ref debounce);
-		GUILayout.Space(5f);
-		if (GUILayout.Button(L.T("self.give_crown"), buttonStyle, Array.Empty<GUILayoutOption>()))
-		{
-			string localPlayerSteamID = PlayerController.GetLocalPlayerSteamID();
-			Object.FindObjectOfType<SessionManager>();
-			PhotonView component = ((Component)Object.FindObjectOfType<PunManager>()).GetComponent<PhotonView>();
-			if ((Object)(object)component != (Object)null)
-			{
-				component.RPC("CrownPlayerRPC", (RpcTarget)3, new object[1] { localPlayerSteamID });
-				Debug.Log((object)"Gave self crown!");
-			}
-			else
-			{
-				Debug.LogError((object)"PhotonView not found on PunManager GameObject!");
-			}
-		}
-		ToggleLogic("no_weapon_recoil", L.T("self.no_recoil"), ref Patches.NoWeaponRecoil._isEnabledForConfig, delegate
-		{
-			ConfigManager.SaveToggle("no_weapon_recoil", Patches.NoWeaponRecoil._isEnabledForConfig);
-			PlayerPrefs.Save();
-			Debug.Log((object)$"[Self Tab Toggle] Set No Recoil Enabled to: {Patches.NoWeaponRecoil._isEnabledForConfig}");
-		});
-		GUILayout.Space(10f);
-		ToggleLogic("no_weapon_cooldown", L.T("self.no_cooldown"), ref ConfigManager.NoWeaponCooldownEnabled, delegate
-		{
-			ConfigManager.SaveToggle("no_weapon_cooldown", ConfigManager.NoWeaponCooldownEnabled);
-			PlayerPrefs.Save();
-			Debug.Log((object)$"[GUI Toggle] Set No Cooldown Enabled to: {ConfigManager.NoWeaponCooldownEnabled}");
-		});
-		GUILayout.Space(10f);
-		GUILayout.Label(L.T("self.spread_fmt", ConfigManager.CurrentSpreadMultiplier, ((ConfigManager.CurrentSpreadMultiplier <= 0.01f) ? L.T("self.spread_none") : (Mathf.Approximately(ConfigManager.CurrentSpreadMultiplier, 1f) ? L.T("self.spread_normal") : $"{ConfigManager.CurrentSpreadMultiplier * 100f:F0}%"))), labelStyle, Array.Empty<GUILayoutOption>());
-		float num = GUILayout.HorizontalSlider(ConfigManager.CurrentSpreadMultiplier, 0f, 2f, Array.Empty<GUILayoutOption>());
-		if (num != ConfigManager.CurrentSpreadMultiplier)
-		{
-			ConfigManager.CurrentSpreadMultiplier = num;
-			ConfigManager.SaveFloat("weapon_spread_multiplier", num);
-			PlayerPrefs.Save();
-			Debug.Log((object)$"[GUI Slider] Set Spread Multiplier to: {num}");
-		}
-		grabThroughWallsEnabled = ToggleLogic("grab_through_walls", L.T("self.grab_walls"), ref grabThroughWallsEnabled, delegate
-		{
-			Patches.ToggleGrabThroughWalls(grabThroughWallsEnabled);
-			ConfigManager.SaveToggle("grab_through_walls", grabThroughWallsEnabled);
-			PlayerPrefs.Save();
-		});
-		GUILayout.Space(10f);
-		DrawSectionHeader(L.T("self.stats"));
-		GUILayout.Label(L.T("self.strength_fmt", Mathf.RoundToInt(sliderValueStrength)), labelStyle, Array.Empty<GUILayoutOption>());
-		sliderValueStrength = GUILayout.HorizontalSlider(sliderValueStrength, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-		if (sliderValueStrength != oldSliderValueStrength)
-		{
-			int num2 = Mathf.RoundToInt(sliderValueStrength);
-			string localPlayerSteamID2 = PlayerController.GetLocalPlayerSteamID();
-			PhotonView component2 = ((Component)Object.FindObjectOfType<PunManager>()).GetComponent<PhotonView>();
-			if ((Object)(object)component2 != (Object)null)
-			{
-				component2.RPC("UpgradePlayerGrabStrengthRPC", (RpcTarget)3, new object[2] { localPlayerSteamID2, num2 });
-			}
-			else
-			{
-				Debug.LogError((object)"PhotonView not found on PunManager GameObject!");
-			}
-			oldSliderValueStrength = sliderValueStrength;
-		}
-		GUILayout.Label(L.T("self.throw_fmt", Mathf.RoundToInt(throwStrength)), labelStyle, Array.Empty<GUILayoutOption>());
-		throwStrength = GUILayout.HorizontalSlider(throwStrength, 0f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-		if (throwStrength != OldthrowStrength)
-		{
-			int num3 = Mathf.RoundToInt(throwStrength);
-			string localPlayerSteamID3 = PlayerController.GetLocalPlayerSteamID();
-			PhotonView component3 = ((Component)Object.FindObjectOfType<PunManager>()).GetComponent<PhotonView>();
-			if ((Object)(object)component3 != (Object)null)
-			{
-				component3.RPC("UpgradePlayerThrowStrengthRPC", (RpcTarget)3, new object[2] { localPlayerSteamID3, num3 });
-			}
-			else
-			{
-				Debug.LogError((object)"PhotonView not found on PunManager GameObject!");
-			}
-			OldthrowStrength = throwStrength;
-		}
-		GUILayout.Label(L.T("self.speed_fmt", Mathf.RoundToInt(sliderValue)), labelStyle, Array.Empty<GUILayoutOption>());
-		sliderValue = GUILayout.HorizontalSlider(sliderValue, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-		if (sliderValue != oldSliderValue)
-		{
-			int num4 = Mathf.RoundToInt(sliderValue);
-			string localPlayerSteamID4 = PlayerController.GetLocalPlayerSteamID();
-			PhotonView component4 = ((Component)Object.FindObjectOfType<PunManager>()).GetComponent<PhotonView>();
-			if ((Object)(object)component4 != (Object)null)
-			{
-				component4.RPC("UpgradePlayerSprintSpeedRPC", (RpcTarget)3, new object[2] { localPlayerSteamID4, num4 });
-			}
-			else
-			{
-				Debug.LogError((object)"PhotonView not found on PunManager GameObject!");
-			}
-			oldSliderValue = sliderValue;
-		}
-		GUILayout.Label(L.T("self.grab_range_fmt", Mathf.RoundToInt(grabRange)), labelStyle, Array.Empty<GUILayoutOption>());
-		grabRange = GUILayout.HorizontalSlider(grabRange, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-		if (grabRange != OldgrabRange)
-		{
-			int num5 = Mathf.RoundToInt(grabRange);
-			string localPlayerSteamID5 = PlayerController.GetLocalPlayerSteamID();
-			PhotonView component5 = ((Component)Object.FindObjectOfType<PunManager>()).GetComponent<PhotonView>();
-			if ((Object)(object)component5 != (Object)null)
-			{
-				component5.RPC("UpgradePlayerGrabRangeRPC", (RpcTarget)3, new object[2] { localPlayerSteamID5, num5 });
-			}
-			else
-			{
-				Debug.LogError((object)"PhotonView not found on PunManager GameObject!");
-			}
-			OldgrabRange = grabRange;
-		}
-		GUILayout.Label(L.T("self.stam_delay_fmt", Mathf.RoundToInt(staminaRechargeDelay)), labelStyle, Array.Empty<GUILayoutOption>());
-		staminaRechargeDelay = GUILayout.HorizontalSlider(staminaRechargeDelay, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-		if (staminaRechargeDelay != oldStaminaRechargeDelay)
-		{
-			oldStaminaRechargeDelay = staminaRechargeDelay;
-			Debug.Log((object)("Stamina Recharge Delay to: " + staminaRechargeDelay));
-		}
-		GUILayout.Label(L.T("self.stam_rate_fmt", Mathf.RoundToInt(staminaRechargeRate)), labelStyle, Array.Empty<GUILayoutOption>());
-		staminaRechargeRate = GUILayout.HorizontalSlider(staminaRechargeRate, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-		if (staminaRechargeDelay != oldStaminaRechargeDelay || staminaRechargeRate != oldStaminaRechargeRate)
-		{
-			PlayerController.DecreaseStaminaRechargeDelay(staminaRechargeDelay, staminaRechargeRate);
-			Debug.Log((object)$"Stamina recharge updated: Delay={staminaRechargeDelay}x, Rate={staminaRechargeRate}x");
-			oldStaminaRechargeDelay = staminaRechargeDelay;
-			oldStaminaRechargeRate = staminaRechargeRate;
-		}
-		GUILayout.Label(L.T("self.extra_jump_fmt", Mathf.RoundToInt((float)extraJumps)), labelStyle, Array.Empty<GUILayoutOption>());
-		extraJumps = (int)GUILayout.HorizontalSlider((float)extraJumps, 0f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-		if ((float)extraJumps != OldextraJumps)
-		{
-			int num6 = Mathf.RoundToInt((float)extraJumps);
-			string localPlayerSteamID6 = PlayerController.GetLocalPlayerSteamID();
-			PhotonView component6 = ((Component)Object.FindObjectOfType<PunManager>()).GetComponent<PhotonView>();
-			if ((Object)(object)component6 != (Object)null)
-			{
-				component6.RPC("UpgradePlayerExtraJumpRPC", (RpcTarget)3, new object[2] { localPlayerSteamID6, num6 });
-			}
-			else
-			{
-				Debug.LogError((object)"PhotonView not found on PunManager GameObject!");
-			}
-			OldextraJumps = extraJumps;
-		}
-		GUILayout.Label(L.T("self.tumble_fmt", Mathf.RoundToInt(tumbleLaunch)), labelStyle, Array.Empty<GUILayoutOption>());
-		tumbleLaunch = (int)GUILayout.HorizontalSlider(tumbleLaunch, 0f, 20f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-		if (tumbleLaunch != OldtumbleLaunch)
-		{
-			int num7 = Mathf.RoundToInt(tumbleLaunch);
-			string localPlayerSteamID7 = PlayerController.GetLocalPlayerSteamID();
-			PhotonView component7 = ((Component)Object.FindObjectOfType<PunManager>()).GetComponent<PhotonView>();
-			if ((Object)(object)component7 != (Object)null)
-			{
-				component7.RPC("UpgradePlayerTumbleLaunchRPC", (RpcTarget)3, new object[2] { localPlayerSteamID7, num7 });
-			}
-			else
-			{
-				Debug.LogError((object)"PhotonView not found on PunManager GameObject!");
-			}
-			OldtumbleLaunch = tumbleLaunch;
-		}
-
-		// ===================== 一键全升级 =====================
-		GUILayout.Space(10f);
-		if (GUILayout.Button(L.T("self.max_all_upgrades"), buttonStyle, Array.Empty<GUILayoutOption>()))
-		{
-			UpgradeHelper.MaxAllUpgrades();
-		}
-
-		// ===================== 游戏速度 =====================
-		GUILayout.Label(L.T("self.game_speed_fmt", Time.timeScale.ToString("F1")), labelStyle, Array.Empty<GUILayoutOption>());
-		float newTimeScale = GUILayout.HorizontalSlider(Time.timeScale, 0.1f, 5f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-		if (Mathf.Abs(newTimeScale - Time.timeScale) > 0.01f)
-		{
-			Time.timeScale = newTimeScale;
-		}
-		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button("0.5x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 0.5f;
-		if (GUILayout.Button("1x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 1f;
-		if (GUILayout.Button("2x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 2f;
-		if (GUILayout.Button("3x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 3f;
-		GUILayout.EndHorizontal();
-
-		// ===================== 幽灵模式 =====================
-		GUILayout.Space(5f);
-		ToggleLogic("stealth_mode", "👻 " + L.T("self.stealth_mode"), ref StealthMode.isEnabled, StealthMode.Apply);
-		if (StealthMode.isEnabled && !string.IsNullOrEmpty(StealthMode.statusMessage))
-			GUILayout.Label(StealthMode.statusMessage, labelStyle, Array.Empty<GUILayoutOption>());
-
+		ToggleLogic("no_death_pit", L.T("self.no_death_pit"), ref NativeGameApi.NoDeathPit);
 		GUILayout.Label(L.T("self.jump_fmt", Mathf.RoundToInt(jumpForce)), labelStyle, Array.Empty<GUILayoutOption>());
 		jumpForce = GUILayout.HorizontalSlider(jumpForce, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		if (jumpForce != OldjumpForce)
@@ -1895,83 +1721,279 @@ public class Hax2 : MonoBehaviour
 			PlayerController.SetSlideDecay(slideDecay);
 			OldslideDecay = slideDecay;
 		}
-		GUILayout.Label(L.T("self.flashlight_fmt", Mathf.RoundToInt(flashlightIntensity)), labelStyle, Array.Empty<GUILayoutOption>());
-		flashlightIntensity = GUILayout.HorizontalSlider(flashlightIntensity, 1f, 20f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-		if (flashlightIntensity != OldflashlightIntensity)
+		GUILayout.Space(10f);
+		DrawSectionHeader(L.T("self.grab_guns"));
+		ToggleLogic("Grab_Guard", L.T("self.anti_grab"), ref debounce);
+		GUILayout.Space(5f);
+		grabThroughWallsEnabled = ToggleLogic("grab_through_walls", L.T("self.grab_walls"), ref grabThroughWallsEnabled, delegate
 		{
-			PlayerController.SetFlashlightIntensity(flashlightIntensity);
-			OldflashlightIntensity = flashlightIntensity;
+			Patches.ToggleGrabThroughWalls(grabThroughWallsEnabled);
+			ConfigManager.SaveToggle("grab_through_walls", grabThroughWallsEnabled);
+			PlayerPrefs.Save();
+		});
+		GUILayout.Space(5f);
+		ToggleLogic("no_weapon_recoil", L.T("self.no_recoil"), ref Patches.NoWeaponRecoil._isEnabledForConfig, delegate
+		{
+			ConfigManager.SaveToggle("no_weapon_recoil", Patches.NoWeaponRecoil._isEnabledForConfig);
+			PlayerPrefs.Save();
+		});
+		GUILayout.Space(5f);
+		ToggleLogic("no_weapon_cooldown", L.T("self.no_cooldown"), ref ConfigManager.NoWeaponCooldownEnabled, delegate
+		{
+			ConfigManager.SaveToggle("no_weapon_cooldown", ConfigManager.NoWeaponCooldownEnabled);
+			PlayerPrefs.Save();
+		});
+		GUILayout.Space(5f);
+		ToggleLogic("instant_gun_buildup", L.T("self.instant_gun_buildup"), ref NativeGameApi.InstantGunBuildup);
+		GUILayout.Space(5f);
+		GUILayout.Label(L.T("self.spread_fmt", ConfigManager.CurrentSpreadMultiplier, ((ConfigManager.CurrentSpreadMultiplier <= 0.01f) ? L.T("self.spread_none") : (Mathf.Approximately(ConfigManager.CurrentSpreadMultiplier, 1f) ? L.T("self.spread_normal") : $"{ConfigManager.CurrentSpreadMultiplier * 100f:F0}%"))), labelStyle, Array.Empty<GUILayoutOption>());
+		float num = GUILayout.HorizontalSlider(ConfigManager.CurrentSpreadMultiplier, 0f, 2f, Array.Empty<GUILayoutOption>());
+		if (num != ConfigManager.CurrentSpreadMultiplier)
+		{
+			ConfigManager.CurrentSpreadMultiplier = num;
+			ConfigManager.SaveFloat("weapon_spread_multiplier", num);
+			PlayerPrefs.Save();
 		}
-		if ((Object)(object)FOVEditor.Instance == (Object)null)
+		GUILayout.Space(10f);
+		if (DrawFoldout("self.look", ref selfShowLook))
 		{
-			new GameObject("FOVEditor").AddComponent<FOVEditor>();
-		}
-		if ((Object)(object)FOVEditor.Instance != (Object)null)
-		{
-			float fOV = FOVEditor.Instance.GetFOV();
-			GUILayout.Label(L.T("self.fov_fmt", Mathf.RoundToInt(fOV)), labelStyle, Array.Empty<GUILayoutOption>());
-			float num8 = GUILayout.HorizontalSlider(fOV, 60f, 120f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-			if (num8 != fOV)
+			ToggleLogic("hide_grabber", L.T("self.hide_grabber"), ref NativeGameApi.HideGrabber, NativeGameApi.ApplyHideGrabber);
+			GUILayout.Space(5f);
+			ToggleLogic("unlimited_fps", L.T("self.unlimited_fps"), ref NativeGameApi.UnlimitedFps, NativeGameApi.ApplyUnlimitedFps);
+			if (GUILayout.Button(L.T("self.cinematic_hud"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
-				FOVEditor.Instance.SetFOV(num8);
-				fieldOfView = num8;
+				NativeGameApi.ToggleCinematicHud();
+			}
+			GUILayout.Space(5f);
+			ToggleLogic("hide_item_labels", L.T("self.hide_item_labels"), ref NativeGameApi.HideItemLabels, NativeGameApi.ApplyHideItemLabels);
+			GUILayout.Space(5f);
+			ToggleLogic("no_camera_shake", L.T("self.no_camera_shake"), ref NativeGameApi.NoCameraShake, NativeGameApi.ApplyNoCameraShake);
+			GUILayout.Space(5f);
+			ToggleLogic("No_Fog", L.T("self.no_fog"), ref MiscFeatures.NoFogEnabled, MiscFeatures.ToggleNoFog);
+			GUILayout.Space(5f);
+			ToggleLogic("WaterMark_Toggle", L.T("self.watermark"), ref showWatermark);
+			GUILayout.Space(5f);
+			ToggleLogic("head_energy", L.T("self.head_energy"), ref NativeGameApi.InfiniteHeadEnergy);
+			if ((Object)(object)FOVEditor.Instance == (Object)null)
+			{
+				new GameObject("FOVEditor").AddComponent<FOVEditor>();
+			}
+			if ((Object)(object)FOVEditor.Instance != (Object)null)
+			{
+				float fOV = FOVEditor.Instance.GetFOV();
+				GUILayout.Label(L.T("self.fov_fmt", Mathf.RoundToInt(fOV)), labelStyle, Array.Empty<GUILayoutOption>());
+				float num8 = GUILayout.HorizontalSlider(fOV, 60f, 120f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+				if (num8 != fOV)
+				{
+					FOVEditor.Instance.SetFOV(num8);
+					fieldOfView = num8;
+				}
+			}
+			else
+			{
+				GUILayout.Label(L.T("self.fov_loading"), labelStyle, Array.Empty<GUILayoutOption>());
+			}
+			GUILayout.Space(5f);
+			ToggleLogic("third_person", L.T("self.third_person"), ref ThirdPersonCamera.isEnabled,
+				() => { if (ThirdPersonCamera.isEnabled) ThirdPersonCamera.Enable(); else ThirdPersonCamera.Disable(); });
+			if (ThirdPersonCamera.isEnabled)
+			{
+				GUILayout.Label(L.T("self.tp_cam_dist_fmt", ThirdPersonCamera.cameraDistance), labelStyle, Array.Empty<GUILayoutOption>());
+				ThirdPersonCamera.cameraDistance = GUILayout.HorizontalSlider(ThirdPersonCamera.cameraDistance, 1f, 15f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+				GUILayout.Label(L.T("self.tp_cam_height_fmt", ThirdPersonCamera.cameraHeight), labelStyle, Array.Empty<GUILayoutOption>());
+				ThirdPersonCamera.cameraHeight = GUILayout.HorizontalSlider(ThirdPersonCamera.cameraHeight, 0f, 5f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 			}
 		}
-		else
-		{
-			GUILayout.Label(L.T("self.fov_loading"), labelStyle, Array.Empty<GUILayoutOption>());
-		}
-
-		// ===================== 第三人称相机 =====================
 		GUILayout.Space(10f);
-		ToggleLogic("third_person", L.T("self.third_person"), ref ThirdPersonCamera.isEnabled,
-			() => { if (ThirdPersonCamera.isEnabled) ThirdPersonCamera.Enable(); else ThirdPersonCamera.Disable(); });
-		if (ThirdPersonCamera.isEnabled)
+		DrawSectionHeader(L.T("cos.header"));
+		ToggleLogic("rainbow_cosmetics", L.T("cos.rainbow"), ref CosmeticFeatures.RainbowMode);
+		if (CosmeticFeatures.RainbowMode)
 		{
-			GUILayout.Label(L.T("self.tp_cam_dist_fmt", ThirdPersonCamera.cameraDistance), labelStyle, Array.Empty<GUILayoutOption>());
-			ThirdPersonCamera.cameraDistance = GUILayout.HorizontalSlider(ThirdPersonCamera.cameraDistance, 1f, 15f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-			GUILayout.Label(L.T("self.tp_cam_height_fmt", ThirdPersonCamera.cameraHeight), labelStyle, Array.Empty<GUILayoutOption>());
-			ThirdPersonCamera.cameraHeight = GUILayout.HorizontalSlider(ThirdPersonCamera.cameraHeight, 0f, 5f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			GUILayout.Label(L.T("cos.rainbow_speed_fmt", CosmeticFeatures.RainbowSpeed), labelStyle, Array.Empty<GUILayoutOption>());
+			CosmeticFeatures.RainbowSpeed = GUILayout.HorizontalSlider(CosmeticFeatures.RainbowSpeed, 0.08f, 1.2f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			GUILayout.Label(L.T("cos.rainbow_hint"), labelStyle, Array.Empty<GUILayoutOption>());
 		}
-
-		// ===================== 创造模式 (内嵌到自身页) =====================
-		GUILayout.Space(15f);
-		DrawSectionHeader(L.T("creative.title"));
 		GUILayout.Space(5f);
-		GUILayout.Label(L.T("creative.desc"), labelStyle, Array.Empty<GUILayoutOption>());
-		GUILayout.Space(5f);
-		ToggleLogic("creative_mode", L.T("creative.toggle"), ref CreativeMode.isCreativeMode, CreativeMode.ToggleCreativeMode);
-		GUILayout.Space(5f);
-		if (CreativeMode.isCreativeMode)
+		if (GUILayout.Button(L.T("cos.unlock_all"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			GUILayout.Label(L.T("creative.status_on"), warningStyle, Array.Empty<GUILayoutOption>());
-			DrawSectionHeader(L.T("creative.controls"));
-			GUILayout.Label(L.T("creative.wasd"), labelStyle, Array.Empty<GUILayoutOption>());
-			GUILayout.Label(L.T("creative.shift"), labelStyle, Array.Empty<GUILayoutOption>());
+			CosmeticFeatures.UnlockAll();
 		}
-		else
+		GUILayout.Space(5f);
+		if (GUILayout.Button(L.T("cos.randomize"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			GUILayout.Label(L.T("creative.status_off"), labelStyle, Array.Empty<GUILayoutOption>());
+			CosmeticFeatures.RandomizeOutfit(randomizeColors: true);
 		}
-
-		// ===================== 反踢保护 (从杂项迁移) =====================
-		GUILayout.Space(15f);
-		DrawSectionHeader(L.T("misc.protection"));
-		ToggleLogic("anti_kick", L.T("misc.anti_kick"), ref antiKickEnabled, () => {
-			if (antiKickEnabled) AntiKick.Enable(); else AntiKick.Disable();
-		});
-
-		// ===================== 智能寻路 (从杂项迁移) =====================
+		GUILayout.Space(5f);
+		ToggleLogic("cos_live_random", L.T("cos.random_live"), ref CosmeticFeatures.LiveRandom);
+		if (CosmeticFeatures.LiveRandom)
+		{
+			GUILayout.Label(L.T("cos.random_interval", CosmeticFeatures.LiveRandomInterval), labelStyle, Array.Empty<GUILayoutOption>());
+			CosmeticFeatures.LiveRandomInterval = GUILayout.HorizontalSlider(CosmeticFeatures.LiveRandomInterval, 0.5f, 8f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			GUILayout.Label(L.T("cos.random_live_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		GUILayout.Space(5f);
+		if (GUILayout.Button(L.T("cos.add_tokens"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			CosmeticFeatures.AddTokens(8);
+		}
+		GUILayout.Space(5f);
+		GUILayout.Label(CosmeticFeatures.LastStatus, labelStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.Space(10f);
-		DrawSectionHeader(L.T("autopilot.title"));
-		if (GUILayout.Button(AutoPilot.isActive ? L.T("autopilot.stop") : L.T("autopilot.start"), 
-			AutoPilot.isActive ? tabSelectedStyle : buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (DrawFoldout("self.stats", ref selfShowStats))
 		{
-			AutoPilot.Toggle();
+			if (NativeGameApi.IsGuest())
+			{
+				GUILayout.Label(L.T("self.stats_guest"), labelStyle, Array.Empty<GUILayoutOption>());
+			}
+			GUILayout.Label(L.T("self.strength_fmt", Mathf.RoundToInt(sliderValueStrength)), labelStyle, Array.Empty<GUILayoutOption>());
+			sliderValueStrength = GUILayout.HorizontalSlider(sliderValueStrength, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if (sliderValueStrength != oldSliderValueStrength)
+			{
+				int num2 = Mathf.RoundToInt(sliderValueStrength);
+				UpgradeHelper.SetLocalLevel("playerUpgradeStrength", num2, (id, v) => PunManager.instance.UpgradePlayerGrabStrength(id, v));
+				oldSliderValueStrength = sliderValueStrength;
+			}
+			GUILayout.Label(L.T("self.throw_fmt", Mathf.RoundToInt(throwStrength)), labelStyle, Array.Empty<GUILayoutOption>());
+			throwStrength = GUILayout.HorizontalSlider(throwStrength, 0f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if (throwStrength != OldthrowStrength)
+			{
+				int num3 = Mathf.RoundToInt(throwStrength);
+				UpgradeHelper.SetLocalLevel("playerUpgradeThrow", num3, (id, v) => PunManager.instance.UpgradePlayerThrowStrength(id, v));
+				OldthrowStrength = throwStrength;
+			}
+			GUILayout.Label(L.T("self.speed_fmt", Mathf.RoundToInt(sliderValue)), labelStyle, Array.Empty<GUILayoutOption>());
+			sliderValue = GUILayout.HorizontalSlider(sliderValue, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if (sliderValue != oldSliderValue)
+			{
+				int num4 = Mathf.RoundToInt(sliderValue);
+				UpgradeHelper.SetLocalLevel("playerUpgradeSpeed", num4, (id, v) => PunManager.instance.UpgradePlayerSprintSpeed(id, v));
+				oldSliderValue = sliderValue;
+			}
+			GUILayout.Label(L.T("self.grab_range_fmt", Mathf.RoundToInt(grabRange)), labelStyle, Array.Empty<GUILayoutOption>());
+			grabRange = GUILayout.HorizontalSlider(grabRange, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if (grabRange != OldgrabRange)
+			{
+				int num5 = Mathf.RoundToInt(grabRange);
+				UpgradeHelper.SetLocalLevel("playerUpgradeRange", num5, (id, v) => PunManager.instance.UpgradePlayerGrabRange(id, v));
+				OldgrabRange = grabRange;
+			}
+			GUILayout.Label(L.T("self.stam_delay_fmt", Mathf.RoundToInt(staminaRechargeDelay)), labelStyle, Array.Empty<GUILayoutOption>());
+			staminaRechargeDelay = GUILayout.HorizontalSlider(staminaRechargeDelay, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if (staminaRechargeDelay != oldStaminaRechargeDelay)
+			{
+				oldStaminaRechargeDelay = staminaRechargeDelay;
+			}
+			GUILayout.Label(L.T("self.stam_rate_fmt", Mathf.RoundToInt(staminaRechargeRate)), labelStyle, Array.Empty<GUILayoutOption>());
+			staminaRechargeRate = GUILayout.HorizontalSlider(staminaRechargeRate, 1f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if (staminaRechargeDelay != oldStaminaRechargeDelay || staminaRechargeRate != oldStaminaRechargeRate)
+			{
+				PlayerController.DecreaseStaminaRechargeDelay(staminaRechargeDelay, staminaRechargeRate);
+				oldStaminaRechargeDelay = staminaRechargeDelay;
+				oldStaminaRechargeRate = staminaRechargeRate;
+			}
+			GUILayout.Label(L.T("self.extra_jump_fmt", Mathf.RoundToInt((float)extraJumps)), labelStyle, Array.Empty<GUILayoutOption>());
+			extraJumps = (int)GUILayout.HorizontalSlider((float)extraJumps, 0f, 30f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if ((float)extraJumps != OldextraJumps)
+			{
+				int num6 = Mathf.RoundToInt((float)extraJumps);
+				UpgradeHelper.SetLocalLevel("playerUpgradeExtraJump", num6, (id, v) => PunManager.instance.UpgradePlayerExtraJump(id, v));
+				OldextraJumps = extraJumps;
+			}
+			GUILayout.Label(L.T("self.tumble_fmt", Mathf.RoundToInt(tumbleLaunch)), labelStyle, Array.Empty<GUILayoutOption>());
+			tumbleLaunch = (int)GUILayout.HorizontalSlider(tumbleLaunch, 0f, 20f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if (tumbleLaunch != OldtumbleLaunch)
+			{
+				int num7 = Mathf.RoundToInt(tumbleLaunch);
+				UpgradeHelper.SetLocalLevel("playerUpgradeLaunch", num7, (id, v) => PunManager.instance.UpgradePlayerTumbleLaunch(id, v));
+				OldtumbleLaunch = tumbleLaunch;
+			}
+			GUILayout.Label(L.T("self.flashlight_fmt", Mathf.RoundToInt(flashlightIntensity)), labelStyle, Array.Empty<GUILayoutOption>());
+			flashlightIntensity = GUILayout.HorizontalSlider(flashlightIntensity, 1f, 20f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if (flashlightIntensity != OldflashlightIntensity)
+			{
+				PlayerController.SetFlashlightIntensity(flashlightIntensity);
+				OldflashlightIntensity = flashlightIntensity;
+			}
+			GUILayout.Space(10f);
+			if (GUILayout.Button(L.T("self.max_all_upgrades"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				UpgradeHelper.MaxAllUpgrades();
+			}
 		}
-		if (AutoPilot.isActive && !string.IsNullOrEmpty(AutoPilot.statusText))
+		GUILayout.Space(10f);
+		if (DrawFoldout("self.extra", ref selfShowExtra))
 		{
-			GUILayout.Label(AutoPilot.statusText, warningStyle, Array.Empty<GUILayoutOption>());
+			DrawSectionHeader(L.T("self.debug_flags"));
+			bool debugEnergy = global::PlayerController.instance != null && global::PlayerController.instance.DebugEnergy;
+			ToggleLogic("debug_energy", L.T("self.debug_energy"), ref debugEnergy, delegate
+			{
+				if (global::PlayerController.instance != null) global::PlayerController.instance.DebugEnergy = debugEnergy;
+			});
+			GUILayout.Space(5f);
+			bool debugNoOvercharge = global::PlayerController.instance != null && global::PlayerController.instance.DebugDisableOvercharge;
+			ToggleLogic("debug_no_overcharge", L.T("self.debug_no_overcharge"), ref debugNoOvercharge, delegate
+			{
+				if (global::PlayerController.instance != null) global::PlayerController.instance.DebugDisableOvercharge = debugNoOvercharge;
+			});
+			GUILayout.Space(5f);
+			bool debugNoTumble = global::PlayerController.instance != null && global::PlayerController.instance.DebugNoTumble;
+			ToggleLogic("debug_no_tumble", L.T("self.debug_no_tumble"), ref debugNoTumble, delegate
+			{
+				if (global::PlayerController.instance != null) global::PlayerController.instance.DebugNoTumble = debugNoTumble;
+			});
+			GUILayout.Space(5f);
+			GUILayout.Label(L.T("self.game_speed_fmt", Time.timeScale.ToString("F1")), labelStyle, Array.Empty<GUILayoutOption>());
+			float newTimeScale = GUILayout.HorizontalSlider(Time.timeScale, 0.1f, 5f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if (Mathf.Abs(newTimeScale - Time.timeScale) > 0.01f)
+			{
+				Time.timeScale = newTimeScale;
+			}
+			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+			if (GUILayout.Button("0.5x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 0.5f;
+			if (GUILayout.Button("1x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 1f;
+			if (GUILayout.Button("2x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 2f;
+			if (GUILayout.Button("3x", buttonStyle, Array.Empty<GUILayoutOption>())) Time.timeScale = 3f;
+			GUILayout.EndHorizontal();
+			GUILayout.Space(5f);
+			ToggleLogic("stealth_mode", "👻 " + L.T("self.stealth_mode"), ref StealthMode.isEnabled, StealthMode.Apply);
+			if (StealthMode.isEnabled && !string.IsNullOrEmpty(StealthMode.statusMessage))
+				GUILayout.Label(StealthMode.statusMessage, labelStyle, Array.Empty<GUILayoutOption>());
+			if (HostOnlyButton(L.T("self.give_crown")))
+			{
+				NativeGameApi.GiveCrown();
+			}
+			GUILayout.Space(10f);
+			DrawSectionHeader(L.T("creative.title"));
+			GUILayout.Label(L.T("creative.desc"), labelStyle, Array.Empty<GUILayoutOption>());
+			ToggleLogic("creative_mode", L.T("creative.toggle"), ref CreativeMode.isCreativeMode, CreativeMode.ToggleCreativeMode);
+			if (CreativeMode.isCreativeMode)
+			{
+				GUILayout.Label(L.T("creative.status_on"), warningStyle, Array.Empty<GUILayoutOption>());
+				DrawSectionHeader(L.T("creative.controls"));
+				GUILayout.Label(L.T("creative.wasd"), labelStyle, Array.Empty<GUILayoutOption>());
+				GUILayout.Label(L.T("creative.shift"), labelStyle, Array.Empty<GUILayoutOption>());
+			}
+			else
+			{
+				GUILayout.Label(L.T("creative.status_off"), labelStyle, Array.Empty<GUILayoutOption>());
+			}
+			GUILayout.Space(10f);
+			DrawSectionHeader(L.T("misc.protection"));
+			ToggleLogic("anti_kick", L.T("misc.anti_kick"), ref antiKickEnabled, () => {
+				if (antiKickEnabled) AntiKick.Enable(); else AntiKick.Disable();
+			});
+			GUILayout.Space(10f);
+			DrawSectionHeader(L.T("autopilot.title"));
+			if (GUILayout.Button(AutoPilot.isActive ? L.T("autopilot.stop") : L.T("autopilot.start"),
+				AutoPilot.isActive ? tabSelectedStyle : buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				AutoPilot.Toggle();
+			}
+			if (AutoPilot.isActive && !string.IsNullOrEmpty(AutoPilot.statusText))
+			{
+				GUILayout.Label(AutoPilot.statusText, warningStyle, Array.Empty<GUILayoutOption>());
+			}
+			DrawNativeStatus();
 		}
 	}
 
@@ -2144,17 +2166,16 @@ public class Hax2 : MonoBehaviour
 				selectedPlayerIndex = i;
 			}
 		}
-		GUILayout.Space(40f);
-		if (GUILayout.Button(L.T("combat.damage"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		GUILayout.Space(10f);
+		if (NativeGameApi.IsGuest())
+		{
+			GUILayout.Label(L.T("role.heal_ok"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		if (HostOnlyButton(L.T("combat.damage")))
 		{
 			if (selectedPlayerIndex >= 0 && selectedPlayerIndex < playerList.Count)
 			{
 				Players.DamagePlayer(playerList[selectedPlayerIndex], 1, playerNames[selectedPlayerIndex]);
-				Debug.Log((object)("Player " + playerNames[selectedPlayerIndex] + " damaged."));
-			}
-			else
-			{
-				Debug.Log((object)"No valid player selected to damage!");
 			}
 		}
 		if (GUILayout.Button(L.T("combat.heal"), buttonStyle, Array.Empty<GUILayoutOption>()))
@@ -2162,22 +2183,15 @@ public class Hax2 : MonoBehaviour
 			if (selectedPlayerIndex >= 0 && selectedPlayerIndex < playerList.Count)
 			{
 				Players.HealPlayer(playerList[selectedPlayerIndex], 50, playerNames[selectedPlayerIndex]);
-				Debug.Log((object)("Player " + playerNames[selectedPlayerIndex] + " healed."));
-			}
-			else
-			{
-				Debug.Log((object)"No valid player selected to heal!");
 			}
 		}
-		if (GUILayout.Button(L.T("combat.kill"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("combat.kill")))
 		{
 			Players.KillSelectedPlayer(selectedPlayerIndex, playerList, playerNames);
-			Debug.Log((object)("Player killed: " + playerNames[selectedPlayerIndex]));
 		}
 		if (GUILayout.Button(L.T("combat.revive"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Players.ReviveSelectedPlayer(selectedPlayerIndex, playerList, playerNames);
-			Debug.Log((object)("Player revived: " + playerNames[selectedPlayerIndex]));
 		}
 		if (GUILayout.Button(L.T("combat.heal_revive"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
@@ -2187,10 +2201,13 @@ public class Hax2 : MonoBehaviour
 				Players.HealRevivePlayer(playerList[selectedPlayerIndex], name);
 			}
 		}
-		if (GUILayout.Button(L.T("combat.tumble"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (NativeGameApi.IsGuest())
+		{
+			GUILayout.Label(L.T("role.revive_guest"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		if (HostOnlyButton(L.T("combat.tumble")))
 		{
 			Players.ForcePlayerTumble();
-			Debug.Log((object)("Player tumbled: " + playerNames[selectedPlayerIndex]));
 		}
 		if (GUILayout.Button(showTeleportUI ? L.T("combat.hide_tp") : L.T("combat.show_tp"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
@@ -2233,6 +2250,19 @@ public class Hax2 : MonoBehaviour
 			GUILayout.Label(L.T("combat.aimbot_range_fmt", Aimbot.maxDistance.ToString("F0")), labelStyle, Array.Empty<GUILayoutOption>());
 			Aimbot.maxDistance = GUILayout.HorizontalSlider(Aimbot.maxDistance, 10f, 200f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 		}
+		GUILayout.Space(10f);
+		HostOnlyToggle("bullet_track", L.T("combat.bullet_track"), ref BulletTrack.Enabled);
+		if (BulletTrack.Enabled)
+		{
+			GUILayout.Label(L.T("combat.bullet_track_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+			ToggleLogic("track_enemies", L.T("combat.track_enemies"), ref BulletTrack.TrackEnemies);
+			ToggleLogic("track_players", L.T("combat.track_players"), ref BulletTrack.TrackPlayers);
+			ToggleLogic("track_items", L.T("combat.track_items"), ref BulletTrack.TrackItems);
+			GUILayout.Label(L.T("combat.track_fov", Mathf.RoundToInt(BulletTrack.Fov)), labelStyle, Array.Empty<GUILayoutOption>());
+			BulletTrack.Fov = GUILayout.HorizontalSlider(BulletTrack.Fov, 4f, 45f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			GUILayout.Label(L.T("combat.track_range", Mathf.RoundToInt(BulletTrack.MaxDistance)), labelStyle, Array.Empty<GUILayoutOption>());
+			BulletTrack.MaxDistance = GUILayout.HorizontalSlider(BulletTrack.MaxDistance, 10f, 200f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+		}
 	}
 
 	private void DrawFunTab()
@@ -2240,7 +2270,34 @@ public class Hax2 : MonoBehaviour
 		UpdatePlayerList();
 		EnsureListStylesInitialized();
 
-		// ===================== 🌀 陀螺旋转 =====================
+		DrawSectionHeader(L.T("fun.toys"));
+		GUILayout.Label(L.T("fun.toys_desc"), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button(L.T("fun.bounce"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			NativeGameApi.Bounce();
+		}
+		if (GUILayout.Button(L.T("fun.antigrav"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			NativeGameApi.AntiGravBurst();
+		}
+		GUILayout.EndHorizontal();
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button(L.T("fun.self_tumble"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			NativeGameApi.SelfTumble();
+		}
+		if (GUILayout.Button(L.T("fun.light_item"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			NativeGameApi.LightHeldItem();
+		}
+		GUILayout.EndHorizontal();
+		if (GUILayout.Button(L.T("fun.greenscreen"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			NativeGameApi.ToggleGreenScreen();
+		}
+		DrawNativeStatus();
+
 		DrawSectionHeader(L.T("fun.title"));
 		GUILayout.Space(5f);
 		ToggleLogic("gyro_spin", L.T("fun.gyro_spin"), ref GyroSpin.isEnabled);
@@ -2404,7 +2461,7 @@ public class Hax2 : MonoBehaviour
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		if (GUILayout.Button(L.T("misc.spoof_color"), buttonStyle, Array.Empty<GUILayoutOption>()) && int.TryParse(colorIndexText, out var result) && GetColorNames().ContainsKey(result))
 		{
-			ChatHijack.ChangePlayerColor(result, colorTargetVisibleName, playerList, playerNames);
+			CosmeticFeatures.ApplyPaletteColor(result, sync: true);
 		}
 		if (GUILayout.Button(colorTargetVisibleName, buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
@@ -2415,19 +2472,7 @@ public class Hax2 : MonoBehaviour
 			showColorIndexDropdown = !showColorIndexDropdown;
 		}
 		GUILayout.EndHorizontal();
-		if (!playerRainbowStates.ContainsKey(selectedPlayerIndex))
-		{
-			playerRainbowStates[selectedPlayerIndex] = false;
-		}
-		bool rainbowState = playerRainbowStates[selectedPlayerIndex];
-		ToggleLogic("rainbow_spoof_" + selectedPlayerIndex, L.T("misc.rainbow"), ref rainbowState, delegate
-		{
-			if (rainbowState)
-			{
-				lastRainbowTimes[selectedPlayerIndex] = Time.time;
-			}
-		});
-		playerRainbowStates[selectedPlayerIndex] = rainbowState;
+		ToggleLogic("rainbow_spoof", L.T("misc.rainbow"), ref CosmeticFeatures.RainbowMode);
 		GUILayout.Space(10f);
 		if (colorDropdownVisible)
 		{
@@ -2608,32 +2653,13 @@ public class Hax2 : MonoBehaviour
 			if (cachedFilteredEnemySetups == null || cachedEnemySetupNames == null)
 			{
 				lastEnemyCacheTime = Time.time;
-				List<EnemySetup> list = new List<EnemySetup>();
-				// 通过反射调用EnemySpawner（当前游戏版本可能已移除该类型）
-				var enemySpawnerType = typeof(RunManager).Assembly.GetType("EnemySpawner");
-				if (enemySpawnerType != null)
-				{
-					var tryGetMethod = enemySpawnerType.GetMethod("TryGetEnemyLists", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-					if (tryGetMethod != null)
-					{
-						var args = new object[] { null, null, null };
-						bool gotLists = (bool)tryGetMethod.Invoke(null, args);
-						if (gotLists)
-						{
-							list.AddRange((List<EnemySetup>)args[0]);
-							list.AddRange((List<EnemySetup>)args[1]);
-							list.AddRange((List<EnemySetup>)args[2]);
-						}
-					}
-				}
-				// Fallback: 如果反射获取为空，使用 Resources 搜索所有 EnemySetup 资源
+				List<EnemySetup> list = NativeGameApi.GetEnemySetups();
 				if (list.Count == 0)
 				{
 					var allSetups = Resources.FindObjectsOfTypeAll<EnemySetup>();
 					if (allSetups != null && allSetups.Length > 0)
 					{
 						list.AddRange(allSetups);
-						Debug.Log("[Hax2] EnemySpawner fallback: found " + allSetups.Length + " EnemySetup via Resources");
 					}
 				}
 				cachedFilteredEnemySetups = new List<EnemySetup>();
@@ -2676,7 +2702,7 @@ public class Hax2 : MonoBehaviour
 			GUI.color = Color.white;
 			GUILayout.Space(40f);
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-			if (GUILayout.Button(L.T("enemies.spawn"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (HostOnlyButton(L.T("enemies.spawn")))
 			{
 				TrySpawnEnemy();
 			}
@@ -2700,39 +2726,43 @@ public class Hax2 : MonoBehaviour
 				GUILayout.EndScrollView();
 			}
 			GUILayout.Space(10f);
-			if (GUILayout.Button(L.T("enemies.kill"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (HostOnlyButton(L.T("enemies.kill")))
 			{
 				Enemies.KillSelectedEnemy(selectedEnemyIndex, enemyList, enemyNames);
 			}
-			if (GUILayout.Button(L.T("enemies.kill_all"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (HostOnlyButton(L.T("enemies.kill_all")))
 			{
 				Enemies.KillAllEnemies();
 			}
+			if (HostOnlyButton(L.T("enemies.despawn_all")))
+			{
+				NativeGameApi.DespawnAllEnemies();
+			}
 
-			// ===================== 冻结所有敌人 =====================
 			GUILayout.Space(5f);
-			if (GUILayout.Button(Enemies.freezeAllEnemies ? L.T("enemies.unfreeze") : L.T("enemies.freeze"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (HostOnlyButton(Enemies.freezeAllEnemies ? L.T("enemies.unfreeze") : L.T("enemies.freeze")))
 			{
 				if (Enemies.freezeAllEnemies) Enemies.UnfreezeAllEnemies();
 				else Enemies.FreezeAllEnemies();
 			}
 
-			// ===================== 禁用陷阱 =====================
-			if (GUILayout.Button(L.T("enemies.disable_traps"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (HostOnlyButton(L.T("enemies.disable_traps")))
 			{
 				int count = TrapDisabler.DisableAllTraps();
 				Debug.Log("[Hax2] Disabled " + count + " traps");
 			}
 
-			ToggleLogic("blind_enemies", L.T("enemies.blind"), ref blindEnemies, delegate
+			ToggleLogic("blind_enemies", L.T("enemies.blind") + (NativeGameApi.IsGuest() ? " " + L.T("role.local_only_tag") : ""), ref blindEnemies, delegate
 			{
-				//IL_0000: Unknown result type (might be due to invalid IL or missing references)
-				//IL_0006: Expected O, but got Unknown
 				Hashtable val2 = new Hashtable();
 				val2[(object)"isBlindEnabled"] = blindEnemies;
 				PhotonNetwork.LocalPlayer.SetCustomProperties(val2, (Hashtable)null, (WebFlags)null);
 				ConfigManager.SaveToggle("blind_enemies", blindEnemies);
+				NativeGameApi.SetNoAggro(blindEnemies);
 			});
+			ToggleLogic("easy_grab_enemies", L.T("enemies.easy_grab"), ref NativeGameApi.EasyGrabEnemies, NativeGameApi.ApplyDirectorFlags);
+			HostOnlyToggle("no_spawn_pause", L.T("enemies.no_spawn_pause"), ref NativeGameApi.NoEnemySpawnPause, NativeGameApi.ApplyDirectorFlags);
+			HostOnlyToggle("spawn_close", L.T("enemies.spawn_close"), ref NativeGameApi.SpawnClose, NativeGameApi.ApplyDirectorFlags);
 			if (GUILayout.Button(showEnemyTeleportUI ? L.T("enemies.hide_tp") : L.T("enemies.show_tp"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				showEnemyTeleportUI = !showEnemyTeleportUI;
@@ -2763,7 +2793,7 @@ public class Hax2 : MonoBehaviour
 					GUILayout.EndScrollView();
 				}
 				GUILayout.Space(10f);
-				if (GUILayout.Button(L.T("enemies.execute_tp"), buttonStyle, Array.Empty<GUILayoutOption>()))
+				if (HostOnlyButton(L.T("enemies.execute_tp")))
 				{
 					int num2 = enemyTeleportDestIndex;
 					if (num2 >= 0 && num2 < playerList.Count)
@@ -2907,12 +2937,16 @@ public class Hax2 : MonoBehaviour
 		{
 			ItemTeleport.TeleportAllItemsToMe();
 		}
+		if (NativeGameApi.IsGuest())
+		{
+			GUILayout.Label(L.T("role.guest_tp_items"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
 		GUILayout.Space(10f);
 		DrawSectionHeader(L.T("items.modify_value"));
 		int num2 = (int)Mathf.Pow(10f, itemValueSliderPos);
 		GUILayout.Label($"${num2:N0}", labelStyle, Array.Empty<GUILayoutOption>());
 		itemValueSliderPos = GUILayout.HorizontalSlider(itemValueSliderPos, 3f, 9f, Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button(L.T("items.apply_value"), buttonStyle, Array.Empty<GUILayoutOption>()) && selectedItemIndex >= 0 && selectedItemIndex < list.Count)
+		if (HostOnlyButton(L.T("items.apply_value")) && selectedItemIndex >= 0 && selectedItemIndex < list.Count)
 		{
 			ItemTeleport.SetItemValue(list[selectedItemIndex], num2);
 		}
@@ -2921,25 +2955,32 @@ public class Hax2 : MonoBehaviour
 		GUILayout.Space(10f);
 		DrawSectionHeader(L.T("items.inflate_title"));
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button(L.T("items.inflate_10x"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("items.inflate_10x")))
 		{
 			ItemInflater.MultiplyAll(10f);
 		}
-		if (GUILayout.Button(L.T("items.inflate_100x"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("items.inflate_100x")))
 		{
 			ItemInflater.MultiplyAll(100f);
 		}
-		if (GUILayout.Button(L.T("items.inflate_max"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("items.inflate_max")))
 		{
 			ItemInflater.InflateAll(99999f);
 		}
 		GUILayout.EndHorizontal();
 
-		// ===================== 复制手持物品 =====================
 		GUILayout.Space(5f);
 		if (GUILayout.Button(L.T("items.duplicate"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			ItemDuplicator.DuplicateHeldItem();
+		}
+		if (NativeGameApi.IsGuest())
+		{
+			GUILayout.Label(L.T("items.guest_spawn_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		if (GUILayout.Button(L.T("items.charge_held"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			NativeGameApi.ChargeHeldItem();
 		}
 
 		if (GUILayout.Button(showItemSpawner ? L.T("items.hide_spawner") : L.T("items.show_spawner"), buttonStyle, Array.Empty<GUILayoutOption>()))
@@ -2956,6 +2997,14 @@ public class Hax2 : MonoBehaviour
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 			GUILayout.Label(L.T("items.select_spawn"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(180f) });
 			itemSpawnSearch = GUILayout.TextField(itemSpawnSearch, textFieldStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
+			if (GUILayout.Button(L.T("items.refresh"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) }))
+			{
+				availableItemsList = NativeGameApi.GetItemNames();
+				if (availableItemsList.Count == 0)
+				{
+					availableItemsList = ItemSpawner.GetAvailableItems();
+				}
+			}
 			GUILayout.EndHorizontal();
 			List<string> list2 = (string.IsNullOrWhiteSpace(itemSpawnSearch) ? availableItemsList : availableItemsList.Where((string item) => item.ToLower().Contains(itemSpawnSearch.ToLower())).ToList());
 			itemSpawnerScroll = GUILayout.BeginScrollView(itemSpawnerScroll, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(150f) });
@@ -2983,7 +3032,7 @@ public class Hax2 : MonoBehaviour
 				GUILayout.Label($"Item Value: ${itemSpawnValue:n0}", labelStyle, Array.Empty<GUILayoutOption>());
 				float num4 = Mathf.Log10((float)itemSpawnValue / 1000f) / 6f;
 				float num5 = GUILayout.HorizontalSlider(num4, 0f, 1f, Array.Empty<GUILayoutOption>());
-				if (num5 != num4 && isHost)
+				if (num5 != num4)
 				{
 					itemSpawnValue = Mathf.Clamp((int)(Mathf.Pow(10f, num5 * 6f) * 1000f), 1000, 1000000000);
 				}
@@ -3006,7 +3055,7 @@ public class Hax2 : MonoBehaviour
 					}
 				}
 			}
-			if (GUILayout.Button(L.T("items.spawn_50"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (HostOnlyButton(L.T("items.spawn_50")))
 			{
 				ItemSpawner.SpawnSelectedItemMultiple(50, availableItemsList, selectedItemToSpawnIndex, itemSpawnValue);
 			}
@@ -3016,19 +3065,20 @@ public class Hax2 : MonoBehaviour
 		// ===================== 商店工具 =====================
 		GUILayout.Space(10f);
 		DrawSectionHeader(L.T("items.shop_section"));
-		if (GUILayout.Button(L.T("items.shop_free"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("items.shop_free")))
 		{
 			ShopHack.SetAllShopItemsFree();
 		}
+		ToggleLogic("cheap_shop", L.T("items.cheap_shop") + (NativeGameApi.IsGuest() ? " " + L.T("role.local_only_tag") : ""), ref NativeGameApi.CheapShop, NativeGameApi.ApplyCheapShop);
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		GUILayout.Label(L.T("items.money_amount", ((int)moneySpawnAmount).ToString()), labelStyle, new GUILayoutOption[] { GUILayout.Width(250f) });
 		moneySpawnAmount = GUILayout.HorizontalSlider(moneySpawnAmount, 1000f, 100000f, new GUILayoutOption[] { GUILayout.Width(200f) });
 		GUILayout.EndHorizontal();
-		if (GUILayout.Button(L.T("items.spawn_money"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("items.spawn_money")))
 		{
 			ShopHack.SpawnMoneyAtPlayer((int)moneySpawnAmount);
 		}
-		if (GUILayout.Button(L.T("items.add_money"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("items.add_money")))
 		{
 			ShopHack.AddMoney((int)moneySpawnAmount);
 		}
@@ -3164,24 +3214,31 @@ public class Hax2 : MonoBehaviour
 		// ===================== 强制夺取主机 =====================
 		DrawSectionHeader(L.T("room.force_host"));
 		GUILayout.Space(3f);
+		GUILayout.Label(ShadowHostMode.GetConnectionLabel(), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(ShadowHostMode.GetDiagnostics(), labelStyle, Array.Empty<GUILayoutOption>());
 		if (PhotonNetwork.InRoom)
 		{
 			Photon.Realtime.Player master = PhotonNetwork.MasterClient;
 			string masterName = (master != null) ? master.NickName : L.T("server.unknown");
-			bool iAmHost = PhotonNetwork.IsMasterClient;
+			bool iAmHost = ShadowHostMode.IsTrueMasterClient();
 			GUILayout.Label(L.T("room.current_host") + " " + masterName + (iAmHost ? " (★)" : ""), labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		GUILayout.Label(L.T("room.force_host_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		if (!string.IsNullOrEmpty(ForceHost.statusMessage))
+		{
+			GUILayout.Label(ForceHost.statusMessage, labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		GUILayout.Space(3f);
 
-			// 状态显示
-			if (!string.IsNullOrEmpty(ForceHost.statusMessage))
-			{
-				GUILayout.Label(ForceHost.statusMessage, labelStyle, Array.Empty<GUILayoutOption>());
-			}
-			GUILayout.Space(3f);
+		if (GUILayout.Button(L.T("room.reset_identity"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			ForceHost.ResetAuthorityState();
+			RpcInjector.ClearQueue();
+		}
 
-			// 禁用状态下不允许点击
-			bool disabled = ForceHost.IsProcessing;
-
-			// 全自动按钮
+		bool disabled = ForceHost.IsProcessing;
+		if (PhotonNetwork.InRoom)
+		{
 			if (GUILayout.Button(disabled ? L.T("room.forcing") : L.T("room.auto_force"), buttonStyle, Array.Empty<GUILayoutOption>()) && !disabled)
 			{
 				ForceHost.Instance.StartCoroutine(ForceHost.Instance.Method_AutoAll());
@@ -3216,90 +3273,81 @@ public class Hax2 : MonoBehaviour
 			}
 			GUILayout.EndHorizontal();
 		}
-		else
-		{
-			GUILayout.Label(L.T("room.not_in_room"), labelStyle, Array.Empty<GUILayoutOption>());
-		}
 		GUILayout.Space(15f);
 
 		// ===================== 权限利用工具 =====================
-		DrawSectionHeader("Authority Tools");
+		DrawSectionHeader(L.T("room.auth_tools"));
 		GUILayout.Space(3f);
+		ToggleLogic("shadow_host", "👻 " + L.T("room.shadow_host"), ref ShadowHostMode.isEnabled, ShadowHostMode.ApplyToggleSideEffects);
+		GUILayout.Label(L.T("room.shadow_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		if (!string.IsNullOrEmpty(ShadowHostMode.statusMessage))
+		{
+			GUILayout.Label(ShadowHostMode.statusMessage, labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		GUILayout.Space(3f);
+
 		if (PhotonNetwork.InRoom)
 		{
-			// ── Shadow Host ──
-			ToggleLogic("shadow_host", "👻 Shadow Host", ref ShadowHostMode.isEnabled);
-			if (ShadowHostMode.isEnabled || !string.IsNullOrEmpty(ShadowHostMode.statusMessage))
-			{
-				GUILayout.Label(ShadowHostMode.GetDiagnostics(), labelStyle, Array.Empty<GUILayoutOption>());
-			}
-			GUILayout.Space(3f);
-
-			// ── Ownership 统计 ──
 			var stats = AuthoritySpoofing.GetOwnershipStats();
-			GUILayout.Label($"PhotonView: {stats}", labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("room.pv_stats_fmt", stats.Total, stats.Mine, stats.Others), labelStyle, Array.Empty<GUILayoutOption>());
 
 			if (!string.IsNullOrEmpty(AuthoritySpoofing.statusMessage))
 				GUILayout.Label(AuthoritySpoofing.statusMessage, labelStyle, Array.Empty<GUILayoutOption>());
 
 			GUILayout.Space(3f);
 
-			// ── 批量夺权按钮 ──
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-			if (GUILayout.Button("夺取敌人", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("room.take_enemies"), buttonStyle, Array.Empty<GUILayoutOption>()))
 				AuthoritySpoofing.TakeOverEnemies();
-			if (GUILayout.Button("夺取物品", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("room.take_items"), buttonStyle, Array.Empty<GUILayoutOption>()))
 				AuthoritySpoofing.TakeOverItems();
 			GUILayout.EndHorizontal();
 
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-			if (GUILayout.Button("夺取全部", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("room.take_all"), buttonStyle, Array.Empty<GUILayoutOption>()))
 				AuthoritySpoofing.TakeOverAll();
-			if (GUILayout.Button("夺取玩家", buttonStyle, Array.Empty<GUILayoutOption>()))
-				AuthoritySpoofing.TakeOverPlayers();
+			if (GUILayout.Button(L.T("room.release_views"), buttonStyle, Array.Empty<GUILayoutOption>()))
+				AuthoritySpoofing.ReleaseAll();
 			GUILayout.EndHorizontal();
+
+			if (GUILayout.Button(L.T("room.take_players"), buttonStyle, Array.Empty<GUILayoutOption>()))
+				AuthoritySpoofing.TakeOverPlayers();
 
 			GUILayout.Space(5f);
 
-			// ── RPC 注入器 ──
-			DrawSectionHeader("RPC Injector");
+			DrawSectionHeader(L.T("room.rpc_injector"));
 			GUILayout.Space(3f);
 
 			if (!string.IsNullOrEmpty(RpcInjector.statusMessage))
 				GUILayout.Label(RpcInjector.statusMessage, labelStyle, Array.Empty<GUILayoutOption>());
 
-			if (GUILayout.Button("扫描游戏 RPC", buttonStyle, Array.Empty<GUILayoutOption>()))
+			if (GUILayout.Button(L.T("room.scan_rpc"), buttonStyle, Array.Empty<GUILayoutOption>()))
 				RpcInjector.ScanAllRPCs(true);
 
 			var hvRpcs = RpcInjector.GetAvailableHighValueRPCs();
 			if (hvRpcs.Count > 0)
 			{
-				GUILayout.Label($"可用高价值 RPC: {hvRpcs.Count}", labelStyle, Array.Empty<GUILayoutOption>());
+				GUILayout.Label(L.T("room.hv_rpc_fmt", hvRpcs.Count), labelStyle, Array.Empty<GUILayoutOption>());
 
 				GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-				if (GUILayout.Button("激活提取点", buttonStyle, Array.Empty<GUILayoutOption>()))
+				if (GUILayout.Button(L.T("room.activate_extract"), buttonStyle, Array.Empty<GUILayoutOption>()))
 					RpcInjector.ActivateExtractionPoint();
-				if (GUILayout.Button("设置金钱 99999", buttonStyle, Array.Empty<GUILayoutOption>()))
+				if (GUILayout.Button(L.T("room.set_money"), buttonStyle, Array.Empty<GUILayoutOption>()))
 					RpcInjector.SetDollarValue(99999);
 				GUILayout.EndHorizontal();
 			}
 
-			// ── RPC 队列状态 ──
 			if (RpcInjector.QueuedCount > 0)
 			{
 				GUILayout.Space(3f);
-				GUILayout.Label($"RPC 队列: {RpcInjector.QueuedCount} 个待执行", labelStyle, Array.Empty<GUILayoutOption>());
+				GUILayout.Label(L.T("room.rpc_queue_fmt", RpcInjector.QueuedCount), labelStyle, Array.Empty<GUILayoutOption>());
 				GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-				if (GUILayout.Button("立即执行队列", buttonStyle, Array.Empty<GUILayoutOption>()))
+				if (GUILayout.Button(L.T("room.flush_queue"), buttonStyle, Array.Empty<GUILayoutOption>()))
 					RpcInjector.FlushRpcQueue();
-				if (GUILayout.Button("清空队列", buttonStyle, Array.Empty<GUILayoutOption>()))
+				if (GUILayout.Button(L.T("room.clear_queue"), buttonStyle, Array.Empty<GUILayoutOption>()))
 					RpcInjector.ClearQueue();
 				GUILayout.EndHorizontal();
 			}
-		}
-		else
-		{
-			GUILayout.Label(L.T("room.not_in_room"), labelStyle, Array.Empty<GUILayoutOption>());
 		}
 		GUILayout.Space(15f);
 
@@ -3308,7 +3356,11 @@ public class Hax2 : MonoBehaviour
 		GUILayout.Space(5f);
 		if (GUILayout.Button(L.T("misc.activate_extraction"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			MiscFeatures.ForceActivateAllExtractionPoints();
+			NativeGameApi.RequestActivateExtraction();
+		}
+		if (NativeGameApi.IsGuest())
+		{
+			GUILayout.Label(L.T("role.guest_extract"), labelStyle, Array.Empty<GUILayoutOption>());
 		}
 		GUILayout.Space(5f);
 		DrawSectionHeader(L.T("misc.map_tweaks"));
@@ -3320,42 +3372,84 @@ public class Hax2 : MonoBehaviour
 		{
 			MapTools.DiscoveryMapValuables();
 		}
+		if (GUILayout.Button(L.T("misc.reveal_map"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			NativeGameApi.RevealMap();
+		}
 		GUILayout.Space(5f);
 		DrawSectionHeader(L.T("misc.round_tools"));
-		if (GUILayout.Button(L.T("misc.zero_haul"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("misc.zero_haul")))
 		{
 			HaulGoalZero.ZeroHaulGoal();
+		}
+		HostOnlyToggle("low_haul", L.T("room.low_haul"), ref NativeGameApi.LowHaul, NativeGameApi.ApplyLowHaul);
+		HostOnlyToggle("fill_valuables", L.T("room.fill_valuables"), ref NativeGameApi.FillValuables, NativeGameApi.ApplyFillValuables);
+		if (HostOnlyButton(L.T("room.unlock_extraction")))
+		{
+			NativeGameApi.UnlockExtractionPoints();
+		}
+		if (HostOnlyButton(L.T("room.extra_lives")))
+		{
+			NativeGameApi.SetRunLives(99);
 		}
 		if (!string.IsNullOrEmpty(HaulGoalZero.statusMessage))
 		{
 			GUILayout.Label(HaulGoalZero.statusMessage, labelStyle, Array.Empty<GUILayoutOption>());
 		}
-		if (GUILayout.Button(L.T("misc.auto_complete"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("misc.auto_complete")))
 		{
 			AutoCompleteRound.Execute();
 		}
 		GUILayout.Space(5f);
 		DrawSectionHeader(L.T("room.level_adjust"));
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button(L.T("room.complete_level"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("room.complete_level")))
 		{
 			LevelAdjust.CompleteLevel();
 		}
-		if (GUILayout.Button(L.T("room.go_shop"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("room.go_shop")))
 		{
 			LevelAdjust.GoShop();
 		}
 		GUILayout.EndHorizontal();
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button(L.T("room.go_lobby"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("room.go_lobby")))
 		{
 			LevelAdjust.GoLobby();
 		}
-		if (GUILayout.Button(L.T("room.go_main_menu"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("room.go_main_menu")))
 		{
 			LevelAdjust.GoMainMenu();
 		}
 		GUILayout.EndHorizontal();
+		GUILayout.Space(5f);
+		DrawSectionHeader(L.T("room.named_level"));
+		List<string> levelNames = NativeGameApi.GetLevelDisplayNames();
+		if (levelNames.Count > 0)
+		{
+			availableLevels = levelNames.ToArray();
+		}
+		if (GUILayout.Button((selectedLevelIndex >= 0 && selectedLevelIndex < availableLevels.Length) ? availableLevels[selectedLevelIndex] : L.T("room.pick_level"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			showLevelDropdown = !showLevelDropdown;
+		}
+		if (showLevelDropdown)
+		{
+			levelDropdownScroll = GUILayout.BeginScrollView(levelDropdownScroll, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(150f) });
+			for (int li = 0; li < availableLevels.Length; li++)
+			{
+				if (GUILayout.Button(availableLevels[li], buttonStyle, Array.Empty<GUILayoutOption>()))
+				{
+					selectedLevelIndex = li;
+					showLevelDropdown = false;
+				}
+			}
+			GUILayout.EndScrollView();
+		}
+		if (HostOnlyButton(L.T("room.go_named_level")) && selectedLevelIndex >= 0 && selectedLevelIndex < availableLevels.Length)
+		{
+			LevelAdjust.GoNamedLevel(availableLevels[selectedLevelIndex]);
+		}
 		if (!string.IsNullOrEmpty(LevelAdjust.statusMessage))
 		{
 			GUILayout.Label(LevelAdjust.statusMessage, warningStyle, Array.Empty<GUILayoutOption>());
@@ -3365,6 +3459,10 @@ public class Hax2 : MonoBehaviour
 
 		// ===================== 恶搞功能 =====================
 		DrawSectionHeader(L.T("room.trolling"));
+		if (NativeGameApi.IsGuest())
+		{
+			GUILayout.Label(L.T("trolling.rpc_dead_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
 		GUILayout.Space(5f);
 		DrawSectionHeader(L.T("room.select"));
 		for (int i = 0; i < playerNames.Count; i++)
@@ -3387,7 +3485,7 @@ public class Hax2 : MonoBehaviour
 			}
 		}
 		GUILayout.Space(40f);
-		if (GUILayout.Button(L.T("trolling.bubble"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("trolling.bubble")))
 		{
 			ToiletFun[] array = Object.FindObjectsOfType<ToiletFun>();
 			Cauldron[] array2 = Object.FindObjectsOfType<Cauldron>();
@@ -3403,7 +3501,7 @@ public class Hax2 : MonoBehaviour
 			}
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button(L.T("trolling.clown"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("trolling.clown")))
 		{
 			ClownTrap[] array5 = Object.FindObjectsOfType<ClownTrap>();
 			for (int j = 0; j < array5.Length; j++)
@@ -3431,12 +3529,12 @@ public class Hax2 : MonoBehaviour
 			MiscFeatures.ForcePlayerMicVolume(-1);
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button(L.T("trolling.inf_tumble"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("trolling.inf_tumble")))
 		{
 			Players.ForcePlayerTumble(9999999f);
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button(L.T("trolling.inf_loading"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("trolling.inf_loading")))
 		{
 			Troll.InfiniteLoadingSelectedPlayer();
 		}
@@ -3446,12 +3544,12 @@ public class Hax2 : MonoBehaviour
 			Troll.SceneRecovery();
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button(L.T("trolling.crash_player"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("trolling.crash_player")))
 		{
 			MiscFeatures.CrashSelectedPlayerNew();
 		}
 		GUILayout.Space(5f);
-		if (GUILayout.Button(L.T("trolling.detonate"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		if (HostOnlyButton(L.T("trolling.detonate")))
 		{
 			Object.FindObjectOfType<ItemMine>();
 			typeof(ItemGrenade).GetMethod("TickStartRPC", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -4570,31 +4668,9 @@ public class Hax2 : MonoBehaviour
 
 	private void TrySpawnEnemy()
 	{
-		//IL_003a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_003f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0049: Unknown result type (might be due to invalid IL or missing references)
-		//IL_004e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0053: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00de: Unknown result type (might be due to invalid IL or missing references)
-
-		// ── 主机权限检查 ──────────────────────────────────
-		if (SemiFunc.IsMultiplayer() && !PhotonNetwork.IsMasterClient)
+		if (SemiFunc.IsMultiplayer() && !SemiFunc.IsMasterClient())
 		{
-			// 先尝试本地伪装为主机，使 PhotonNetwork.Instantiate 等调用通过
-			bool faked = ForceHost.Method_LocalMasterFake();
-			if (!faked || !PhotonNetwork.IsMasterClient)
-			{
-				Debug.LogWarning("[SpawnEnemy] 非主机，尝试自动夺取主机权限…");
-				ForceHost.Instance.StartCoroutine(ForceHost.Instance.Method_AutoAll());
-				ForceHost.statusMessage = "[SpawnEnemy] 正在尝试获取主机权限，请稍后重试";
-				return;
-			}
-		}
-
-		LevelGenerator val = Object.FindObjectOfType<LevelGenerator>();
-		if ((Object)(object)val == (Object)null)
-		{
-			Debug.Log((object)"LevelGenerator instance not found!");
+			Debug.LogWarning("[SpawnEnemy] host only — use the game's EnemyDirector spawn path");
 			return;
 		}
 		GameObject localPlayer = DebugCheats.GetLocalPlayer();
@@ -4617,64 +4693,8 @@ public class Hax2 : MonoBehaviour
 		result = Mathf.Clamp(result, 1, 10);
 		if (spawnEnemyIndex >= 0 && spawnEnemyIndex < cachedFilteredEnemySetups.Count)
 		{
-			var esType = typeof(RunManager).Assembly.GetType("EnemySpawner");
-			bool spawned = false;
-			for (int i = 0; i < result; i++)
-			{
-				if (esType != null)
-				{
-					// 尝试多种方法签名（游戏更新可能改变参数）
-					bool ok = false;
-					// 签名1: (LevelGenerator, EnemySetup, Vector3)
-					var m3 = esType.GetMethod("SpawnSpecificEnemy", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
-						null, new Type[] { typeof(LevelGenerator), typeof(EnemySetup), typeof(Vector3) }, null);
-					if (m3 != null)
-					{
-						try { m3.Invoke(null, new object[] { val, cachedFilteredEnemySetups[spawnEnemyIndex], position }); ok = true; }
-						catch (Exception ex) { Debug.LogWarning("[SpawnEnemy] 3-param failed: " + ex.InnerException?.Message); }
-					}
-					if (!ok)
-					{
-						// 签名2: (LevelGenerator, EnemySetup, Vector3, bool) — 新版可能有forced参数
-						var m4 = esType.GetMethod("SpawnSpecificEnemy", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
-							null, new Type[] { typeof(LevelGenerator), typeof(EnemySetup), typeof(Vector3), typeof(bool) }, null);
-						if (m4 != null)
-						{
-							try { m4.Invoke(null, new object[] { val, cachedFilteredEnemySetups[spawnEnemyIndex], position, true }); ok = true; }
-							catch (Exception ex) { Debug.LogWarning("[SpawnEnemy] 4-param failed: " + ex.InnerException?.Message); }
-						}
-					}
-					if (!ok)
-					{
-						// 签名3: 尝试任何名为SpawnSpecificEnemy的静态方法
-						var mAny = esType.GetMethod("SpawnSpecificEnemy", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-						if (mAny != null)
-						{
-							try
-							{
-								var pars = mAny.GetParameters();
-								object[] args;
-								if (pars.Length == 3) args = new object[] { val, cachedFilteredEnemySetups[spawnEnemyIndex], position };
-								else if (pars.Length == 4) args = new object[] { val, cachedFilteredEnemySetups[spawnEnemyIndex], position, true };
-								else args = new object[] { val, cachedFilteredEnemySetups[spawnEnemyIndex], position };
-								mAny.Invoke(null, args); ok = true;
-							}
-							catch (Exception ex) { Debug.LogWarning("[SpawnEnemy] Generic invoke failed: " + ex.InnerException?.Message); }
-						}
-						else
-						{
-							Debug.LogError("[SpawnEnemy] 未找到 EnemySpawner.SpawnSpecificEnemy 方法");
-						}
-					}
-					if (ok) spawned = true;
-				}
-				else
-				{
-					Debug.LogError("[SpawnEnemy] 未找到 EnemySpawner 类型");
-				}
-			}
-			if (spawned)
-				Debug.Log((object)$"Spawned {result}x {cachedEnemySetupNames[spawnEnemyIndex]}");
+			int spawned = NativeGameApi.SpawnEnemy(cachedFilteredEnemySetups[spawnEnemyIndex], position, result);
+			Debug.Log((object)$"Spawned {spawned}x {cachedEnemySetupNames[spawnEnemyIndex]} ({NativeGameApi.LastStatus})");
 		}
 		else
 		{

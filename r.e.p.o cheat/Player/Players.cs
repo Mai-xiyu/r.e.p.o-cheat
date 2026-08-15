@@ -29,60 +29,19 @@ internal static class Players
 
 	public static void DamagePlayer(object targetPlayer, int damageAmount, string playerName)
 	{
-		//IL_00e9: Unknown result type (might be due to invalid IL or missing references)
 		if (targetPlayer == null)
 		{
 			return;
 		}
 		try
 		{
-			FieldInfo field = targetPlayer.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field == null)
+			if (targetPlayer is PlayerAvatar avatar && avatar.playerHealth != null)
 			{
+				avatar.playerHealth.HurtOther(damageAmount, ((Component)avatar).transform.position, true);
 				return;
-			}
-			object value = field.GetValue(targetPlayer);
-			PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-			if ((Object)(object)val == (Object)null)
-			{
-				return;
-			}
-			FieldInfo field2 = targetPlayer.GetType().GetField("playerHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field2 == null)
-			{
-				return;
-			}
-			object value2 = field2.GetValue(targetPlayer);
-			if (value2 == null)
-			{
-				return;
-			}
-			MethodInfo method = value2.GetType().GetMethod("Hurt", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (method != null)
-			{
-				method.Invoke(value2, new object[3] { damageAmount, true, -1 });
-			}
-			if (!PhotonNetwork.IsConnected || !((Object)(object)val != (Object)null))
-			{
-				return;
-			}
-			GetPlayerMaxHealth(value2);
-			val.RPC("HurtOtherRPC", (RpcTarget)3, new object[4]
-			{
-				damageAmount,
-				Vector3.zero,
-				false,
-				-1
-			});
-			try
-			{
-				val.RPC("HurtRPC", (RpcTarget)3, new object[3] { damageAmount, true, -1 });
-			}
-			catch
-			{
 			}
 		}
-		catch (Exception)
+		catch
 		{
 		}
 	}
@@ -107,11 +66,7 @@ internal static class Players
 			// 游戏自己的复活+同步路径（Revive → ReviveRPC）
 			if (selectedPlayer is PlayerAvatar avatar)
 			{
-				avatar.Revive(false);
-				if (avatar.playerHealth != null)
-				{
-					avatar.playerHealth.HealOther(GetPlayerMaxHealth(avatar.playerHealth), effect: false);
-				}
+				ReviveAvatar(avatar);
 			}
 		}
 		catch (Exception)
@@ -271,11 +226,7 @@ internal static class Players
 				Debug.Log((object)"[ReviveSelf] 无法找到本地玩家");
 				return;
 			}
-			local.Revive(false);
-			if (local.playerHealth != null)
-			{
-				local.playerHealth.HealOther(GetPlayerMaxHealth(local.playerHealth), effect: false);
-			}
+			ReviveAvatar(local);
 			Debug.Log((object)"[ReviveSelf] 已复活自己");
 		}
 		catch (Exception ex)
@@ -297,17 +248,45 @@ internal static class Players
 			// 游戏自己的复活+治疗+同步路径
 			if (targetPlayer is PlayerAvatar avatar)
 			{
-				avatar.Revive(false);
-				if (avatar.playerHealth != null)
-				{
-					avatar.playerHealth.HealOther(GetPlayerMaxHealth(avatar.playerHealth), effect: false);
-				}
+				ReviveAvatar(avatar);
 				Debug.Log((object)("[HealRevive] 已治疗复活: " + playerName));
 			}
 		}
 		catch (Exception ex)
 		{
 			Debug.LogError((object)("[HealRevive] 出错: " + ex.Message));
+		}
+	}
+
+	private static void ReviveAvatar(PlayerAvatar avatar)
+	{
+		if (avatar == null)
+		{
+			return;
+		}
+		try
+		{
+			object head = typeof(PlayerAvatar).GetField("playerDeathHead", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(avatar);
+			if (head != null)
+			{
+				head.GetType().GetField("inExtractionPoint", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.SetValue(head, true);
+				head.GetType().GetMethod("Revive", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.Invoke(head, null);
+			}
+			if (NativeGameApi.IsHost())
+			{
+				avatar.Revive(false);
+			}
+			else
+			{
+				NativeGameApi.ReviveLocal(avatar);
+			}
+			if (avatar.playerHealth != null)
+			{
+				avatar.playerHealth.HealOther(GetPlayerMaxHealth(avatar.playerHealth), effect: false);
+			}
+		}
+		catch
+		{
 		}
 	}
 }

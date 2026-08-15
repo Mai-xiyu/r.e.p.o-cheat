@@ -386,15 +386,14 @@ public static class Teleport
 	}
 
 	/// <summary>
-	/// 游戏自己的传送 API：PlayerAvatar.Spawn（单人本地 / 多人 SpawnRPC 同步）。
-	/// 旧的 transform.position + 客户端直发 SpawnRPC 会被游戏 MasterOnly 守卫丢弃，已废弃。
+	/// 游戏自己的传送 API：PhysGrabObject.Teleport（非房主转发 SetPositionRPC 给主机）。
 	/// </summary>
 	private static void TeleportTo(Component target, Vector3 position)
 	{
 		PlayerAvatar avatar = target != null ? target.GetComponent<PlayerAvatar>() : null;
 		if (avatar != null)
 		{
-			avatar.Spawn(position, target.transform.rotation);
+			NativeGameApi.TeleportPlayer(avatar, position, target.transform.rotation);
 			return;
 		}
 		if (target != null)

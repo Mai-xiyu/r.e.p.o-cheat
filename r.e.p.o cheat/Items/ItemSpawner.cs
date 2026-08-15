@@ -23,6 +23,12 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 
 	public static List<string> GetAvailableItems()
 	{
+		List<string> fromGame = NativeGameApi.GetItemNames();
+		if (fromGame.Count > 0)
+		{
+			availableItems = fromGame;
+			return availableItems;
+		}
 		if (availableItems.Count == 0)
 		{
 			availableItems.Add("Item Cart Medium");
@@ -166,6 +172,10 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 		//IL_00af: Unknown result type (might be due to invalid IL or missing references)
 		try
 		{
+			if (value <= 0 && NativeGameApi.SpawnItemNative(itemName, position))
+			{
+				return;
+			}
 			bool flag = SemiFunc.IsMultiplayer();
 			if (flag && !PhotonNetwork.IsMasterClient)
 			{

@@ -75,6 +75,17 @@ public static class UpgradeHelper
 
     private static readonly Dictionary<string, FieldInfo> DictFields = new Dictionary<string, FieldInfo>();
 
+    /// <summary>把本地玩家某项升级设到目标等级（走 PunManager.UpgradePlayerX 差值 + UpdateStat 同步）。</summary>
+    public static void SetLocalLevel(string dictName, int target, Action<string, int> apply)
+    {
+        string steamID = PlayerController.GetLocalPlayerSteamID();
+        if (string.IsNullOrEmpty(steamID) || PunManager.instance == null)
+        {
+            return;
+        }
+        SetUpgrade(steamID, dictName, Mathf.Max(0, target), apply);
+    }
+
     /// <summary>幂等升级：先应用差值（立即生效），再用游戏自己的 UpdateStat 同步字典到所有客户端。</summary>
     private static void SetUpgrade(string steamID, string dictName, int target, Action<string, int> apply)
     {
@@ -89,12 +100,12 @@ public static class UpgradeHelper
             return;
         }
         int current = dict.TryGetValue(steamID, out int level) ? level : 0;
-        if (current >= target)
+        if (current == target)
         {
             return;
         }
         apply?.Invoke(steamID, target - current);
-        if (PunManager.instance != null)
+        if (PunManager.instance != null && NativeGameApi.IsHost())
         {
             PunManager.instance.UpdateStat(dictName, steamID, target);
         }
@@ -157,19 +168,15 @@ public static class UpgradeHelper
             if (localAvatar.physGrabber != null)
                 localAvatar.physGrabber.grabStrength = grabStrength;
 
-            // 速度 - 通过反射设置 PlayerController 内部的速度相关字段
+            // 速度滑条是升级层数（PunManager 对 SprintSpeed 做 +=），不能把 SprintSpeed
+            // 写成绝对值。每 8 秒写成 1 会冲掉商店加成，并和 Super Speed 的 OverrideSpeed 抢值，
+            // 再叠上慢走就无法起步疾跑。
             Type pcType = typeof(RunManager).Assembly.GetType("PlayerController");
             if (pcType != null)
             {
                 object pcInst = GameHelper.FindObjectOfType(pcType);
                 if (pcInst != null)
                 {
-                    // 尝试设置 sprintSpeed 相关字段
-                    var sprintField = pcType.GetField("SprintSpeed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                        ?? pcType.GetField("sprintSpeed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (sprintField != null && sprintField.FieldType == typeof(float))
-                        sprintField.SetValue(pcInst, (float)sprintSpeed);
-
                     // 尝试设置 extraJump 相关字段
                     var jumpField = pcType.GetField("ExtraJump", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                         ?? pcType.GetField("extraJump", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
@@ -303,6 +310,9 @@ public static class HaulGoalZero
     {
         try
         {
+            NativeGameApi.LowHaul = true;
+            NativeGameApi.ApplyLowHaul();
+
             RoundDirector instance = RoundDirector.instance;
             if (instance == null)
             {
@@ -748,59 +758,7 @@ public static class TrapDisabler
 {
     public static int DisableAllTraps()
     {
-        int count = 0;
-        try
-        {
-            // Known trap types
-            string[] trapTypeNames = { "ClownTrap", "TrapDoor", "TrapController",
-                "TrapBear", "TrapFloor", "TrapCeiling", "TrapSpike",
-                "Trap", "DoorController", "DoorLock" };
-
-            var assembly = typeof(RunManager).Assembly;
-
-            foreach (string typeName in trapTypeNames)
-            {
-                Type trapType = assembly.GetType(typeName);
-                if (trapType == null) continue;
-
-                var objects = UnityEngine.Object.FindObjectsOfType(trapType);
-                foreach (var obj in objects)
-                {
-                    try
-                    {
-                        if (obj is Component comp && comp.gameObject.activeInHierarchy)
-                        {
-                            comp.gameObject.SetActive(false);
-                            count++;
-                        }
-                    }
-                    catch { }
-                }
-            }
-
-            // Also search for any MonoBehaviour with "Trap" in name
-            var allBehaviours = UnityEngine.Object.FindObjectsOfType<MonoBehaviour>();
-            foreach (var mb in allBehaviours)
-            {
-                string typeName = mb.GetType().Name;
-                if (typeName.Contains("Trap") && mb.gameObject.activeInHierarchy)
-                {
-                    try
-                    {
-                        mb.gameObject.SetActive(false);
-                        count++;
-                    }
-                    catch { }
-                }
-            }
-
-            Debug.Log($"[TrapDisabler] Disabled {count} traps/doors");
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning("[TrapDisabler] Error: " + ex.Message);
-        }
-        return count;
+        return NativeGameApi.DisableAllTraps();
     }
 }
 
@@ -852,8 +810,7 @@ public static class TeamTeleport
                     Vector3 offset = new Vector3(UnityEngine.Random.Range(-1.5f, 1.5f), 0, UnityEngine.Random.Range(-1.5f, 1.5f));
                     Vector3 pos = targetPos + offset;
 
-                    // 游戏自己的传送 API（Spawn → SpawnRPC 同步；旧客户端直发 SpawnRPC 被 MasterOnly 守卫丢弃）
-                    avatar.Spawn(pos, ((Component)avatar).transform.rotation);
+                    NativeGameApi.TeleportPlayer(avatar, pos, ((Component)avatar).transform.rotation);
                     count++;
                 }
                 catch { }

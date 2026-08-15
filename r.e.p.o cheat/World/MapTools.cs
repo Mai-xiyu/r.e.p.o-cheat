@@ -1,4 +1,5 @@
 using System;
+using Photon.Pun;
 using UnityEngine;
 
 namespace r.e.p.o_cheat;
@@ -35,12 +36,22 @@ public static class MapTools
 
 	public static void DiscoveryMapValuables()
 	{
+		NativeGameApi.RevealMap();
 		foreach (object valuableObject in DebugCheats.valuableObjects)
 		{
 			ValuableObject val = (ValuableObject)((valuableObject is ValuableObject) ? valuableObject : null);
-			if ((Object)(object)val != (Object)null)
+			if ((Object)(object)val == (Object)null)
+			{
+				continue;
+			}
+			if (Map.Instance != null)
 			{
 				Map.Instance.AddValuable(val);
+			}
+			PhotonView view = ((Component)val).GetComponent<PhotonView>();
+			if ((Object)(object)view != (Object)null && SemiFunc.IsMultiplayer())
+			{
+				view.RPC("DiscoverRPC", RpcTarget.All);
 			}
 		}
 	}

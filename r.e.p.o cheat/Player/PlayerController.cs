@@ -43,6 +43,23 @@ internal class PlayerController
 
 	public static void SetGodMode(bool enable)
 	{
+		Hax2.godModeActive = enable;
+		try
+		{
+			PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+			if (local != null && local.playerHealth != null)
+			{
+				FieldInfo field = typeof(PlayerHealth).GetField("godMode", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				if (field != null)
+				{
+					field.SetValue(local.playerHealth, enable);
+					return;
+				}
+			}
+		}
+		catch
+		{
+		}
 		if (PlayerReflectionCache.PlayerHealthInstance == null)
 		{
 			PlayerReflectionCache.CachePlayerControllerData();
@@ -53,7 +70,6 @@ internal class PlayerController
 			if (field != null)
 			{
 				field.SetValue(PlayerReflectionCache.PlayerHealthInstance, enable);
-				Hax2.godModeActive = enable;
 			}
 		}
 	}
@@ -66,47 +82,80 @@ internal class PlayerController
 		}
 		if (PlayerReflectionCache.PlayerControllerInstance != null)
 		{
-			FieldInfo field = PlayerReflectionCache.PlayerControllerType.GetField("SprintSpeed", BindingFlags.Instance | BindingFlags.Public);
+			object inst = PlayerReflectionCache.PlayerControllerInstance;
+			Type type = PlayerReflectionCache.PlayerControllerType;
+			FieldInfo field = type.GetField("SprintSpeed", BindingFlags.Instance | BindingFlags.Public);
 			if (field != null)
 			{
-				field.SetValue(PlayerReflectionCache.PlayerControllerInstance, value);
+				field.SetValue(inst, value);
+			}
+			FieldInfo original = type.GetField("playerOriginalSprintSpeed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			if (original != null)
+			{
+				original.SetValue(inst, value);
 			}
 		}
 	}
 
 	public static void MaxHealth()
 	{
-		if (PlayerReflectionCache.PlayerHealthInstance == null)
+		try
 		{
-			PlayerReflectionCache.CachePlayerControllerData();
-		}
-		if (PlayerReflectionCache.PlayerHealthInstance == null)
-		{
-			return;
-		}
-		MethodInfo method = PlayerReflectionCache.PlayerHealthInstance.GetType().GetMethod("UpdateHealthRPC", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-		if (method != null)
-		{
-			if (Hax2.infiniteHealthActive)
+			PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+			PlayerHealth health = local != null ? local.playerHealth : null;
+			if (health == null)
 			{
-				method.Invoke(PlayerReflectionCache.PlayerHealthInstance, new object[3] { 999999, 100, true });
+				if (PlayerReflectionCache.PlayerHealthInstance == null)
+				{
+					PlayerReflectionCache.CachePlayerControllerData();
+				}
+				health = PlayerReflectionCache.PlayerHealthInstance as PlayerHealth;
 			}
-			else
+			if (health == null)
 			{
-				method.Invoke(PlayerReflectionCache.PlayerHealthInstance, new object[3] { 100, 100, true });
+				return;
 			}
+			int max = 100;
+			FieldInfo maxField = typeof(PlayerHealth).GetField("maxHealth", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			FieldInfo hpField = typeof(PlayerHealth).GetField("health", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			if (maxField != null)
+			{
+				max = (int)maxField.GetValue(health);
+			}
+			int current = hpField != null ? (int)hpField.GetValue(health) : 0;
+			int amount = Hax2.infiniteHealthActive ? Math.Max(max, 100) : max;
+			if (current < amount)
+			{
+				health.Heal(amount, false);
+			}
+		}
+		catch
+		{
 		}
 	}
 
 	public static void MaxStamina()
 	{
+		try
+		{
+			if (global::PlayerController.instance != null)
+			{
+				global::PlayerController.instance.DebugEnergy = Hax2.stamineState;
+				if (Hax2.stamineState)
+				{
+					global::PlayerController.instance.EnergyCurrent = global::PlayerController.instance.EnergyStart;
+				}
+			}
+		}
+		catch
+		{
+		}
 		if (PlayerReflectionCache.PlayerControllerInstance == null)
 		{
 			PlayerReflectionCache.CachePlayerControllerData();
 		}
 		if (PlayerReflectionCache.PlayerControllerInstance != null)
 		{
-			// 同时设置 EnergyStart 和 EnergyCurrent，避免蹲伏恢复把 EnergyCurrent 钳制回 EnergyStart
 			float num = Hax2.stamineState ? 999999f : 40f;
 			SetMaxStamina(num);
 		}
@@ -338,14 +387,24 @@ internal class PlayerController
 
 	public static void SetMaxHealth(int newMaxHealth)
 	{
-		if (PlayerReflectionCache.PlayerHealthInstance != null)
+		PlayerHealth health = null;
+		try
 		{
-			MethodInfo method = PlayerReflectionCache.PlayerHealthInstance.GetType().GetMethod("UpdateHealthRPC", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (method != null)
-			{
-				method.Invoke(PlayerReflectionCache.PlayerHealthInstance, new object[3] { newMaxHealth, newMaxHealth, true });
-			}
+			PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+			health = local != null ? local.playerHealth : null;
 		}
+		catch
+		{
+		}
+		if (health == null)
+		{
+			if (PlayerReflectionCache.PlayerHealthInstance == null)
+			{
+				PlayerReflectionCache.CachePlayerControllerData();
+			}
+			health = PlayerReflectionCache.PlayerHealthInstance as PlayerHealth;
+		}
+		NativeGameApi.SetPlayerMaxHealth(health, newMaxHealth);
 	}
 
 	public static float GetCurrentMaxStamina()

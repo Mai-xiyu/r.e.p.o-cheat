@@ -1,20 +1,13 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 using Photon.Pun;
-using Photon.Realtime;
 using UnityEngine;
-using Hashtable = ExitGames.Client.Photon.Hashtable;
 
 namespace r.e.p.o_cheat;
 
 /// <summary>
-/// 权限欺骗系统 — 批量请求/夺取场景中 PhotonView 的 Ownership。
-/// 三种策略:
-///   1. RequestOwnership — 标准请求 (需要房间 OwnershipOption 允许)
-///   2. SyncVar 篡改 — 修改 PhotonView 内部 ownerId 字段
-///   3. 低级属性设置 — 通过 Photon 网络层设置 owner 属性
+/// PhotonView ownership helpers.
+/// Auto uses RequestOwnership, or TransferOwnership when we are the real host.
+/// Player avatars and core managers are never taken — that desyncs movement and other tabs.
 /// </summary>
 public static class AuthoritySpoofing
 {
@@ -31,7 +24,7 @@ public static class AuthoritySpoofing
         Request,
         /// <summary>SyncVar/反射篡改 ownerId</summary>
         SyncVarManipulation,
-        /// <summary>自动: 先尝试 Request，失败则 SyncVar</summary>
+        /// <summary>Host TransferOwnership, otherwise RequestOwnership</summary>
         Auto
     }
 
@@ -150,40 +143,17 @@ public static class AuthoritySpoofing
     }
 
     /// <summary>
-    /// 夺取所有玩家的 PhotonView 所有权 (高风险，可能导致异常)
+    /// 夺取所有玩家的 PhotonView 所有权 — blocked: this desyncs movement / noclip / teleport.
     /// </summary>
     public static int TakeOverPlayers(Strategy strategy = Strategy.Auto)
     {
-        int count = 0;
-        try
-        {
-            Type playerAvType = typeof(RunManager).Assembly.GetType("PlayerAvatar");
-            if (playerAvType != null)
-            {
-                var players = UnityEngine.Object.FindObjectsOfType(playerAvType);
-                foreach (var player in players)
-                {
-                    PhotonView pv = ((Component)player).GetComponent<PhotonView>();
-                    if ((UnityEngine.Object)(object)pv != (UnityEngine.Object)null && !pv.IsMine)
-                    {
-                        if (TakeOwnership(pv, strategy))
-                            count++;
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError("[AuthoritySpoofing] TakeOverPlayers 异常: " + ex.Message);
-        }
-
-        _lastTakeoverCount = count;
-        statusMessage = $"已夺取 {count} 个玩家的控制权";
-        return count;
+        _lastTakeoverCount = 0;
+        statusMessage = L.T("room.player_take_blocked");
+        return 0;
     }
 
     /// <summary>
-    /// 夺取场景中所有 PhotonView 的所有权
+    /// 夺取场景中所有 PhotonView 的所有权（跳过玩家与核心管理器）
     /// </summary>
     public static int TakeOverAll(Strategy strategy = Strategy.Auto)
     {
@@ -195,6 +165,7 @@ public static class AuthoritySpoofing
             {
                 if ((UnityEngine.Object)(object)pv == (UnityEngine.Object)null) continue;
                 if (pv.IsMine) continue;
+                if (IsProtectedView(pv)) continue;
 
                 if (TakeOwnership(pv, strategy))
                     count++;
@@ -211,6 +182,55 @@ public static class AuthoritySpoofing
         return count;
     }
 
+    public static int ReleaseAll()
+    {
+        int count = 0;
+        try
+        {
+            PhotonView[] allViews = UnityEngine.Object.FindObjectsOfType<PhotonView>();
+            foreach (PhotonView pv in allViews)
+            {
+                if ((UnityEngine.Object)(object)pv == (UnityEngine.Object)null) continue;
+                if (!pv.IsMine) continue;
+                if (IsProtectedView(pv)) continue;
+                if (ReleaseOwnership(pv))
+                    count++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[AuthoritySpoofing] ReleaseAll 异常: " + ex.Message);
+        }
+
+        _lastTakeoverCount = count;
+        statusMessage = L.T("room.released_fmt", count);
+        return count;
+    }
+
+    private static bool IsProtectedView(PhotonView pv)
+    {
+        try
+        {
+            Component host = (Component)(object)pv;
+            if (host.GetComponent<PlayerAvatar>() != null || host.GetComponentInParent<PlayerAvatar>() != null)
+                return true;
+            if (host.GetComponent<PlayerTumble>() != null || host.GetComponentInParent<PlayerTumble>() != null)
+                return true;
+            if (host.GetComponent<PunManager>() != null || host.GetComponentInParent<PunManager>() != null)
+                return true;
+            if (host.GetComponent<NetworkManager>() != null)
+                return true;
+            if (host.GetComponent<LevelGenerator>() != null)
+                return true;
+            if (host.GetComponent<RunManager>() != null)
+                return true;
+            if (host.GetComponent<RoundDirector>() != null)
+                return true;
+        }
+        catch { }
+        return false;
+    }
+
     // ─── 单个 PhotonView 所有权操作 ─────────────────────────
 
     /// <summary>
@@ -220,6 +240,7 @@ public static class AuthoritySpoofing
     {
         if ((UnityEngine.Object)(object)pv == (UnityEngine.Object)null) return false;
         if (pv.IsMine) return true;
+        if (IsProtectedView(pv)) return false;
 
         switch (strategy)
         {
@@ -231,11 +252,16 @@ public static class AuthoritySpoofing
 
             case Strategy.Auto:
             default:
-                // 先尝试标准请求
-                if (TryRequestOwnership(pv))
-                    return true;
-                // 失败则强制 SyncVar 篡改
-                return TrySyncVarManipulation(pv);
+                if (ShadowHostMode.IsTrueMasterClient())
+                {
+                    try
+                    {
+                        pv.TransferOwnership(PhotonNetwork.LocalPlayer);
+                        return true;
+                    }
+                    catch { }
+                }
+                return TryRequestOwnership(pv);
         }
     }
 
@@ -286,96 +312,17 @@ public static class AuthoritySpoofing
     {
         try
         {
-            int myActorNumber = PhotonNetwork.LocalPlayer.ActorNumber;
-
-            // 方式 A: 通过 TransferOwnership API (如果我们是 MasterClient 或掌握主机)
-            if (PhotonNetwork.IsMasterClient)
+            if (!ShadowHostMode.IsTrueMasterClient())
             {
-                pv.TransferOwnership(PhotonNetwork.LocalPlayer);
-                return true;
+                return false;
             }
-
-            // 方式 B: 直接修改 ownerId 字段
-            // PhotonView 内部存储 ownerActorNr / ownerId
-            FieldInfo ownerField = typeof(PhotonView).GetField("ownerId",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            if (ownerField == null)
-            {
-                ownerField = typeof(PhotonView).GetField("ownerActorNr",
-                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            }
-            if (ownerField == null)
-            {
-                // PUN2 某些版本用属性
-                ownerField = typeof(PhotonView).GetField("OwnerActorNr",
-                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            }
-
-            if (ownerField != null)
-            {
-                ownerField.SetValue(pv, myActorNumber);
-                Debug.Log($"[AuthoritySpoofing] SyncVar 修改 ViewID={pv.ViewID} owner → {myActorNumber}");
-            }
-
-            // 方式 C: 修改 controllerActorNr
-            FieldInfo controllerField = typeof(PhotonView).GetField("controllerActorNr",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            if (controllerField != null)
-            {
-                controllerField.SetValue(pv, myActorNumber);
-            }
-
-            // 方式 D: 通过 Owner 属性 setter (某些版本)
-            PropertyInfo ownerProp = typeof(PhotonView).GetProperty("Owner",
-                BindingFlags.Instance | BindingFlags.Public);
-            if (ownerProp != null && ownerProp.CanWrite)
-            {
-                ownerProp.SetValue(pv, PhotonNetwork.LocalPlayer);
-            }
-
-            // 方式 E: 发送网络层的 ownership 更新
-            TryNetworkOwnershipUpdate(pv, myActorNumber);
-
+            pv.TransferOwnership(PhotonNetwork.LocalPlayer);
             return true;
         }
         catch (Exception ex)
         {
-            Debug.LogError($"[AuthoritySpoofing] SyncVar 篡改失败 (ViewID={pv.ViewID}): {ex.Message}");
+            Debug.LogError($"[AuthoritySpoofing] TransferOwnership 失败 (ViewID={pv.ViewID}): {ex.Message}");
             return false;
-        }
-    }
-
-    /// <summary>
-    /// 通过 Photon 网络层发送 ownership 变更
-    /// </summary>
-    private static void TryNetworkOwnershipUpdate(PhotonView pv, int newOwnerActorNr)
-    {
-        try
-        {
-            LoadBalancingClient client = PhotonNetwork.NetworkingClient;
-            if (client == null) return;
-
-            // 构建 ownership 转移操作
-            // OpCode 227 = OwnershipUpdate 在某些 PUN 版本中
-            Hashtable evData = new Hashtable();
-            evData[(byte)0] = pv.ViewID;
-            evData[(byte)1] = newOwnerActorNr;
-
-            // 通过 RaiseEvent 通知其他客户端
-            var raiseEventOptions = new Photon.Realtime.RaiseEventOptions
-            {
-                Receivers = Photon.Realtime.ReceiverGroup.All,
-                CachingOption = Photon.Realtime.EventCaching.DoNotCache
-            };
-
-            // OperationCode 253 = Cyclic events (或自定义事件码)
-            // PUN 的 Ownership Transfer 使用自定义事件
-            PhotonNetwork.RaiseEvent(210, evData, raiseEventOptions,
-                new ExitGames.Client.Photon.SendOptions { Reliability = true });
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning("[AuthoritySpoofing] 网络 ownership 更新失败: " + ex.Message);
         }
     }
 

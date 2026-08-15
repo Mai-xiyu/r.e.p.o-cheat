@@ -42,10 +42,22 @@ public static class LevelAdjust
         SetLevel(RunManager.ChangeLevelType.Tutorial, completed: false);
     }
 
+    /// <summary>按游戏关卡资源名切换（走 /level 同源的 debugLevel + ChangeLevel）。</summary>
+    public static void GoNamedLevel(string levelName)
+    {
+        NativeGameApi.GoToLevel(levelName);
+        statusMessage = NativeGameApi.LastStatus;
+    }
+
     private static void SetLevel(RunManager.ChangeLevelType type, bool completed)
     {
         try
         {
+            if (!NativeGameApi.IsHost())
+            {
+                statusMessage = "host only";
+                return;
+            }
             if (RunManager.instance == null)
             {
                 statusMessage = "RunManager 未就绪";

@@ -339,7 +339,7 @@ internal static class Strength
 			int currentUpgradeCount = GetCurrentUpgradeCount(text);
 			if (num != currentUpgradeCount)
 			{
-				punManagerPhotonView.RPC("UpgradePlayerGrabStrengthRPC", (RpcTarget)2, new object[2] { text, num });
+				UpgradeHelper.SetLocalLevel("playerUpgradeStrength", num, (id, v) => PunManager.instance.UpgradePlayerGrabStrength(id, v));
 			}
 		}
 	}

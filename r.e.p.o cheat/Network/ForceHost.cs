@@ -20,8 +20,16 @@ public class ForceHost : MonoBehaviourPunCallbacks
 	private static ForceHost _instance;
 	public static string statusMessage = "";
 	private static bool isProcessing = false;
-	// 当 Method_AutoAll 调用子方法时为 true，允许子方法跳过 isProcessing 检查
 	private static bool _calledFromAutoAll = false;
+	private static float _processingStartedAt;
+	private const float ProcessingTimeout = 25f;
+
+	private static int _savedActorNumber = -1;
+	private static int _savedMasterClientId = -1;
+	private static bool _localFakeActive;
+	private static bool _spoofingActor;
+
+	public static bool LocalFakeActive => _localFakeActive;
 
 	// ─── NetworkManager 安全恢复 ─────────────────────────────
 	private static NetworkManager _disabledNM;
@@ -59,12 +67,15 @@ public class ForceHost : MonoBehaviourPunCallbacks
 		SceneManager.sceneLoaded += OnSceneLoaded;
 	}
 
+	private void Update()
+	{
+		TickSafety();
+	}
+
 	private void OnDestroy()
 	{
 		SceneManager.sceneLoaded -= OnSceneLoaded;
-		// 安全钩子：确保 NetworkManager 不会被永久禁用
-		SafeRestoreNM();
-		isProcessing = false;
+		ResetAuthorityState();
 	}
 
 	/// <summary>
@@ -72,9 +83,7 @@ public class ForceHost : MonoBehaviourPunCallbacks
 	/// </summary>
 	private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
 	{
-		SafeRestoreNM();
-		isProcessing = false;
-		_calledFromAutoAll = false;
+		ResetAuthorityState();
 	}
 
 	// ─── 回调系统 ──────────────────────────────────────────
@@ -89,9 +98,8 @@ public class ForceHost : MonoBehaviourPunCallbacks
 	public static void OnHostAcquired(Action callback)
 	{
 		if (callback == null) return;
-		if (PhotonNetwork.IsMasterClient)
+		if (ShadowHostMode.IsTrueMasterClient())
 		{
-			// 已经是主机，直接执行
 			callback();
 			return;
 		}
@@ -145,14 +153,100 @@ public class ForceHost : MonoBehaviourPunCallbacks
 
 	public override void OnLeftRoom()
 	{
-		// 重置 AntiKick 的主动离开标志
 		AntiKick.ResetVoluntaryFlag();
+		ResetAuthorityState();
 	}
 
 	public override void OnDisconnected(DisconnectCause cause)
 	{
-		// 重置 AntiKick 的主动离开标志
 		AntiKick.ResetVoluntaryFlag();
+		ResetAuthorityState();
+	}
+
+	public static void TickSafety()
+	{
+		if (isProcessing && Time.unscaledTime - _processingStartedAt > ProcessingTimeout)
+		{
+			isProcessing = false;
+			_calledFromAutoAll = false;
+			_spoofingActor = false;
+			SafeRestoreNM();
+			RestoreLocalIdentity();
+			statusMessage = L.T("room.force_timeout");
+		}
+		if (!isProcessing && !PhotonNetwork.InRoom)
+		{
+			SafeRestoreNM();
+		}
+		if (!_spoofingActor && !_localFakeActive && PhotonNetwork.InRoom && PhotonNetwork.LocalPlayer != null)
+		{
+			int actor = PhotonNetwork.LocalPlayer.ActorNumber;
+			if (actor > 0)
+			{
+				_savedActorNumber = actor;
+			}
+		}
+		if (ShadowHostMode.isEnabled && !_spoofingActor && PhotonNetwork.InRoom)
+		{
+			RestoreLocalIdentity();
+		}
+	}
+
+	public static void ResetAuthorityState()
+	{
+		_calledFromAutoAll = false;
+		isProcessing = false;
+		_spoofingActor = false;
+		SafeRestoreNM();
+		RestoreLocalIdentity();
+		_savedActorNumber = -1;
+		_savedMasterClientId = -1;
+		_localFakeActive = false;
+	}
+
+	public static void RestoreLocalIdentity()
+	{
+		if (_spoofingActor)
+		{
+			return;
+		}
+		try
+		{
+			if (PhotonNetwork.LocalPlayer != null && _savedActorNumber > 0)
+			{
+				FieldInfo actorField = typeof(Player).GetField("actorNumber", BindingFlags.Instance | BindingFlags.NonPublic);
+				if (actorField != null)
+				{
+					int current = PhotonNetwork.LocalPlayer.ActorNumber;
+					if (current != _savedActorNumber)
+					{
+						actorField.SetValue(PhotonNetwork.LocalPlayer, _savedActorNumber);
+					}
+				}
+			}
+			if (_localFakeActive && PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null && _savedMasterClientId > 0)
+			{
+				Room room = PhotonNetwork.CurrentRoom;
+				FieldInfo masterIdField = typeof(Room).GetField("masterClientId", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+				masterIdField?.SetValue(room, _savedMasterClientId);
+				FieldInfo isMasterField = typeof(Player).GetField("isMasterClient", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+				if (isMasterField != null)
+				{
+					foreach (Player p in PhotonNetwork.PlayerList)
+					{
+						if (p == null)
+						{
+							continue;
+						}
+						isMasterField.SetValue(p, p.ActorNumber == _savedMasterClientId);
+					}
+				}
+				_localFakeActive = false;
+			}
+		}
+		catch
+		{
+		}
 	}
 
 	/// <summary>
@@ -182,11 +276,19 @@ public class ForceHost : MonoBehaviourPunCallbacks
 		{
 			if (isProcessing) yield break;
 			isProcessing = true;
+			_processingStartedAt = Time.unscaledTime;
 		}
 
 		if (!PhotonNetwork.InRoom)
 		{
 			statusMessage = L.T("room.force_fail");
+			if (!fromAutoAll) isProcessing = false;
+			yield break;
+		}
+
+		if (ShadowHostMode.IsTrueMasterClient())
+		{
+			statusMessage = L.T("room.already_host");
 			if (!fromAutoAll) isProcessing = false;
 			yield break;
 		}
@@ -219,6 +321,7 @@ public class ForceHost : MonoBehaviourPunCallbacks
 		{
 			if (isProcessing) yield break;
 			isProcessing = true;
+			_processingStartedAt = Time.unscaledTime;
 		}
 
 		if (!PhotonNetwork.InRoom)
@@ -335,6 +438,7 @@ public class ForceHost : MonoBehaviourPunCallbacks
 		{
 			if (isProcessing) yield break;
 			isProcessing = true;
+			_processingStartedAt = Time.unscaledTime;
 		}
 
 		if (!PhotonNetwork.InRoom || PhotonNetwork.MasterClient == null)
@@ -374,13 +478,12 @@ public class ForceHost : MonoBehaviourPunCallbacks
 
 			if (actorField != null && myActorNumber != masterActorNumber)
 			{
-				// 临时伪装为MasterClient
+				_spoofingActor = true;
+				_savedActorNumber = myActorNumber;
 				actorField.SetValue(PhotonNetwork.LocalPlayer, masterActorNumber);
 
-				// 发送 SetMasterClient (此时本地看起来我们是master)
 				PhotonNetwork.SetMasterClient(PhotonNetwork.LocalPlayer);
 
-				// 同时尝试底层操作
 				Hashtable properties = new Hashtable();
 				properties[(byte)248] = myActorNumber;
 				TryLowLevelSetMasterWithProps(properties);
@@ -398,6 +501,7 @@ public class ForceHost : MonoBehaviourPunCallbacks
 				try { actorField.SetValue(PhotonNetwork.LocalPlayer, myActorNumber); }
 				catch { }
 			}
+			_spoofingActor = false;
 			Debug.Log("[ForceHost] ActorNumber 欺骗完成，已恢复");
 		}
 	}
@@ -431,6 +535,7 @@ public class ForceHost : MonoBehaviourPunCallbacks
 	{
 		if (isProcessing) yield break;
 		isProcessing = true;
+		_processingStartedAt = Time.unscaledTime;
 
 		if (!PhotonNetwork.InRoom || PhotonNetwork.MasterClient == null)
 		{
@@ -439,7 +544,7 @@ public class ForceHost : MonoBehaviourPunCallbacks
 			yield break;
 		}
 
-		if (PhotonNetwork.IsMasterClient)
+		if (ShadowHostMode.IsTrueMasterClient())
 		{
 			statusMessage = L.T("room.already_host");
 			isProcessing = false;
@@ -503,17 +608,22 @@ public class ForceHost : MonoBehaviourPunCallbacks
 
 			Room room = PhotonNetwork.CurrentRoom;
 			int myActor = PhotonNetwork.LocalPlayer.ActorNumber;
+			if (_savedMasterClientId <= 0 && PhotonNetwork.MasterClient != null)
+			{
+				_savedMasterClientId = PhotonNetwork.MasterClient.ActorNumber;
+			}
+			if (_savedActorNumber <= 0)
+			{
+				_savedActorNumber = myActor;
+			}
 
-			// 修改 Room.masterClientId
 			FieldInfo masterIdField = typeof(Room).GetField("masterClientId",
 				BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 			if (masterIdField != null)
 			{
 				masterIdField.SetValue(room, myActor);
-				Debug.Log("[ForceHost] 本地 Room.masterClientId 已修改为 " + myActor);
 			}
 
-			// 也尝试 RoomInfo 基类的字段
 			FieldInfo baseField = typeof(RoomInfo).GetField("masterClientId",
 				BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 			if (baseField != null && baseField != masterIdField)
@@ -521,28 +631,25 @@ public class ForceHost : MonoBehaviourPunCallbacks
 				baseField.SetValue(room, myActor);
 			}
 
-			// 刷新 Player.IsMasterClient 缓存
 			FieldInfo isMasterField = typeof(Player).GetField("isMasterClient",
 				BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 			if (isMasterField != null)
 			{
-				// 将所有玩家的 isMasterClient 设为 false
 				foreach (Player p in PhotonNetwork.PlayerList)
 				{
 					isMasterField.SetValue(p, false);
 				}
-				// 将自己的设为 true
 				isMasterField.SetValue(PhotonNetwork.LocalPlayer, true);
 			}
 
-			statusMessage = L.T("room.local_fake_done");
-			Debug.Log("[ForceHost] 本地主机伪装完成");
+			_localFakeActive = true;
+			ShadowHostMode.isEnabled = false;
+			statusMessage = L.T("room.local_fake_warn");
 			return true;
 		}
 		catch (Exception ex)
 		{
 			statusMessage = L.T("room.method_fail_fmt", "5 - LocalFake: " + ex.Message);
-			Debug.LogError("[ForceHost] 本地伪装异常: " + ex.Message);
 			return false;
 		}
 	}
@@ -554,60 +661,67 @@ public class ForceHost : MonoBehaviourPunCallbacks
 	{
 		if (isProcessing) yield break;
 		isProcessing = true;
-
-		if (!PhotonNetwork.InRoom)
+		_processingStartedAt = Time.unscaledTime;
+		try
 		{
-			statusMessage = L.T("room.force_fail");
+			if (!PhotonNetwork.InRoom)
+			{
+				statusMessage = L.T("room.force_fail");
+				yield break;
+			}
+
+			if (ShadowHostMode.IsTrueMasterClient())
+			{
+				statusMessage = L.T("room.already_host");
+				yield break;
+			}
+
+			statusMessage = L.T("room.trying_method_fmt", "1 - SetMasterClient");
+			_calledFromAutoAll = true;
+			yield return ((MonoBehaviour)Instance).StartCoroutine(Method_SetMasterClient());
+			_calledFromAutoAll = false;
+			if (ShadowHostMode.IsTrueMasterClient())
+			{
+				statusMessage = L.T("room.force_success");
+				yield break;
+			}
+
+			yield return (object)new WaitForSeconds(0.5f);
+
+			statusMessage = L.T("room.trying_method_fmt", "2 - LowLevel Op");
+			_calledFromAutoAll = true;
+			yield return ((MonoBehaviour)Instance).StartCoroutine(Method_LowLevelOp());
+			_calledFromAutoAll = false;
+			if (ShadowHostMode.IsTrueMasterClient())
+			{
+				statusMessage = L.T("room.force_success");
+				yield break;
+			}
+
+			yield return (object)new WaitForSeconds(0.5f);
+
+			statusMessage = L.T("room.trying_method_fmt", "3 - ActorSpoof");
+			_calledFromAutoAll = true;
+			yield return ((MonoBehaviour)Instance).StartCoroutine(Method_ActorNumberSpoof());
+			_calledFromAutoAll = false;
+			if (ShadowHostMode.IsTrueMasterClient())
+			{
+				statusMessage = L.T("room.force_success");
+				yield break;
+			}
+
+			yield return (object)new WaitForSeconds(0.5f);
+
+			statusMessage = ShadowHostMode.IsTrueMasterClient()
+				? L.T("room.force_success")
+				: L.T("room.auto_stopped");
+		}
+		finally
+		{
+			_calledFromAutoAll = false;
 			isProcessing = false;
-			yield break;
+			SafeRestoreNM();
 		}
-
-		if (ShadowHostMode.IsTrueMasterClient())
-		{
-			statusMessage = L.T("room.already_host");
-			isProcessing = false;
-			yield break;
-		}
-
-		// 尝试方法1: SetMasterClient
-		statusMessage = L.T("room.trying_method_fmt", "1 - SetMasterClient");
-		// 不释放 isProcessing 锁 — 子协程内部使用 _calledFromAutoAll 跳过锁检查
-		_calledFromAutoAll = true;
-		yield return ((MonoBehaviour)Instance).StartCoroutine(Method_SetMasterClient());
-		_calledFromAutoAll = false;
-		if (ShadowHostMode.IsTrueMasterClient()) { isProcessing = false; yield break; }
-
-		yield return (object)new WaitForSeconds(0.5f);
-
-		// 尝试方法2: 底层操作
-		statusMessage = L.T("room.trying_method_fmt", "2 - LowLevel Op");
-		_calledFromAutoAll = true;
-		yield return ((MonoBehaviour)Instance).StartCoroutine(Method_LowLevelOp());
-		_calledFromAutoAll = false;
-		if (ShadowHostMode.IsTrueMasterClient()) { isProcessing = false; yield break; }
-
-		yield return (object)new WaitForSeconds(0.5f);
-
-		// 尝试方法3: ActorNumber 欺骗
-		statusMessage = L.T("room.trying_method_fmt", "3 - ActorSpoof");
-		_calledFromAutoAll = true;
-		yield return ((MonoBehaviour)Instance).StartCoroutine(Method_ActorNumberSpoof());
-		_calledFromAutoAll = false;
-		if (ShadowHostMode.IsTrueMasterClient()) { isProcessing = false; yield break; }
-
-		yield return (object)new WaitForSeconds(0.5f);
-
-		// 尝试方法5: 本地伪装 (仅本地有效，不实际夺主机)
-		statusMessage = L.T("room.trying_method_fmt", "5 - LocalFake");
-		Method_LocalMasterFake();
-
-		yield return (object)new WaitForSeconds(1f);
-
-		if (!ShadowHostMode.IsTrueMasterClient())
-		{
-			statusMessage = L.T("room.auto_suggest_crash");
-		}
-		isProcessing = false;
 	}
 
 	// ================================================================
@@ -682,30 +796,18 @@ public class ForceHost : MonoBehaviourPunCallbacks
 	}
 
 	/// <summary>
-	/// 用于 ActorNumber 欺骗模式：临时伪装为主机发送特定RPC
+	/// Honest RPC send only. Actor spoofing here left IsMasterClient / actorNumber
+	/// desynced and broke heal, teleport, battery, and haul on other tabs.
 	/// </summary>
 	public static void SendRPCAsHost(PhotonView targetView, string rpcName, RpcTarget rpcTarget, params object[] args)
 	{
 		try
 		{
-			if (!PhotonNetwork.InRoom || PhotonNetwork.MasterClient == null) return;
-
-			int myActorNumber = PhotonNetwork.LocalPlayer.ActorNumber;
-			int masterActorNumber = PhotonNetwork.MasterClient.ActorNumber;
-			FieldInfo actorField = typeof(Player).GetField("actorNumber", BindingFlags.Instance | BindingFlags.NonPublic);
-
-			if (actorField != null)
+			if ((Object)(object)targetView == (Object)null || !PhotonNetwork.InRoom)
 			{
-				actorField.SetValue(PhotonNetwork.LocalPlayer, masterActorNumber);
-				try
-				{
-					targetView.RPC(rpcName, rpcTarget, args);
-				}
-				finally
-				{
-					actorField.SetValue(PhotonNetwork.LocalPlayer, myActorNumber);
-				}
+				return;
 			}
+			targetView.RPC(rpcName, rpcTarget, args);
 		}
 		catch (Exception ex)
 		{

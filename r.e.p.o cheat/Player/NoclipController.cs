@@ -309,7 +309,21 @@ public static class NoclipController
 			{
 				val -= Vector3.up;
 			}
-			float num = ((sprintAction != null && sprintAction.IsPressed()) ? 20f : 10f);
+			bool sprintHeld = (sprintAction != null && sprintAction.IsPressed())
+				|| Input.GetKey(KeyCode.LeftShift)
+				|| Input.GetKey(KeyCode.RightShift);
+			try
+			{
+				sprintHeld = sprintHeld || SemiFunc.InputHold(InputKey.Sprint);
+			}
+			catch
+			{
+			}
+			float num = sprintHeld ? 20f : 10f;
+			if (r.e.p.o_cheat.NativeGameApi.SuperSpeed)
+			{
+				num *= 2.5f;
+			}
 			val = val.normalized * num * Time.deltaTime;
 			transform2.position += val;
 		}

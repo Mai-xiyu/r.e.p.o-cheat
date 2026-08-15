@@ -227,10 +227,10 @@ public static class LanguageManager
     {
         return new string[]
         {
-            T("tab.self"), T("tab.visuals"), T("tab.combat"), T("tab.fun"),
-            T("tab.enemies"), T("tab.items"), T("tab.hotkeys"), T("tab.trolling"),
-            T("tab.config"), T("tab.server"), T("tab.teleport"), T("tab.menu"),
-            T("tab.admin")
+            T("tab.self"), T("tab.visuals"), T("tab.combat"), T("tab.items"),
+            T("tab.enemies"), T("tab.teleport"), T("tab.fun"), T("tab.trolling"),
+            T("tab.admin"), T("tab.hotkeys"), T("tab.config"), T("tab.server"),
+            T("tab.menu")
         };
     }
 }

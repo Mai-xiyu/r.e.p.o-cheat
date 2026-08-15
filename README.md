@@ -6,6 +6,8 @@ An open-source C# Mono cheat for the Unity game [R.E.P.O.](https://store.steampo
 
 - [中文文档](README_CN.md)
 
+**Current release: [v2.3.0](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.3.0)** — adapted for R.E.P.O. v0.4.4.3.
+
 ## Compatibility
 
 The build is adapted against the following installed game baseline:
@@ -22,16 +24,18 @@ Compatibility is decided by assembly fingerprint and capability detection, not b
 
 ## Features
 
-- **Self**: god mode, infinite health/stamina, noclip, customizable speed/strength/jump/gravity/grab range, no recoil/cooldown, grab through walls, custom FOV, no fog, auto dodge, self revive, teammate heal/revive, creative mode, one-click max upgrades (all 13 upgrade kinds), game speed control, game debug flags (infinite energy / no overcharge / no tumble).
-- **Visuals**: TMP-based ESP (enemies, items, players, extraction points) with boxes/names/distance/health/value filters, chams, mini radar, trace lines, ESP presets, map value summary, player status list.
-- **Combat and players**: damage/heal/kill/revive players, teleport players, name spoofing, possession, aimbot with smoothness and range settings.
-- **Enemies**: blind/freeze/kill enemies, disable traps, teleport enemies, enemy spawner (host only).
-- **Items**: item spawner with custom values (host only), item teleport, value inflation, duplicate held item, remote sell, auto pickup, auto sell.
-- **Teleport**: crosshair teleport, extraction teleport, random teleport, named waypoints, synced through the game's own `PlayerAvatar.Spawn` API.
-- **World**: zero haul goal, auto-complete round, chat commands (`!help`), shop tools (run currency via the game's own `SetRunStatSet`), level transitions via `RunManager.ChangeLevel`.
+Host-only actions are tagged `[Host]` in the menu. Guests keep owner-local and unsecured game APIs (heal others, item teleport, extraction request, held-item battery, `PhotonNetwork.Instantiate` spawns). Do not fake `MasterOnlyRPC` senders.
+
+- **Self**: god mode, infinite health/stamina, **unlimited battery** (guests: held/equipped items; guns/drones stay host-authoritative), noclip, customizable speed/strength/jump/gravity/grab range (via `PunManager.UpdateStat`), no recoil/cooldown, **instant gun build-up**, grab through walls, custom FOV, no fog, auto dodge, self revive, teammate heal/revive (`HealOtherRPC`), creative mode, one-click max upgrades (all 13 upgrade kinds), game speed control, game debug flags (infinite energy / no overcharge / no tumble / slow walk / feather fall), **hide grabber beam, hide item labels, no camera shake, cinematic HUD, unlock FPS**, ignore death pit, infinite spectate battery, cosmetic tokens.
+- **Visuals**: TMP-based ESP (enemies, items, players, extraction points) with boxes/names/distance/health/value filters, chams, mini radar, trace lines, ESP presets, map value summary, player status list, **full map reveal**.
+- **Combat and players**: damage/heal/kill/revive players, teleport players, name spoofing, possession, aimbot with smoothness and range settings, **bullet track** (host/solo; redirects `ItemGun.ShootBullet`).
+- **Enemies**: blind/freeze/kill/despawn enemies via the game's own EnemyDirector/EnemyParent APIs, disable traps (`Trap` base type), teleport enemies, enemy spawner (host only, `PhotonNetwork.InstantiateRoomObject`), **easy grab / spawn close / no spawn pause** debug flags.
+- **Items**: item spawner from `StatsManager.itemDictionary` (host: room objects; **guest: `PhotonNetwork.Instantiate`**, may despawn on leave). Item teleport (`SetPositionRPC`), value inflation (host), duplicate held item, **charge held battery**, remote sell, auto pickup, auto sell.
+- **Teleport**: crosshair teleport, extraction teleport, random teleport, named waypoints, synced through the game's own `PhysGrabObject.Teleport` API.
+- **World**: zero haul goal / **low-haul debug flag**, auto-complete round, chat commands (`!help`), shop tools (run currency via `SetRunStatSet` plus **cheap shop prices**, host), extra lives, unlock extraction, **request extraction** (`RoundDirector.RequestExtractionPointActivation`, guest-safe), discover valuables (`DiscoverRPC`), fill valuables next level, level transitions via `RunManager.ChangeLevel` plus **named level picker** (`debugLevel`). Native wrappers live in `World/NativeGameApi.cs`.
 - **Cosmetics**: unlock all cosmetics (game-native `CosmeticUnlockAll` + save), random outfit, rainbow cosmetics cycle - all through the game's own MetaManager/PlayerCosmetics pipeline with lobby sync.
-- **Room**: host takeover, lobby discovery/creation, RPC injection, anti-kick, anti-crash protection. These network modules are provided as-is; verify them in private lobbies only.
-- **Game localization (new, off by default)**: Simplified Chinese rendering for the game UI through the game's own Unity.Localization string tables, with a CJK font fallback. See [Localization](#game-localization).
+- **Room**: host takeover (no leftover local-master fake after Auto), identity watchdog (does not rewrite `IsMasterClient`), ownership tools that skip player avatars, honest RPC injector, lobby discovery/creation, anti-kick, anti-crash protection. Use **Reset identity** if other tabs desync. Verify network modules in private lobbies only.
+- **Game localization (off by default)**: Simplified Chinese rendering for the game UI through the game's own Unity.Localization string tables, with a CJK font fallback. See [Localization](#game-localization).
 
 ## Usage
 
@@ -96,6 +100,20 @@ powershell -ExecutionPolicy Bypass -File run-tests.ps1
 ## Contributing
 
 Contributions are welcome. Please keep the compatibility layer up to date when adapting to a new game version: update the fingerprint in `Compatibility\GameVersionInfo.cs`, re-run the API diff described in `.api-compatibility.md`, and keep the test suite green.
+
+## Changelog
+
+### [v2.3.0](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.3.0) — 2026-08-16
+
+- Guest-safe paths for unlimited battery (held items), extraction request, item spawn/duplicate, valuable discovery, and item teleport. Host-only controls are labeled in the menu.
+- `NativeGameApi` wraps live v0.4.4.3 debug/host APIs (enemies, map, haul, shop, levels, battery fill).
+- Room tab: Force Host no longer leaves a local master fake that breaks battery/guns/haul. Shadow Host is an identity watchdog. Authority tools skip player PhotonViews. RPC injector no longer spoofs the host sender.
+- Self/combat extras: ignore death pit, spectate battery, bullet track (host/solo).
+- Tests: `powershell -ExecutionPolicy Bypass -File run-tests.ps1` (21/21).
+
+### [v2.2.0](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.2.0)
+
+Cosmetics suite and game-API feature overhaul for v0.4.4.3.
 
 ## License
 

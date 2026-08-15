@@ -200,18 +200,17 @@ public static class TeleportPlus
         }
     }
 
-    // 核心传送方法 — 游戏自己的传送 API：PlayerAvatar.Spawn（单人本地 / 多人 SpawnRPC 同步；
-    // 客户端直发 SpawnRPC 会被游戏 MasterOnly 守卫丢弃，已废弃）
+    // 核心传送方法 — 游戏自己的 PhysGrabObject.Teleport（非房主会转发 SetPositionRPC 给主机）
     private static void DoTeleport(GameObject player, Vector3 position)
     {
-        PlayerAvatar avatar = player != null ? player.GetComponent<PlayerAvatar>() : null;
-        if (avatar != null)
-        {
-            avatar.Spawn(position, player.transform.rotation);
-        }
-        else
-        {
-            player.transform.position = position;
-        }
+            PlayerAvatar avatar = player.GetComponent<PlayerAvatar>();
+            if (avatar != null)
+            {
+                NativeGameApi.TeleportPlayer(avatar, position, player.transform.rotation);
+            }
+            else
+            {
+                player.transform.position = position;
+            }
     }
 }
