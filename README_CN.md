@@ -6,7 +6,7 @@
 
 - [English Documentation](README.md)
 
-**当前版本：[v2.3.0](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.3.0)** — 适配 R.E.P.O. v0.4.4.3。
+**当前版本：[v2.5.0](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.5.0)** — 适配 R.E.P.O. v0.4.4.3。
 
 ## 兼容性
 
@@ -39,16 +39,11 @@
 
 ## 使用
 
-1. 自行构建（见下文），或从 [Releases](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases) 下载 `r.e.p.o.cheat.dll`。
-2. 将 `r.e.p.o.cheat.dll` 与 SharpMonoInjector 的 `smi.exe` 放在同一文件夹。
-3. 启动 R.E.P.O. 后，在管理员终端中执行：
-
-   ```
-   .\smi.exe inject -p repo -a r.e.p.o.cheat.dll -n r.e.p.o_cheat -c Loader -m Init
-   ```
-
+1. 从 [Releases](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases) 下载 `DarkMenu.Injector.exe`，或按下文自行构建。
+2. 正常启动 R.E.P.O.。
+3. 运行 `DarkMenu.Injector.exe` 并同意 Windows UAC 提权。它只会目标定位到 `repo.exe`，内含 payload DLL，不再需要额外 DLL 或 `smi.exe`。
 4. 按 **Delete** 打开/关闭菜单（可在热键页改键）。**F5** 重载菜单，**F10** 卸载。
-5. `C:\temp\inject_debug.txt` 记录初始化过程与每个 Harmony 补丁类的打补丁结果。
+5. 启动器诊断写入 `%LOCALAPPDATA%\DarkMenu\injector.log`；初始化和每个 Harmony 补丁类的结果仍写入 `C:\temp\inject_debug.txt`。
 
 ## 游戏汉化
 
@@ -66,13 +61,14 @@
 
 ## 从源码构建
 
-依赖：.NET SDK 8 或更高（`libs/` 中已附带所需的游戏引用程序集）。
+依赖：.NET SDK 8 或更高（`libs/` 中已附带所需的游戏引用程序集）。克隆仓库时需同时拉取 submodule，供开源注入器依赖使用。
 
 ```
 dotnet build "r.e.p.o cheat.sln" -c Release
+dotnet publish "RepoInjector/RepoInjector.csproj" -c Release -o artifacts/injector
 ```
 
-构建产物为 `r.e.p.o cheat\bin\Release\r.e.p.o cheat.dll`。0Harmony 以内嵌资源形式打入，DLL 自包含。
+启动器产物为 `artifacts\injector\DarkMenu.Injector.exe`。它通过应用清单请求管理员权限，内嵌 payload DLL，并打包 MIT 许可的 SharpMonoInjector 核心。开发时仍可使用 `r.e.p.o cheat\bin\Release\r.e.p.o cheat.dll`。
 
 ## 测试
 

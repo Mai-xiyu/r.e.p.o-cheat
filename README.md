@@ -6,7 +6,7 @@ An open-source C# Mono cheat for the Unity game [R.E.P.O.](https://store.steampo
 
 - [中文文档](README_CN.md)
 
-**Current release: [v2.3.0](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.3.0)** — adapted for R.E.P.O. v0.4.4.3.
+**Current release: [v2.5.0](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.5.0)** — adapted for R.E.P.O. v0.4.4.3.
 
 ## Compatibility
 
@@ -39,16 +39,11 @@ Host-only actions are tagged `[Host]` in the menu. Guests keep owner-local and u
 
 ## Usage
 
-1. Build the project (see below) or download `r.e.p.o.cheat.dll` from [Releases](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases).
-2. Place `r.e.p.o.cheat.dll` and SharpMonoInjector's `smi.exe` in the same folder.
-3. Start R.E.P.O. and run from an elevated terminal:
-
-   ```
-   .\smi.exe inject -p repo -a r.e.p.o.cheat.dll -n r.e.p.o_cheat -c Loader -m Init
-   ```
-
+1. Download `DarkMenu.Injector.exe` from [Releases](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases), or build it from source below.
+2. Start R.E.P.O. normally.
+3. Run `DarkMenu.Injector.exe` and approve its Windows UAC prompt. It targets only `repo.exe`; the payload DLL is embedded, so no separate DLL or `smi.exe` is required.
 4. Open/close the menu with **Delete** (rebindable in the Hotkeys tab). **F5** reloads the menu, **F10** unloads the cheat.
-5. `C:\temp\inject_debug.txt` records initialization and the per-class Harmony patch results.
+5. Launcher diagnostics are written to `%LOCALAPPDATA%\DarkMenu\injector.log`; initialization and Harmony patch results remain in `C:\temp\inject_debug.txt`.
 
 ## Game localization
 
@@ -66,13 +61,14 @@ The game UI can be rendered in Simplified Chinese as an optional feature, **disa
 
 ## Building from source
 
-Requirements: .NET SDK 8 or newer (the game reference assemblies in `libs/` are the only binaries required).
+Requirements: .NET SDK 8 or newer (the game reference assemblies in `libs/` are the only binaries required). Clone with submodules so the open-source injector dependency is available.
 
 ```
 dotnet build "r.e.p.o cheat.sln" -c Release
+dotnet publish "RepoInjector/RepoInjector.csproj" -c Release -o artifacts/injector
 ```
 
-The build output is `r.e.p.o cheat\bin\Release\r.e.p.o cheat.dll`. 0Harmony is embedded as a resource, so the DLL is self-contained.
+The launcher output is `artifacts\injector\DarkMenu.Injector.exe`. It requests administrator rights through its application manifest, embeds the payload DLL, and bundles the MIT-licensed SharpMonoInjector core. The payload DLL remains available at `r.e.p.o cheat\bin\Release\r.e.p.o cheat.dll` for development.
 
 ## Tests
 
