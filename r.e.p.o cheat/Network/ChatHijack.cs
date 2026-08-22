@@ -3,181 +3,216 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Photon.Pun;
+using Photon.Realtime;
 using UnityEngine;
 
 namespace r.e.p.o_cheat;
 
 public static class ChatHijack
 {
-	private static Dictionary<object, string> originalPlayerNames = new Dictionary<object, string>();
+    private static readonly FieldInfo IsCrouchingField = typeof(PlayerAvatar).GetField(
+        "isCrouching", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+    private static readonly FieldInfo IsDisabledField = typeof(PlayerAvatar).GetField(
+        "isDisabled", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+    private static readonly Regex RichTextTagRegex = new Regex("<.*?>", RegexOptions.Compiled);
 
-	private static bool isSpoofingActive = false;
+    private static string _originalNickName;
 
-	private static bool IsAllTarget(string targetName)
-	{
-		return targetName == "All" || targetName == L.T("common.all");
-	}
+    private static bool IsAllTarget(string targetName)
+    {
+        return targetName == "All" || targetName == L.T("common.all");
+    }
 
-	public static void MakeChat(string message, string targetName, List<object> playerList, List<string> playerNames)
-	{
-		// 聊天命令拦截: 如果以 ! 或 / 开头则作为命令处理
-		if (!string.IsNullOrEmpty(message) && (message.StartsWith("!") || message.StartsWith("/")))
-		{
-			if (ChatCommands.TryExecuteCommand(message))
-				return; // 命令已处理，不发送聊天消息
-		}
+    public static void MakeChat(string message, string targetName, List<object> playerList, List<string> playerNames)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return;
+        }
+        bool gameSlashCommand = message.StartsWith("/", StringComparison.Ordinal);
+        if ((message.StartsWith("!", StringComparison.Ordinal) || gameSlashCommand) &&
+            ChatCommands.TryExecuteCommand(message))
+        {
+            return;
+        }
 
-		for (int i = 0; i < playerList.Count; i++)
-		{
-			object obj = playerList[i];
-			string text = playerNames[i];
-			if (!IsAllTarget(targetName) && text != targetName)
-			{
-				continue;
-			}
-			FieldInfo field = obj.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (!(field == null))
-			{
-				object value = field.GetValue(obj);
-				PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-				if (!((Object)(object)val == (Object)null))
-				{
-					val.RPC("ChatMessageSendRPC", (RpcTarget)0, new object[2] { message, false });
-				}
-			}
-		}
-	}
+        try
+        {
+            PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+            if (local == null || local.photonView == null)
+            {
+                return;
+            }
 
-	private static string StripStatusTags(string name)
-	{
-		return Regex.Replace(name, "\\[(LIVE|DEAD)\\]\\s*", "");
-	}
+            // Preserve the game's own slash-command path. Calling the RPC
+            // directly would bypass PlayerAvatar.ChatMessageSend's command check.
+            if (gameSlashCommand || !SemiFunc.IsMultiplayer() || IsAllTarget(targetName))
+            {
+                local.ChatMessageSend(message);
+                return;
+            }
 
-	public static void ToggleNameSpoofing(bool enable, string spoofName, string targetName, List<object> playerList, List<string> playerNames)
-	{
-		if (enable)
-		{
-			if (!isSpoofingActive)
-			{
-				StoreOriginalNames(playerList, playerNames);
-				isSpoofingActive = true;
-			}
-			SendCustomNameRPC(spoofName, targetName, playerList, playerNames);
-		}
-		else
-		{
-			RestoreOriginalNames(targetName, playerList, playerNames);
-			isSpoofingActive = false;
-		}
-	}
+            if (!TryResolveTarget(targetName, playerList, playerNames, out Player target))
+            {
+                Debug.LogWarning("[Chat] selected target is no longer available: " + StripRichText(targetName));
+                return;
+            }
 
-	private static void StoreOriginalNames(List<object> playerList, List<string> playerNames)
-	{
-		for (int i = 0; i < playerList.Count; i++)
-		{
-			if (!originalPlayerNames.ContainsKey(playerList[i]))
-			{
-				string value = StripStatusTags(playerNames[i]);
-				originalPlayerNames[playerList[i]] = value;
-			}
-		}
-	}
+            bool crouching = ReadBool(IsCrouchingField, local) || ReadBool(IsDisabledField, local);
+            local.photonView.RPC("ChatMessageSendRPC", target, message, crouching);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[Chat] " + ex.GetType().Name + ": " + ex.Message);
+        }
+    }
 
-	private static void RestoreOriginalNames(string targetName, List<object> playerList, List<string> playerNames)
-	{
-		for (int i = 0; i < playerList.Count; i++)
-		{
-			object obj = playerList[i];
-			string name = playerNames[i];
-			string text = StripStatusTags(targetName);
-			string text2 = StripStatusTags(name);
-			if ((!IsAllTarget(text) && text2 != text) || !originalPlayerNames.ContainsKey(obj))
-			{
-				continue;
-			}
-			string text3 = originalPlayerNames[obj];
-			FieldInfo field = obj.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (!(field == null))
-			{
-				object value = field.GetValue(obj);
-				PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-				if (!((Object)(object)val == (Object)null))
-				{
-					val.RPC("AddToStatsManagerRPC", (RpcTarget)3, new object[2] { text3, "472644" });
-				}
-			}
-		}
-	}
+    private static bool TryResolveTarget(string targetName, List<object> playerList,
+        List<string> playerNames, out Player target)
+    {
+        target = null;
+        if (playerList == null || playerNames == null)
+        {
+            return false;
+        }
 
-	public static void SendCustomNameRPC(string spoofName, string targetName, List<object> playerList, List<string> playerNames)
-	{
-		if (playerList == null || playerNames == null || playerList.Count != playerNames.Count)
-		{
-			return;
-		}
-		string text = StripStatusTags(targetName);
-		for (int i = 0; i < playerList.Count; i++)
-		{
-			string name = playerNames[i];
-			object obj = playerList[i];
-			string text2 = StripStatusTags(name);
-			if (!IsAllTarget(text) && text2 != text)
-			{
-				continue;
-			}
-			FieldInfo field = obj.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (!(field == null))
-			{
-				object value = field.GetValue(obj);
-				PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-				if (!((Object)(object)val == (Object)null))
-				{
-					val.RPC("AddToStatsManagerRPC", (RpcTarget)3, new object[2] { spoofName, "472644" });
-				}
-			}
-		}
-	}
+        int index = playerNames.IndexOf(targetName);
+        if (index < 0)
+        {
+            string visibleTarget = StripRichText(targetName);
+            int uniqueMatch = -1;
+            int count = Math.Min(playerList.Count, playerNames.Count);
+            for (int i = 0; i < count; i++)
+            {
+                PlayerAvatar avatar = playerList[i] as PlayerAvatar;
+                if (avatar == null)
+                {
+                    continue;
+                }
 
-	public static void ChangePlayerColor(int colorIndex, string targetName, List<object> playerList, List<string> playerNames)
-	{
-		CosmeticFeatures.ApplyPaletteColor(colorIndex, sync: true);
-	}
+                string visibleEntry = StripRichText(playerNames[i]);
+                string avatarName = SemiFunc.PlayerGetName(avatar) ?? string.Empty;
+                bool matches = string.Equals(visibleEntry, visibleTarget, StringComparison.Ordinal) ||
+                    string.Equals(avatarName, visibleTarget, StringComparison.Ordinal) ||
+                    (!string.IsNullOrEmpty(avatarName) &&
+                        visibleTarget.EndsWith(" " + avatarName, StringComparison.Ordinal));
+                if (!matches)
+                {
+                    continue;
+                }
+                if (uniqueMatch >= 0)
+                {
+                    return false;
+                }
+                uniqueMatch = i;
+            }
+            index = uniqueMatch;
+        }
 
-	public static void ClearStoredNames()
-	{
-		originalPlayerNames.Clear();
-		isSpoofingActive = false;
-	}
+        if (index < 0 || index >= playerList.Count)
+        {
+            return false;
+        }
 
-	/// <summary>
-	/// 仅修改本地玩家自己的名称（立即生效）
-	/// </summary>
-	public static bool SpoofLocalPlayerName(string newName)
-	{
-		try
-		{
-			if (string.IsNullOrEmpty(newName)) return false;
+        PlayerAvatar selected = playerList[index] as PlayerAvatar;
+        PhotonView view = selected != null ? selected.photonView : null;
+        target = view != null ? view.Owner : null;
+        return target != null;
+    }
 
-			List<PlayerAvatar> players = SemiFunc.PlayerGetList();
-			if (players == null) return false;
+    private static bool ReadBool(FieldInfo field, object instance)
+    {
+        try
+        {
+            return field != null && field.GetValue(instance) is bool value && value;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
-			foreach (PlayerAvatar player in players)
-			{
-				FieldInfo field = ((object)player).GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-				if (field == null) continue;
+    private static string StripRichText(string text)
+    {
+        return RichTextTagRegex.Replace(text ?? string.Empty, string.Empty).Trim();
+    }
 
-				object value = field.GetValue(player);
-				PhotonView pv = (PhotonView)((value is PhotonView) ? value : null);
-				if ((Object)(object)pv == (Object)null || !pv.IsMine) continue;
+    public static void ToggleNameSpoofing(bool enable, string spoofName, string targetName, List<object> playerList, List<string> playerNames)
+    {
+        if (enable)
+        {
+            SpoofLocalPlayerName(spoofName);
+        }
+        else
+        {
+            RestoreLocalName();
+        }
+    }
 
-				pv.RPC("AddToStatsManagerRPC", (RpcTarget)3, new object[2] { newName, "472644" });
-				return true;
-			}
-		}
-		catch (Exception ex)
-		{
-			Debug.LogError((object)("SpoofLocalPlayerName 失败: " + ex.Message));
-		}
-		return false;
-	}
+    public static void ChangePlayerColor(int colorIndex, string targetName, List<object> playerList, List<string> playerNames)
+    {
+        CosmeticFeatures.ApplyPaletteColor(colorIndex, sync: true);
+    }
+
+    public static void ClearStoredNames()
+    {
+        _originalNickName = null;
+    }
+
+    public static bool SpoofLocalPlayerName(string newName)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(newName))
+            {
+                return false;
+            }
+            PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+            if (local == null || local.photonView == null || !local.photonView.IsMine)
+            {
+                return false;
+            }
+            if (string.IsNullOrEmpty(_originalNickName))
+            {
+                _originalNickName = PhotonNetwork.NickName;
+                if (string.IsNullOrEmpty(_originalNickName))
+                {
+                    _originalNickName = SemiFunc.PlayerGetName(local);
+                }
+            }
+            string steamId = SemiFunc.PlayerGetSteamID(local);
+            PhotonNetwork.NickName = newName;
+            if (PhotonNetwork.LocalPlayer != null)
+            {
+                PhotonNetwork.LocalPlayer.NickName = newName;
+            }
+            if (global::PlayerController.instance != null && !string.IsNullOrEmpty(steamId))
+            {
+                global::PlayerController.instance.PlayerSetName(newName, steamId);
+            }
+            if (SemiFunc.IsMultiplayer())
+            {
+                local.photonView.RPC("AddToStatsManagerRPC", RpcTarget.AllBuffered, newName, steamId);
+            }
+            else
+            {
+                local.AddToStatsManagerRPC(newName, steamId, default(PhotonMessageInfo));
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("SpoofLocalPlayerName 失败: " + ex.Message);
+        }
+        return false;
+    }
+
+    private static void RestoreLocalName()
+    {
+        if (!string.IsNullOrEmpty(_originalNickName))
+        {
+            SpoofLocalPlayerName(_originalNickName);
+        }
+        _originalNickName = null;
+    }
 }

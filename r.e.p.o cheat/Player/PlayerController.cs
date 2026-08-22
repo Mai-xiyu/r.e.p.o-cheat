@@ -287,30 +287,6 @@ internal class PlayerController
 			return;
 		}
 		fieldInfo.SetValue(PlayerReflectionCache.PlayerControllerInstance, crawlDelay);
-		PhotonView val = null;
-		if (PlayerReflectionCache.PhotonViewField != null)
-		{
-			val = (PhotonView)PlayerReflectionCache.PhotonViewField.GetValue(PlayerReflectionCache.PlayerControllerInstance);
-		}
-		if ((Object)(object)val == (Object)null)
-		{
-			FieldInfo field2 = PlayerReflectionCache.PlayerAvatarScriptInstance.GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field2 != null)
-			{
-				val = (PhotonView)field2.GetValue(PlayerReflectionCache.PlayerAvatarScriptInstance);
-			}
-		}
-		if ((Object)(object)val != (Object)null)
-		{
-			if (PhotonNetwork.IsMasterClient)
-			{
-				val.RPC("SetCrawlDelayRPC", (RpcTarget)3, new object[1] { crawlDelay });
-			}
-			else
-			{
-				val.RPC("SetCrawlDelayRPC", (RpcTarget)2, new object[1] { crawlDelay });
-			}
-		}
 	}
 
 	public static void SetGrabRange(float value)
@@ -352,7 +328,7 @@ internal class PlayerController
 			FieldInfo field2 = value2.GetType().GetField("throwStrength", BindingFlags.Instance | BindingFlags.Public);
 			if (field2 != null)
 			{
-				field2.SetValue(value2, value);
+				field2.SetValue(value2, UpgradeHelper.GameThrowStrength(Mathf.RoundToInt(value)));
 			}
 		}
 	}
@@ -453,7 +429,7 @@ internal class PlayerController
 			MaxStamina();
 			ReapplyStaminaSettings();
 			SetThrowStrength(Hax2.throwStrength);
-			SetGrabRange(5f);
+			SetGrabRange(UpgradeHelper.GameGrabRange(Mathf.RoundToInt(Hax2.grabRange)));
 			SetCrouchDelay(Hax2.crouchDelay);
 			SetCrouchSpeed(1f);
 			SetJumpForce(17f);

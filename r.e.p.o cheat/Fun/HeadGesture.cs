@@ -81,4 +81,10 @@ public static class HeadGesture
     /// 是否有活跃的手势
     /// </summary>
     public static bool IsActive => isShaking || isNodding;
+
+    public static void Stop()
+    {
+        isShaking = false;
+        isNodding = false;
+    }
 }

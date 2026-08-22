@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
+using r.e.p.o_cheat.Localization;
 
 namespace r.e.p.o_cheat;
 
@@ -23,6 +24,12 @@ public static class LanguageManager
         = new Dictionary<string, Dictionary<string, string>>();
 
     private static bool loaded = false;
+
+    private static readonly Dictionary<string, string> itemNameCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    private static string itemCacheLang;
+
+    private static TranslationDatabase itemHudDb;
 
     /// <summary>
     /// 自动检测打包的i18n语言文件
@@ -166,22 +173,113 @@ public static class LanguageManager
 
     /// <summary>
     /// 获取物品的翻译名称
-    /// 清理 "Valuable" 前缀和 "(Clone)" 后缀后查找 item.name.{cleaned} 键
-    /// 如果没有翻译则返回清理后的原始名称
+    /// 清理 "Valuable" 前缀和 "(Clone)" 后缀后查找 item.name.{cleaned} 键，
+    /// 商店物品再走 HUD ITEM.*（与游戏中文包同一套表），不依赖游戏内汉化开关。
     /// </summary>
     public static string GetItemName(string rawName)
     {
         if (string.IsNullOrEmpty(rawName)) return rawName;
-        string cleaned = rawName;
-        if (cleaned.StartsWith("Valuable", StringComparison.OrdinalIgnoreCase))
-            cleaned = cleaned.Substring("Valuable".Length).Trim();
-        if (cleaned.EndsWith("(Clone)", StringComparison.OrdinalIgnoreCase))
-            cleaned = cleaned.Substring(0, cleaned.Length - "(Clone)".Length).Trim();
+        if (!string.Equals(itemCacheLang, currentLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            itemNameCache.Clear();
+            itemCacheLang = currentLanguage;
+        }
+        if (itemNameCache.TryGetValue(rawName, out string cached))
+            return cached;
+        string resolved = ResolveItemName(rawName);
+        itemNameCache[rawName] = resolved;
+        return resolved;
+    }
+
+    public static bool ItemMatchesSearch(string rawName, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return true;
+        if (string.IsNullOrEmpty(rawName)) return false;
+        string q = query.Trim();
+        if (rawName.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+        string display = GetItemName(rawName);
+        return !string.IsNullOrEmpty(display) && display.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static string ResolveItemName(string rawName)
+    {
+        string cleaned = StripItemClone(rawName);
         if (string.IsNullOrEmpty(cleaned)) return rawName;
 
-        string key = "item.name." + cleaned;
-        string result = T(key);
-        return result == key ? cleaned : result;
+        string valuableKey = StripPrefix(cleaned, "Valuable");
+        foreach (string candidate in new[] { cleaned, valuableKey, StripPrefix(cleaned, "Item") })
+        {
+            if (string.IsNullOrEmpty(candidate)) continue;
+            string key = "item.name." + candidate;
+            string result = T(key);
+            if (result != key) return result;
+        }
+
+        if (IsChinese())
+        {
+            string hudKey = ToHudItemKey(cleaned);
+            if (hudKey != null)
+            {
+                TranslationDatabase db = ItemHudDb();
+                if (db != null && db.TryGetTable(TranslationDatabase.TableHud, hudKey, out string zh) && !string.IsNullOrEmpty(zh))
+                    return zh;
+            }
+        }
+
+        string assetLabel = NativeGameApi.GetItemPlainName(rawName);
+        if (!string.IsNullOrEmpty(assetLabel))
+            return assetLabel;
+
+        string strippedItem = StripPrefix(cleaned, "Item");
+        return string.IsNullOrEmpty(strippedItem) ? cleaned : strippedItem;
+    }
+
+    private static bool IsChinese()
+    {
+        return !string.IsNullOrEmpty(currentLanguage) &&
+            currentLanguage.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static TranslationDatabase ItemHudDb()
+    {
+        GameLocalizationManager mgr = GameLocalizationManager.Instance;
+        if (mgr != null && mgr.Database != null)
+            return mgr.Database;
+        if (itemHudDb == null)
+            itemHudDb = TranslationDatabase.Load();
+        return itemHudDb;
+    }
+
+    private static string StripItemClone(string rawName)
+    {
+        string cleaned = rawName.Trim();
+        if (cleaned.EndsWith("(Clone)", StringComparison.OrdinalIgnoreCase))
+            cleaned = cleaned.Substring(0, cleaned.Length - "(Clone)".Length).Trim();
+        return cleaned;
+    }
+
+    private static string StripPrefix(string value, string prefix)
+    {
+        if (string.IsNullOrEmpty(value) || string.IsNullOrEmpty(prefix)) return value;
+        if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return value.Substring(prefix.Length).Trim();
+        return value;
+    }
+
+    private static string ToHudItemKey(string cleaned)
+    {
+        if (string.IsNullOrEmpty(cleaned) || !cleaned.StartsWith("Item", StringComparison.OrdinalIgnoreCase))
+            return null;
+        string rest = StripPrefix(cleaned, "Item");
+        if (string.IsNullOrEmpty(rest)) return null;
+        return "ITEM." + rest.Replace(' ', '_').ToUpperInvariant();
+    }
+
+    private static void ClearItemNameCache()
+    {
+        itemNameCache.Clear();
+        itemCacheLang = null;
     }
 
     /// <summary>
@@ -197,6 +295,7 @@ public static class LanguageManager
         var langs = DetectLanguages();
         int idx = Array.IndexOf(langs, currentLanguage);
         currentLanguage = langs[(idx + 1) % langs.Length];
+        ClearItemNameCache();
     }
 
     /// <summary>
@@ -206,7 +305,10 @@ public static class LanguageManager
     {
         EnsureLoaded();
         if (langData.ContainsKey(lang))
+        {
             currentLanguage = lang;
+            ClearItemNameCache();
+        }
     }
 
     /// <summary>

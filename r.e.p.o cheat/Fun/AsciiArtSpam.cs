@@ -5,8 +5,8 @@ using UnityEngine;
 namespace r.e.p.o_cheat;
 
 /// <summary>
-/// ASCII 艺术刷屏 — 在聊天中发送预设字符画
-/// 注意：R.E.P.O. 会在空格处拆分消息为多条，所以使用全角空格 '\u3000' 或下划线替代
+/// Multiline chat-art sender. The game already accepts LF newlines in one chat
+/// payload, so art is encoded once and sent as one message whenever possible.
 /// </summary>
 public static class AsciiArtSpam
 {
@@ -67,38 +67,72 @@ public static class AsciiArtSpam
     {
         string[] names = new string[_artList.Count];
         for (int i = 0; i < _artList.Count; i++)
+        {
             names[i] = _artList[i].Name;
+        }
         return names;
     }
 
     public static int ArtCount => _artList.Count;
 
-    /// <summary>
-    /// 发送选中的 ASCII 字符画到聊天（需要通过协程逐行发送）
-    /// </summary>
-    public static void Send(string target, List<object> playerList, List<string> playerNames)
+    public static string GetArtText(int index)
     {
-        if (selectedArtIndex < 0 || selectedArtIndex >= _artList.Count) return;
-
-        var art = _artList[selectedArtIndex];
-        MonoBehaviour runner = Object.FindObjectOfType<MonoBehaviour>();
-        if (runner != null)
+        if (index < 0 || index >= _artList.Count)
         {
-            runner.StartCoroutine(SendArtCoroutine(art.Lines, target, playerList, playerNames));
-            statusMessage = $"正在发送 {art.Name}...";
+            return "";
         }
+        return string.Join("\n", _artList[index].Lines);
     }
 
-    private static IEnumerator SendArtCoroutine(string[] lines, string target,
+    public static void Send(string target, List<object> playerList, List<string> playerNames)
+    {
+        SendCustom(GetArtText(selectedArtIndex), target, playerList, playerNames);
+    }
+
+    public static void SendCustom(string text, string target, List<object> playerList, List<string> playerNames)
+    {
+        string[] payloads = ChatArtCodec.BuildPayloads(text);
+        if (payloads.Length == 0)
+        {
+            return;
+        }
+
+        if (payloads.Length == 1)
+        {
+            ChatHijack.MakeChat(payloads[0], target, playerList, playerNames);
+            statusMessage = ChatArtCodec.LooksLikeArt(text) ? L.T("fun.ascii_done") : "";
+            if (statusMessage.Length > 0)
+            {
+                Loader.RunCoroutine(ClearStatusCoroutine());
+            }
+            return;
+        }
+
+        statusMessage = L.T("fun.ascii_sending");
+        Loader.RunCoroutine(SendPayloadsCoroutine(payloads, target, playerList, playerNames));
+    }
+
+    private static IEnumerator SendPayloadsCoroutine(string[] payloads, string target,
         List<object> playerList, List<string> playerNames)
     {
-        foreach (string line in lines)
+        for (int i = 0; i < payloads.Length; i++)
         {
-            ChatHijack.MakeChat(line, target, playerList, playerNames);
-            yield return new WaitForSeconds(0.15f);
+            ChatHijack.MakeChat(payloads[i], target, playerList, playerNames);
+            if (i + 1 < payloads.Length)
+            {
+                // A new TTS message stops the previous one. Chunking is only a
+                // large-payload fallback, so leave enough time between chunks.
+                yield return new WaitForSecondsRealtime(0.75f);
+            }
         }
-        statusMessage = "发送完成!";
-        yield return new WaitForSeconds(2f);
+        statusMessage = L.T("fun.ascii_done");
+        yield return new WaitForSecondsRealtime(2f);
+        statusMessage = "";
+    }
+
+    private static IEnumerator ClearStatusCoroutine()
+    {
+        yield return new WaitForSecondsRealtime(2f);
         statusMessage = "";
     }
 }

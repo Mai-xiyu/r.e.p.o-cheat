@@ -1,6 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using ExitGames.Client.Photon;
+using Photon.Pun;
+using Photon.Realtime;
 using UnityEngine;
 
 namespace r.e.p.o_cheat
@@ -20,6 +24,16 @@ namespace r.e.p.o_cheat
 		public static float LiveRandomInterval = 2.5f;
 
 		public static string LastStatus = string.Empty;
+
+		public static bool FeedingMachine;
+
+		private static Coroutine _feedRoutine;
+
+		private static MonoBehaviour _feedHost;
+
+		private static MethodInfo _machineInteract;
+
+		private static FieldInfo _machineState;
 
 		private static float _nextColorSync;
 
@@ -46,6 +60,12 @@ namespace r.e.p.o_cheat
 		private static int _emissionId;
 
 		private static int _fresnelId;
+
+		private const byte TokenEvent = 172;
+
+		private static bool _photonEventHooked;
+
+		private static float _lastTokenEvent;
 
 		public static bool UnlockAll()
 		{
@@ -266,6 +286,19 @@ namespace r.e.p.o_cheat
 			return map;
 		}
 
+		public static SemiFunc.Rarity TokenRarity = SemiFunc.Rarity.UltraRare;
+
+		public static string RarityLabel(SemiFunc.Rarity rarity)
+		{
+			switch (rarity)
+			{
+				case SemiFunc.Rarity.Uncommon: return L.T("cos.rarity_uncommon");
+				case SemiFunc.Rarity.Rare: return L.T("cos.rarity_rare");
+				case SemiFunc.Rarity.UltraRare: return L.T("cos.rarity_ultra");
+				default: return L.T("cos.rarity_common");
+			}
+		}
+
 		public static int AddTokens(int count)
 		{
 			try
@@ -286,27 +319,545 @@ namespace r.e.p.o_cheat
 					LastStatus = "no token list";
 					return 0;
 				}
-				count = Mathf.Clamp(count, 1, 20);
-				SemiFunc.Rarity[] rarities =
-				{
-					SemiFunc.Rarity.Common,
-					SemiFunc.Rarity.Uncommon,
-					SemiFunc.Rarity.Rare,
-					SemiFunc.Rarity.UltraRare
-				};
+				count = Mathf.Clamp(count, 1, 200);
+				int rarity = (int)TokenRarity;
 				for (int i = 0; i < count; i++)
 				{
-					tokens.Add((int)rarities[i % rarities.Length]);
+					tokens.Add(rarity);
 				}
 				meta.Save();
-				RefreshTokenUi();
-				LastStatus = "tokens +" + count + " (now " + tokens.Count + ")";
+				RebuildTokenUi();
+				LastStatus = "tokens +" + count + " " + RarityLabel(TokenRarity) + " (now " + tokens.Count + ")";
 				return count;
 			}
 			catch (Exception ex)
 			{
 				LastStatus = "tokens: " + ex.Message;
 				return 0;
+			}
+		}
+
+		public static void SpawnCubeAtSelected()
+		{
+			PlayerAvatar avatar = GetSelectedAvatar();
+			if (avatar == null)
+			{
+				avatar = SemiFunc.PlayerAvatarLocal();
+			}
+			if ((UnityEngine.Object)avatar == null)
+			{
+				LastStatus = L.T("common.no_players");
+				return;
+			}
+			Transform t = avatar.playerTransform != null ? avatar.playerTransform : avatar.transform;
+			Vector3 pos = t.position + t.forward * 1.2f + Vector3.up * 0.4f;
+			if (NativeGameApi.SpawnCosmeticCube(TokenRarity, pos))
+			{
+				LastStatus = L.T("cos.cube_spawned");
+			}
+			else
+			{
+				LastStatus = NativeGameApi.LastStatus;
+			}
+		}
+
+		public static void AddTokensToSelected(int count)
+		{
+			EnsurePhotonEventHook();
+			PlayerAvatar avatar = GetSelectedAvatar();
+			if (avatar == null || IsLocalAvatar(avatar))
+			{
+				AddTokens(count);
+				return;
+			}
+			if (!PhotonNetwork.InRoom || avatar.photonView == null || avatar.photonView.Owner == null)
+			{
+				LastStatus = L.T("cos.tokens_need_room");
+				return;
+			}
+			int actor = avatar.photonView.Owner.ActorNumber;
+			Player localPlayer = PhotonNetwork.LocalPlayer;
+			if (localPlayer != null && actor == localPlayer.ActorNumber)
+			{
+				AddTokens(count);
+				return;
+			}
+			try
+			{
+				RaiseEventOptions options = new RaiseEventOptions
+				{
+					TargetActors = new[] { actor }
+				};
+				PhotonNetwork.RaiseEvent(TokenEvent, new object[] { count, (int)TokenRarity }, options, SendOptions.SendReliable);
+				PhotonNetwork.SendAllOutgoingCommands();
+				string name = SemiFunc.PlayerGetName(avatar) ?? actor.ToString();
+				LastStatus = L.T("cos.tokens_sent_fmt", count, name);
+			}
+			catch (Exception ex)
+			{
+				LastStatus = "tokens: " + ex.Message;
+			}
+		}
+
+		internal static void UnhookPhotonEvents()
+		{
+			if (!_photonEventHooked)
+			{
+				return;
+			}
+			try
+			{
+				if (PhotonNetwork.NetworkingClient != null)
+				{
+					PhotonNetwork.NetworkingClient.EventReceived -= OnPhotonEvent;
+				}
+			}
+			catch
+			{
+			}
+			_photonEventHooked = false;
+		}
+
+		internal static void EnsurePhotonEventHook()
+		{
+			if (_photonEventHooked)
+			{
+				return;
+			}
+			try
+			{
+				if (PhotonNetwork.NetworkingClient == null)
+				{
+					return;
+				}
+				PhotonNetwork.NetworkingClient.EventReceived += OnPhotonEvent;
+				_photonEventHooked = true;
+			}
+			catch
+			{
+			}
+		}
+
+		private static void OnPhotonEvent(EventData photonEvent)
+		{
+			if (photonEvent == null || photonEvent.Code != TokenEvent || !PhotonNetwork.InRoom)
+			{
+				return;
+			}
+			if (photonEvent.Sender <= 0)
+			{
+				return;
+			}
+			Player sender = null;
+			try
+			{
+				Room room = PhotonNetwork.CurrentRoom;
+				sender = room != null ? room.GetPlayer(photonEvent.Sender) : null;
+			}
+			catch
+			{
+			}
+			if (sender == null)
+			{
+				return;
+			}
+			object[] args = photonEvent.CustomData as object[];
+			if (args == null || args.Length < 1)
+			{
+				return;
+			}
+			int count;
+			int rarity;
+			try
+			{
+				count = Convert.ToInt32(args[0]);
+				rarity = args.Length > 1 ? Convert.ToInt32(args[1]) : (int)TokenRarity;
+			}
+			catch
+			{
+				return;
+			}
+			count = Mathf.Clamp(count, 1, 200);
+			if (rarity < 0 || rarity > 3)
+			{
+				return;
+			}
+			if (Time.unscaledTime - _lastTokenEvent < 0.25f)
+			{
+				return;
+			}
+			_lastTokenEvent = Time.unscaledTime;
+			SemiFunc.Rarity saved = TokenRarity;
+			try
+			{
+				TokenRarity = (SemiFunc.Rarity)rarity;
+				int added = AddTokens(count);
+				if (added > 0)
+				{
+					LastStatus = L.T("cos.tokens_received_fmt", added, RarityLabel(TokenRarity));
+				}
+			}
+			finally
+			{
+				TokenRarity = saved;
+			}
+		}
+
+		private static PlayerAvatar GetSelectedAvatar()
+		{
+			if (Hax2.selectedPlayerIndex < 0 || Hax2.selectedPlayerIndex >= Hax2.playerList.Count)
+			{
+				return null;
+			}
+			return Hax2.playerList[Hax2.selectedPlayerIndex] as PlayerAvatar;
+		}
+
+		private static bool IsLocalAvatar(PlayerAvatar avatar)
+		{
+			if ((UnityEngine.Object)avatar == null)
+			{
+				return true;
+			}
+			if (avatar.photonView != null && avatar.photonView.IsMine)
+			{
+				return true;
+			}
+			PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+			return (UnityEngine.Object)local != null && local == avatar;
+		}
+
+		public static List<int> GetTokenList()
+		{
+			MetaManager meta = MetaManager.instance;
+			if (meta == null)
+			{
+				return null;
+			}
+			if (_tokensField == null)
+			{
+				_tokensField = typeof(MetaManager).GetField("cosmeticTokens", InstAll);
+			}
+			return _tokensField?.GetValue(meta) as List<int>;
+		}
+
+		public static int CurrencyForRarity(SemiFunc.Rarity rarity)
+		{
+			switch (rarity)
+			{
+				case SemiFunc.Rarity.Common: return 2;
+				case SemiFunc.Rarity.Uncommon: return 4;
+				case SemiFunc.Rarity.Rare: return 8;
+				case SemiFunc.Rarity.UltraRare: return 15;
+				default: return 2;
+			}
+		}
+
+		public static int SumCashoutValue(List<int> tokens)
+		{
+			if (tokens == null || tokens.Count == 0)
+			{
+				return 0;
+			}
+			int sum = 0;
+			for (int i = 0; i < tokens.Count; i++)
+			{
+				sum += CurrencyForRarity((SemiFunc.Rarity)tokens[i]);
+			}
+			return sum;
+		}
+
+		public static string FormatTokenPreview()
+		{
+			try
+			{
+				List<int> tokens = GetTokenList();
+				if (tokens == null)
+				{
+					return L.T("cos.token_none");
+				}
+				int c = 0, u = 0, r = 0, ur = 0;
+				for (int i = 0; i < tokens.Count; i++)
+				{
+					switch ((SemiFunc.Rarity)tokens[i])
+					{
+						case SemiFunc.Rarity.Uncommon: u++; break;
+						case SemiFunc.Rarity.Rare: r++; break;
+						case SemiFunc.Rarity.UltraRare: ur++; break;
+						default: c++; break;
+					}
+				}
+				int cash = SumCashoutValue(tokens);
+				int now = 0;
+				try { now = SemiFunc.StatGetRunCurrency(); } catch { }
+				return L.T("cos.token_preview_fmt", tokens.Count, c, u, r, ur, cash, now, now + cash);
+			}
+			catch (Exception ex)
+			{
+				return "tokens: " + ex.Message;
+			}
+		}
+
+		/// <summary>
+		/// Shop machine duplicate payout: skip remaining cosmetic rolls and convert every
+		/// token to run currency (Common 2 / Uncommon 4 / Rare 8 / UltraRare 15). Host-synced.
+		/// </summary>
+		public static bool CashOutAllTokensAsCurrency()
+		{
+			try
+			{
+				List<int> tokens = GetTokenList();
+				if (tokens == null)
+				{
+					LastStatus = "no token list";
+					return false;
+				}
+				if (tokens.Count == 0)
+				{
+					LastStatus = L.T("cos.token_none");
+					return false;
+				}
+				int gained = SumCashoutValue(tokens);
+				int spent = tokens.Count;
+				if (!NativeGameApi.IsHost())
+				{
+					LastStatus = L.T("cos.cashout_need_host") + "  +" + gained + "K";
+					return false;
+				}
+				int now = SemiFunc.StatGetRunCurrency();
+				SemiFunc.StatSetRunCurrency(now + gained);
+				tokens.Clear();
+				MetaManager.instance.Save();
+				RebuildTokenUi();
+				try
+				{
+					if (CurrencyUI.instance != null)
+					{
+						CurrencyUI.instance.FetchCurrency();
+					}
+				}
+				catch { }
+				try
+				{
+					if (ShopIncreaseUI.instance != null)
+					{
+						ShopIncreaseUI.instance.ShowIncrease(gained, 3f);
+					}
+				}
+				catch { }
+				LastStatus = L.T("cos.cashout_done_fmt", spent, gained, now + gained);
+				return true;
+			}
+			catch (Exception ex)
+			{
+				LastStatus = "cashout: " + ex.Message;
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// Guest-legal dump: CosmeticShopMachine.Interact() → InteractClientRPC to the
+		/// real master. Currency is still applied by the host in RewardCurrency.
+		/// One token per Idle cycle (host animation). Unlocks leftover cosmetics first
+		/// so CosmeticLockedGet returns null and the machine pays shop money.
+		/// </summary>
+		public static void ToggleMachineFeed(MonoBehaviour runner)
+		{
+			if (FeedingMachine)
+			{
+				StopMachineFeed();
+				LastStatus = L.T("cos.feed_cancelled");
+				return;
+			}
+			if (runner == null)
+			{
+				LastStatus = "no coroutine host";
+				return;
+			}
+			List<int> tokens = GetTokenList();
+			if (tokens == null || tokens.Count == 0)
+			{
+				LastStatus = L.T("cos.token_none");
+				return;
+			}
+			if (CosmeticShopMachine.instance == null)
+			{
+				LastStatus = L.T("cos.feed_need_shop");
+				return;
+			}
+			_feedHost = runner;
+			FeedingMachine = true;
+			_feedRoutine = runner.StartCoroutine(FeedMachineRoutine());
+		}
+
+		public static void StopMachineFeed()
+		{
+			FeedingMachine = false;
+			if (_feedHost != null && _feedRoutine != null)
+			{
+				_feedHost.StopCoroutine(_feedRoutine);
+			}
+			_feedRoutine = null;
+			_feedHost = null;
+		}
+
+		private static IEnumerator FeedMachineRoutine()
+		{
+			int inserted = 0;
+			try
+			{
+				UnlockAll();
+				while (FeedingMachine)
+				{
+					List<int> tokens = GetTokenList();
+					if (tokens == null || tokens.Count == 0)
+					{
+						LastStatus = L.T("cos.feed_done_fmt", inserted);
+						yield break;
+					}
+					CosmeticShopMachine machine = CosmeticShopMachine.instance;
+					if (machine == null)
+					{
+						LastStatus = L.T("cos.feed_need_shop");
+						yield break;
+					}
+					float wait = 0f;
+					while (FeedingMachine && machine != null && !IsMachineIdle(machine) && wait < 25f)
+					{
+						LastStatus = L.T("cos.feed_wait_fmt", inserted, tokens.Count);
+						wait += Time.deltaTime;
+						yield return null;
+						machine = CosmeticShopMachine.instance;
+					}
+					if (!FeedingMachine)
+					{
+						yield break;
+					}
+					if (machine == null)
+					{
+						LastStatus = L.T("cos.feed_need_shop");
+						yield break;
+					}
+					if (!IsMachineIdle(machine))
+					{
+						LastStatus = L.T("cos.feed_timeout");
+						yield break;
+					}
+					if (!InvokeMachineInteract(machine))
+					{
+						LastStatus = "Interact() missing";
+						yield break;
+					}
+					float ack = 0f;
+					while (FeedingMachine && machine != null && IsMachineIdle(machine) && ack < 3f)
+					{
+						ack += Time.deltaTime;
+						yield return null;
+						machine = CosmeticShopMachine.instance;
+					}
+					if (!FeedingMachine)
+					{
+						yield break;
+					}
+					if (machine == null)
+					{
+						LastStatus = L.T("cos.feed_need_shop");
+						yield break;
+					}
+					if (IsMachineIdle(machine))
+					{
+						LastStatus = L.T("cos.feed_timeout");
+						yield break;
+					}
+					inserted++;
+					wait = 0f;
+					while (FeedingMachine && machine != null && !IsMachineIdle(machine) && wait < 25f)
+					{
+						int left = GetTokenList()?.Count ?? 0;
+						LastStatus = L.T("cos.feed_progress_fmt", inserted, left);
+						wait += Time.deltaTime;
+						yield return null;
+						machine = CosmeticShopMachine.instance;
+					}
+				}
+			}
+			finally
+			{
+				FeedingMachine = false;
+				_feedRoutine = null;
+				_feedHost = null;
+			}
+		}
+
+		private static bool IsMachineIdle(CosmeticShopMachine machine)
+		{
+			try
+			{
+				if (_machineState == null)
+				{
+					_machineState = typeof(CosmeticShopMachine).GetField("stateCurrent", InstAll);
+				}
+				object raw = _machineState?.GetValue(machine);
+				return raw != null && (CosmeticShopMachine.State)raw == CosmeticShopMachine.State.Idle;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		private static bool InvokeMachineInteract(CosmeticShopMachine machine)
+		{
+			try
+			{
+				if (_machineInteract == null)
+				{
+					_machineInteract = typeof(CosmeticShopMachine).GetMethod("Interact", InstAll, null, Type.EmptyTypes, null);
+				}
+				if (_machineInteract == null)
+				{
+					return false;
+				}
+				_machineInteract.Invoke(machine, null);
+				return true;
+			}
+			catch (Exception ex)
+			{
+				LastStatus = "Interact: " + ex.Message;
+				return false;
+			}
+		}
+
+		public static bool SetAllTokensRarity(SemiFunc.Rarity rarity)
+		{
+			try
+			{
+				List<int> tokens = GetTokenList();
+				if (tokens == null)
+				{
+					LastStatus = "no token list";
+					return false;
+				}
+				if (tokens.Count == 0)
+				{
+					LastStatus = L.T("cos.token_none");
+					return false;
+				}
+				int rarityValue = (int)rarity;
+				for (int i = 0; i < tokens.Count; i++)
+				{
+					tokens[i] = rarityValue;
+				}
+				TokenRarity = rarity;
+				MetaManager meta = MetaManager.instance;
+				meta?.Save();
+				RebuildTokenUi();
+				LastStatus = L.T("cos.set_all_done_fmt", tokens.Count, RarityLabel(rarity));
+				return true;
+			}
+			catch (Exception ex)
+			{
+				LastStatus = "rarity: " + ex.Message;
+				return false;
 			}
 		}
 
@@ -567,15 +1118,44 @@ namespace r.e.p.o_cheat
 
 		private static void RefreshTokenUi()
 		{
+			RebuildTokenUi();
+		}
+
+		private static void RebuildTokenUi()
+		{
 			try
 			{
-				if (CosmeticTokenUI.instance != null)
+				if (CosmeticTokenUI.instance == null)
 				{
-					CosmeticTokenUI.instance.Setup();
+					return;
 				}
+				FieldInfo listField = typeof(CosmeticTokenUI).GetField("tokenObjects", InstAll);
+				if (listField?.GetValue(CosmeticTokenUI.instance) is List<CosmeticTokenUIElement> objects)
+				{
+					for (int i = 0; i < objects.Count; i++)
+					{
+						CosmeticTokenUIElement el = objects[i];
+						if (el != null)
+						{
+							UnityEngine.Object.Destroy(el.gameObject);
+						}
+					}
+					objects.Clear();
+				}
+				CosmeticTokenUI.instance.Setup();
 			}
 			catch
 			{
+				try
+				{
+					if (CosmeticTokenUI.instance != null)
+					{
+						CosmeticTokenUI.instance.Setup();
+					}
+				}
+				catch
+				{
+				}
 			}
 		}
 	}

@@ -19,38 +19,25 @@ public static class Patches
 		}
 	}
 
-	[HarmonyPatch(typeof(Input), "GetMouseButtonUp", new Type[] { typeof(int) })]
-	public class Patch_Input_GetMouseButtonUp
+	// UnityEngine.Input mouse methods are native extern calls and cannot be
+	// prefix-patched safely. Patch the game's managed Input System facade instead.
+	[HarmonyPatch]
+	public static class InputManagerMenuButtonPatch
 	{
-		private static bool Prefix(int button, ref bool __result)
+		private static IEnumerable<MethodBase> TargetMethods()
 		{
-			if (Hax2.showMenu)
+			string[] names = { "KeyDown", "KeyUp", "KeyHold" };
+			for (int i = 0; i < names.Length; i++)
 			{
-				__result = false;
-				return false;
+				MethodInfo method = AccessTools.Method(typeof(InputManager), names[i], new[] { typeof(InputKey) });
+				if (method != null)
+				{
+					yield return method;
+				}
 			}
-			return true;
 		}
-	}
 
-	[HarmonyPatch(typeof(Input), "GetMouseButtonDown", new Type[] { typeof(int) })]
-	public class Patch_Input_GetMouseButtonDown
-	{
-		private static bool Prefix(int button, ref bool __result)
-		{
-			if (Hax2.showMenu)
-			{
-				__result = false;
-				return false;
-			}
-			return true;
-		}
-	}
-
-	[HarmonyPatch(typeof(Input), "GetMouseButton", new Type[] { typeof(int) })]
-	public class Patch_Input_GetMouseButton
-	{
-		private static bool Prefix(int button, ref bool __result)
+		private static bool Prefix(ref bool __result)
 		{
 			if (Hax2.showMenu)
 			{
@@ -84,15 +71,20 @@ public static class Patches
 			if (Hax2.spoofNameActive)
 			{
 				string persistentNameText = Hax2.persistentNameText;
-				string text = "765611472644157498";
+				string steamId = SemiFunc.PlayerGetSteamID(__instance);
+				PhotonNetwork.NickName = persistentNameText;
+				if (PhotonNetwork.LocalPlayer != null)
+				{
+					PhotonNetwork.LocalPlayer.NickName = persistentNameText;
+				}
 				if (!GameManager.Multiplayer())
 				{
-					__instance.AddToStatsManagerRPC(persistentNameText, text, default(PhotonMessageInfo));
+					__instance.AddToStatsManagerRPC(persistentNameText, steamId, default(PhotonMessageInfo));
 					return false;
 				}
 				if (__instance.photonView.IsMine)
 				{
-					__instance.photonView.RPC("AddToStatsManagerRPC", (RpcTarget)3, new object[2] { persistentNameText, text });
+					__instance.photonView.RPC("AddToStatsManagerRPC", RpcTarget.AllBuffered, persistentNameText, steamId);
 					return false;
 				}
 			}
@@ -207,8 +199,6 @@ public static class Patches
 	{
 		public static bool _isEnabledForConfig = false;
 
-		private static FieldInfo _photonViewField = AccessTools.Field(typeof(ItemGun), "photonView");
-
 		private static FieldInfo _physGrabObjectField = AccessTools.Field(typeof(ItemGun), "physGrabObject");
 
 		private static FieldInfo _grabStrengthMultiplierField = AccessTools.Field(typeof(ItemGun), "grabStrengthMultiplier");
@@ -219,23 +209,7 @@ public static class Patches
 		public static bool Prefix(ItemGun __instance, ref float[] __state)
 		{
 			__state = null;
-			bool flag = false;
-			try
-			{
-				if ((Object)(object)__instance != (Object)null && _photonViewField != null)
-				{
-					object value = _photonViewField.GetValue(__instance);
-					PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-					if ((Object)(object)val != (Object)null)
-					{
-						flag = val.IsMine;
-					}
-				}
-			}
-			catch (Exception)
-			{
-			}
-			if (!_isEnabledForConfig || !flag)
+			if (!_isEnabledForConfig || !BulletTrack.IsLocalShot(__instance))
 			{
 				return true;
 			}
@@ -287,24 +261,11 @@ public static class Patches
 		[HarmonyPostfix]
 		public static void Postfix(ItemGun __instance, float[] __state)
 		{
-			if (__state == null) return;
-			bool flag = false;
-			try
+			if (__state == null)
 			{
-				if ((Object)(object)__instance != (Object)null && _photonViewField != null)
-				{
-					object value = _photonViewField.GetValue(__instance);
-					PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-					if ((Object)(object)val != (Object)null)
-					{
-						flag = val.IsMine;
-					}
-				}
+				return;
 			}
-			catch (Exception)
-			{
-			}
-			if (!flag)
+			if (!BulletTrack.IsLocalShot(__instance))
 			{
 				return;
 			}
@@ -484,5 +445,32 @@ public static class Patches
 	public static bool IsGrabThroughWallsEnabled()
 	{
 		return GrabThroughWallsPatch.enableGrabThroughWalls;
+	}
+
+	[HarmonyPatch(typeof(PlayerHealth), "Hurt")]
+	public static class PlayerHealth_Hurt_AuraPatch
+	{
+		private static bool Prefix(PlayerHealth __instance)
+		{
+			return !PlayerAura.BlocksDamage(__instance);
+		}
+	}
+
+	[HarmonyPatch(typeof(PlayerHealth), "HurtOther")]
+	public static class PlayerHealth_HurtOther_AuraPatch
+	{
+		private static bool Prefix(PlayerHealth __instance)
+		{
+			return !PlayerAura.BlocksDamage(__instance);
+		}
+	}
+
+	[HarmonyPatch(typeof(HurtCollider), "PlayerHurt")]
+	public static class HurtCollider_PlayerHurt_AuraPatch
+	{
+		private static bool Prefix(PlayerAvatar _player)
+		{
+			return !PlayerAura.Covers(_player);
+		}
 	}
 }

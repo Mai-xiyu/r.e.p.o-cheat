@@ -55,13 +55,10 @@ public static class RpcInjector
         "ReviveRPC",
         "UpdateHealthRPC",
         "DollarValueSetRPC",
-        "UpgradePlayerGrabStrengthRPC",
-        "UpgradePlayerSprintSpeedRPC",
-        "UpgradePlayerExtraJumpRPC",
-        "UpgradePlayerTumbleLaunchRPC",
-        "UpgradePlayerGrabRangeRPC",
-        "UpgradePlayerHealthRPC",
-        "UpgradePlayerThrowStrengthRPC",
+        "UpdateStatRPC",
+        "TesterNoAggroCommandRPC",
+        "ChatMessageSendRPC",
+        "AddToStatsManagerRPC",
     };
 
     // ─── 扫描 ──────────────────────────────────────────────
@@ -331,23 +328,52 @@ public static class RpcInjector
     /// </summary>
     public static bool HealPlayer(string steamID, int amount)
     {
-        var pv = FindPunManagerView();
-        if ((UnityEngine.Object)(object)pv != (UnityEngine.Object)null)
+        try
         {
-            return CallRpcOnView(pv, "HealRPC", (RpcTarget)3, new object[] { steamID, amount });
+            List<PlayerAvatar> players = SemiFunc.PlayerGetList();
+            if (players == null)
+            {
+                return false;
+            }
+            foreach (PlayerAvatar avatar in players)
+            {
+                if (avatar != null && SemiFunc.PlayerGetSteamID(avatar) == steamID)
+                {
+                    Players.HealPlayer(avatar, amount, SemiFunc.PlayerGetName(avatar));
+                    statusMessage = "heal requested";
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = ex.Message;
         }
         return false;
     }
 
-    /// <summary>
-    /// 复活玩家
-    /// </summary>
     public static bool RevivePlayer(string steamID)
     {
-        var pv = FindPunManagerView();
-        if ((UnityEngine.Object)(object)pv != (UnityEngine.Object)null)
+        try
         {
-            return CallRpcOnView(pv, "ReviveRPC", (RpcTarget)3, new object[] { steamID });
+            List<PlayerAvatar> players = SemiFunc.PlayerGetList();
+            if (players == null)
+            {
+                return false;
+            }
+            foreach (PlayerAvatar avatar in players)
+            {
+                if (avatar != null && SemiFunc.PlayerGetSteamID(avatar) == steamID)
+                {
+                    Players.ReviveSelectedPlayer(avatar, new List<object>(), SemiFunc.PlayerGetName(avatar));
+                    statusMessage = "revive requested";
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            statusMessage = ex.Message;
         }
         return false;
     }

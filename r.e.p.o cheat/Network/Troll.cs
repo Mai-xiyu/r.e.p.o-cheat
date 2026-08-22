@@ -1,15 +1,20 @@
 using System;
-using System.Collections;
 using System.Reflection;
+using ExitGames.Client.Photon;
 using Photon.Pun;
 using Photon.Realtime;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace r.e.p.o_cheat;
 
 internal static class Troll
 {
+	private const byte RecoverLoadingEvent = 173;
+
+	private static bool _photonEventHooked;
+
+	private static readonly BindingFlags InstAll = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
 	public static void InfiniteLoadingSelectedPlayer()
 	{
 		try
@@ -69,20 +74,149 @@ internal static class Troll
 
 	public static void SceneRecovery()
 	{
-		Debug.Log((object)"[恢复] === 开始场景恢复 ===");
-		SceneManager.LoadScene("LobbyJoin", (LoadSceneMode)0);
-		Debug.Log((object)"[恢复] 已加载 LobbyJoin 场景。");
-		((MonoBehaviour)Hax2.CoroutineHost).StartCoroutine(LoadReloadSceneAfterDelay());
+		RecoverLocalFromLoading();
+		TryNotifySelectedPlayerToRecover();
 	}
 
-	private static IEnumerator LoadReloadSceneAfterDelay()
+	internal static void UnhookPhotonEvents()
 	{
-		yield return (object)new WaitForSeconds(3f);
-		SceneManager.LoadScene("Reload", (LoadSceneMode)0);
-		Debug.Log((object)"[恢复] 已加载 Reload 场景。");
-		yield return (object)new WaitForSeconds(0.5f);
-		PhotonNetwork.Disconnect();
-		Debug.Log((object)"[恢复] === 场景恢复完成 ===");
+		if (!_photonEventHooked)
+		{
+			return;
+		}
+		try
+		{
+			if (PhotonNetwork.NetworkingClient != null)
+			{
+				PhotonNetwork.NetworkingClient.EventReceived -= OnPhotonEvent;
+			}
+		}
+		catch
+		{
+		}
+		_photonEventHooked = false;
+	}
+
+	internal static void EnsurePhotonEventHook()
+	{
+		if (_photonEventHooked)
+		{
+			return;
+		}
+		try
+		{
+			if (PhotonNetwork.NetworkingClient == null)
+			{
+				return;
+			}
+			PhotonNetwork.NetworkingClient.EventReceived += OnPhotonEvent;
+			_photonEventHooked = true;
+		}
+		catch
+		{
+		}
+	}
+
+	internal static void RecoverLocalFromLoading()
+	{
+		try
+		{
+			GameDirector gd = GameDirector.instance;
+			if (gd != null)
+			{
+				FieldInfo outroField = typeof(GameDirector).GetField("outroStart", InstAll);
+				bool outroFlag = outroField != null && outroField.GetValue(gd) is bool flag && flag;
+				if (outroFlag || gd.currentState == GameDirector.gameState.Outro || gd.currentState == GameDirector.gameState.Death)
+				{
+					gd.Revive();
+				}
+			}
+			LoadingUI ui = LoadingUI.instance;
+			if (ui != null)
+			{
+				ui.StopLoading();
+				typeof(LoadingUI).GetField("levelAnimationCompleted", InstAll)?.SetValue(ui, true);
+			}
+			if (HUD.instance != null)
+			{
+				HUD.instance.Show();
+			}
+			PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+			if (local != null)
+			{
+				typeof(PlayerAvatar).GetField("levelAnimationCompleted", InstAll)?.SetValue(local, true);
+			}
+			Debug.Log((object)"[恢复] 已本地解除加载界面，未重载场景、未断开连接。");
+		}
+		catch (Exception ex)
+		{
+			Debug.Log((object)("[恢复] 本地解除失败: " + ex.Message));
+		}
+	}
+
+	private static void TryNotifySelectedPlayerToRecover()
+	{
+		EnsurePhotonEventHook();
+		if (!PhotonNetwork.InRoom)
+		{
+			return;
+		}
+		PlayerAvatar avatar = GetSelectedAvatar();
+		if (avatar == null || avatar.photonView == null || avatar.photonView.Owner == null)
+		{
+			return;
+		}
+		int actor = avatar.photonView.Owner.ActorNumber;
+		Player localPlayer = PhotonNetwork.LocalPlayer;
+		if (localPlayer != null && actor == localPlayer.ActorNumber)
+		{
+			return;
+		}
+		try
+		{
+			RaiseEventOptions options = new RaiseEventOptions
+			{
+				TargetActors = new[] { actor }
+			};
+			PhotonNetwork.RaiseEvent(RecoverLoadingEvent, true, options, SendOptions.SendReliable);
+		}
+		catch
+		{
+		}
+	}
+
+	private static void OnPhotonEvent(EventData photonEvent)
+	{
+		if (photonEvent == null || photonEvent.Code != RecoverLoadingEvent || !PhotonNetwork.InRoom)
+		{
+			return;
+		}
+		if (photonEvent.Sender <= 0)
+		{
+			return;
+		}
+		try
+		{
+			Room room = PhotonNetwork.CurrentRoom;
+			if (room == null || room.GetPlayer(photonEvent.Sender) == null)
+			{
+				return;
+			}
+		}
+		catch
+		{
+			return;
+		}
+		RecoverLocalFromLoading();
+	}
+
+	private static PlayerAvatar GetSelectedAvatar()
+	{
+		if (Hax2.selectedPlayerIndex < 0 || Hax2.selectedPlayerIndex >= Hax2.playerList.Count)
+		{
+			return null;
+		}
+		return Hax2.playerList[Hax2.selectedPlayerIndex] as PlayerAvatar;
 	}
 
 	public static void ForcePlayerGlitch()

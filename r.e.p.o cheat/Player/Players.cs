@@ -91,11 +91,15 @@ internal static class Players
 	{
 		try
 		{
-			// 游戏自己的死亡+同步路径（PlayerHealth.Death 内部处理 RPC）
-			if (selectedPlayer is PlayerAvatar avatar && avatar.playerHealth != null)
+			if (!(selectedPlayer is PlayerAvatar avatar))
 			{
-				avatar.playerHealth.Death();
+				return;
 			}
+			// PlayerHealth.Death() is owner-only (photonView.IsMine). Calling it on the
+			// host for a guest avatar is a no-op, so same-cheat guests with godMode
+			// never die. PlayerDeath → PlayerDeathRPC is master-authoritative and
+			// does not check godMode.
+			avatar.PlayerDeath(-1);
 		}
 		catch (Exception)
 		{

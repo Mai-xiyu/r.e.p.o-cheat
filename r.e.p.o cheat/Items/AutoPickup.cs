@@ -1,185 +1,294 @@
 using System;
-using System.Collections.Generic;
 using System.Reflection;
-using Photon.Pun;
+using HarmonyLib;
 using UnityEngine;
 
 namespace r.e.p.o_cheat;
 
 /// <summary>
-/// 自动拾取 - 自动将附近高价值物品传送到玩家
-/// 自动卖出 - 自动将物品传送到撤离点
+/// Auto pickup teleports nearby valuables to the player.
+/// Auto sell teleports only the grabbed / grab-ray hovered valuable into an
+/// unlocked extraction (Active, or Idle READY). Locked and completed points are skipped.
 /// </summary>
 public static class AutoPickup
 {
-    public static bool isAutoPickupEnabled = false;
-    public static bool isAutoSellEnabled = false;
+	public static bool isAutoPickupEnabled = false;
+	public static bool isAutoSellEnabled = false;
+	public static string SellStatus = "";
 
-    // 自动拾取参数
-    public static float pickupRadius = 30f;         // 拾取范围
-    public static int minPickupValue = 100;          // 最小拾取价值
-    public static float pickupInterval = 1.5f;       // 拾取间隔（秒）
+	public static float pickupRadius = 30f;
+	public static int minPickupValue = 100;
+	public static float pickupInterval = 1.5f;
 
-    private static float lastPickupTime = 0f;
-    private static float lastSellTime = 0f;
-    private static float sellInterval = 2f;
+	private static float lastPickupTime = 0f;
+	private static float lastSellTime = 0f;
+	private static float sellInterval = 0.2f;
 
-    /// <summary>
-    /// 在 Update 中调用
-    /// </summary>
-    public static void UpdateAutoPickup()
-    {
-        if (!isAutoPickupEnabled && !isAutoSellEnabled) return;
+	private static readonly FieldInfo GrabbedPhysField = AccessTools.Field(typeof(PhysGrabber), "grabbedPhysGrabObject");
+	private static readonly FieldInfo LookingAtField = AccessTools.Field(typeof(PhysGrabber), "currentlyLookingAtPhysGrabObject");
+	private static readonly FieldInfo RoomVolumeCheckField = AccessTools.Field(typeof(PhysGrabObject), "roomVolumeCheck");
+	private static readonly FieldInfo InExtractionField = AccessTools.Field(typeof(RoomVolumeCheck), "inExtractionPoint");
 
-        try
-        {
-            if (isAutoPickupEnabled && Time.time - lastPickupTime >= pickupInterval)
-            {
-                lastPickupTime = Time.time;
-                PickupNearbyItems();
-            }
+	public static void UpdateAutoPickup()
+	{
+		if (!isAutoPickupEnabled && !isAutoSellEnabled)
+		{
+			return;
+		}
 
-            if (isAutoSellEnabled && Time.time - lastSellTime >= sellInterval)
-            {
-                lastSellTime = Time.time;
-                SellItemsToExtraction();
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError((object)$"[自动拾取] 错误: {ex.Message}");
-        }
-    }
+		try
+		{
+			if (isAutoPickupEnabled && Time.time - lastPickupTime >= pickupInterval)
+			{
+				lastPickupTime = Time.time;
+				PickupNearbyItems();
+			}
 
-    private static void PickupNearbyItems()
-    {
-        try
-        {
-            GameObject localPlayer = DebugCheats.GetLocalPlayer();
-            if ((Object)(object)localPlayer == (Object)null) return;
+			if (isAutoSellEnabled && Time.time - lastSellTime >= sellInterval)
+			{
+				lastSellTime = Time.time;
+				SellItemsToExtraction();
+			}
+		}
+		catch (Exception ex)
+		{
+			SellStatus = ex.Message;
+			Debug.LogError((object)("[自动拾取] 错误: " + ex.Message));
+		}
+	}
 
-            Vector3 playerPos = localPlayer.transform.position;
-            ValuableObject[] valuables = SceneCache.GetObjects<ValuableObject>(0.5f);
+	private static void PickupNearbyItems()
+	{
+		try
+		{
+			GameObject localPlayer = DebugCheats.GetLocalPlayer();
+			if ((Object)(object)localPlayer == (Object)null)
+			{
+				return;
+			}
 
-            if (valuables == null || valuables.Length == 0) return;
+			Vector3 playerPos = localPlayer.transform.position;
+			Quaternion playerRot = localPlayer.transform.rotation;
+			ValuableObject[] valuables = SceneCache.GetObjects<ValuableObject>(0.5f);
+			if (valuables == null || valuables.Length == 0)
+			{
+				return;
+			}
 
-            foreach (ValuableObject valuable in valuables)
-            {
-                if ((Object)(object)valuable == (Object)null) continue;
+			foreach (ValuableObject valuable in valuables)
+			{
+				if (!IsSellableValuable(valuable))
+				{
+					continue;
+				}
 
-                Transform t = ((Component)valuable).transform;
-                if ((Object)(object)t == (Object)null) continue;
+				Transform t = ((Component)valuable).transform;
+				float dist = Vector3.Distance(playerPos, t.position);
+				if (dist > pickupRadius || dist < 1.2f)
+				{
+					continue;
+				}
 
-                float dist = Vector3.Distance(playerPos, t.position);
-                if (dist > pickupRadius) continue;
+				if (GetItemValue(valuable) < minPickupValue)
+				{
+					continue;
+				}
 
-                // 读取价值
-                int value = GetItemValue(valuable);
-                if (value < minPickupValue) continue;
+				Vector3 targetPos = ItemTeleport.SnapToGround(playerPos + localPlayer.transform.forward * 1f);
+				ItemTeleport.TeleportComponent((Component)valuable, targetPos, playerRot);
+			}
+		}
+		catch (Exception ex)
+		{
+			Debug.LogError((object)("[自动拾取] 拾取失败: " + ex.Message));
+		}
+	}
 
-                // 传送物品到玩家位置
-                Vector3 targetPos = playerPos + Vector3.up * 0.5f + UnityEngine.Random.insideUnitSphere * 0.5f;
-                targetPos.y = playerPos.y + 0.5f;
+	private static void SellItemsToExtraction()
+	{
+		try
+		{
+			PhysGrabObject phys = GetHoveredPhys();
+			if ((Object)(object)phys == (Object)null)
+			{
+				SellStatus = L.T("items.auto_sell_aim");
+				return;
+			}
 
-                PhotonView pv = ((Component)valuable).GetComponent<PhotonView>();
-                if (pv != null && PhotonNetwork.IsConnected)
-                {
-                    t.position = targetPos;
-                }
-                else
-                {
-                    t.position = targetPos;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError((object)$"[自动拾取] 拾取失败: {ex.Message}");
-        }
-    }
+			ValuableObject valuable = phys.GetComponent<ValuableObject>()
+				?? phys.GetComponentInParent<ValuableObject>()
+				?? phys.GetComponentInChildren<ValuableObject>();
+			if ((Object)(object)valuable == (Object)null || !IsSellableValuable(valuable))
+			{
+				SellStatus = L.T("items.auto_sell_not_valuable");
+				return;
+			}
 
-    private static void SellItemsToExtraction()
-    {
-        try
-        {
-            GameObject localPlayer = DebugCheats.GetLocalPlayer();
-            if ((Object)(object)localPlayer == (Object)null) return;
+			if (!ItemTeleport.TryGetOpenExtractionDrop(out Vector3 dropPos, out Quaternion dropRot, out string extractLabel))
+			{
+				SellStatus = L.T("items.auto_sell_no_extract");
+				return;
+			}
 
-            // 找到最近的撤离点
-            ExtractionPoint[] points = SceneCache.GetObjects<ExtractionPoint>(1f);
-            if (points == null || points.Length == 0) return;
+			if (IsAlreadyInExtraction(phys) || Vector3.Distance(dropPos, ((Component)valuable).transform.position) < 1.2f)
+			{
+				SellStatus = L.T("items.auto_sell_in_zone");
+				return;
+			}
 
-            ExtractionPoint nearest = null;
-            float nearestDist = float.MaxValue;
-            Vector3 playerPos = localPlayer.transform.position;
+			ReleaseIfGrabbed();
+			if (!ItemTeleport.TeleportComponent((Component)valuable, dropPos, dropRot))
+			{
+				SellStatus = L.T("items.auto_sell_no_extract");
+				return;
+			}
 
-            foreach (var point in points)
-            {
-                if ((Object)(object)point == (Object)null) continue;
-                float dist = Vector3.Distance(playerPos, ((Component)point).transform.position);
-                if (dist < nearestDist)
-                {
-                    nearestDist = dist;
-                    nearest = point;
-                }
-            }
+			SellStatus = L.T("items.auto_sell_sent", extractLabel);
+		}
+		catch (Exception ex)
+		{
+			SellStatus = ex.Message;
+			Debug.LogError((object)("[自动卖出] 失败: " + ex.Message));
+		}
+	}
 
-            if (nearest == null) return;
+	private static PhysGrabObject GetHoveredPhys()
+	{
+		PhysGrabber grabber = GetLocalGrabber();
+		PhysGrabObject phys = null;
 
-            Vector3 extractionPos = ((Component)nearest).transform.position;
+		if ((Object)(object)grabber != (Object)null)
+		{
+			if (grabber.grabbed)
+			{
+				phys = ComponentToPhys(grabber.grabbedObjectTransform);
+				if ((Object)(object)phys == (Object)null)
+				{
+					phys = GrabbedPhysField?.GetValue(grabber) as PhysGrabObject;
+				}
+			}
+			if ((Object)(object)phys == (Object)null)
+			{
+				phys = LookingAtField?.GetValue(grabber) as PhysGrabObject;
+			}
+		}
 
-            // 找到玩家附近（很近的）物品并传送到撤离点
-            ValuableObject[] valuables = SceneCache.GetObjects<ValuableObject>(0.5f);
-            if (valuables == null) return;
+		if ((Object)(object)phys == (Object)null || phys.dead)
+		{
+			return null;
+		}
+		return phys;
+	}
 
-            int soldCount = 0;
-            foreach (ValuableObject valuable in valuables)
-            {
-                if ((Object)(object)valuable == (Object)null) continue;
-                Transform t = ((Component)valuable).transform;
-                float dist = Vector3.Distance(playerPos, t.position);
+	private static PhysGrabObject ComponentToPhys(Component source)
+	{
+		if ((Object)(object)source == (Object)null)
+		{
+			return null;
+		}
+		return source.GetComponent<PhysGrabObject>()
+			?? source.GetComponentInParent<PhysGrabObject>()
+			?? source.GetComponentInChildren<PhysGrabObject>();
+	}
 
-                // 只传送玩家附近5米内的物品
-                if (dist <= 5f)
-                {
-                    Vector3 sellPos = extractionPos + UnityEngine.Random.insideUnitSphere * 1f;
-                    sellPos.y = extractionPos.y + 0.5f;
-                    t.position = sellPos;
-                    soldCount++;
-                }
-            }
+	private static PhysGrabObject ComponentToPhys(GameObject source)
+	{
+		if ((Object)(object)source == (Object)null)
+		{
+			return null;
+		}
+		return source.GetComponent<PhysGrabObject>()
+			?? source.GetComponentInParent<PhysGrabObject>()
+			?? source.GetComponentInChildren<PhysGrabObject>();
+	}
 
-            if (soldCount > 0)
-            {
-                Debug.Log((object)$"[自动卖出] 传送了 {soldCount} 个物品到撤离点");
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError((object)$"[自动卖出] 失败: {ex.Message}");
-        }
-    }
+	private static void ReleaseIfGrabbed()
+	{
+		PhysGrabber grabber = GetLocalGrabber();
+		if ((Object)(object)grabber == (Object)null || !grabber.grabbed)
+		{
+			return;
+		}
+		try
+		{
+			grabber.ReleaseObject(-1);
+		}
+		catch
+		{
+		}
+	}
 
-    private static int GetItemValue(ValuableObject valuable)
-    {
-        try
-        {
-            FieldInfo dollarValueField = typeof(ValuableObject).GetField("dollarValueCurrent",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (dollarValueField != null)
-            {
-                return (int)(float)dollarValueField.GetValue(valuable);
-            }
+	private static PhysGrabber GetLocalGrabber()
+	{
+		if ((Object)(object)PhysGrabber.instance != (Object)null)
+		{
+			return PhysGrabber.instance;
+		}
+		PlayerAvatar avatar = PlayerAvatar.instance;
+		if ((Object)(object)avatar != (Object)null)
+		{
+			return avatar.physGrabber;
+		}
+		return null;
+	}
 
-            // fallback
-            FieldInfo valueField = typeof(ValuableObject).GetField("dollarValueOriginal",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (valueField != null)
-            {
-                return (int)(float)valueField.GetValue(valuable);
-            }
-        }
-        catch { }
-        return 0;
-    }
+	private static bool IsAlreadyInExtraction(PhysGrabObject phys)
+	{
+		try
+		{
+			object check = RoomVolumeCheckField?.GetValue(phys);
+			if (check == null)
+			{
+				return false;
+			}
+			object flag = InExtractionField?.GetValue(check);
+			return flag is bool inside && inside;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private static bool IsSellableValuable(ValuableObject valuable)
+	{
+		if ((Object)(object)valuable == (Object)null)
+		{
+			return false;
+		}
+		GameObject go = ((Component)valuable).gameObject;
+		if ((Object)(object)go == (Object)null || !go.activeInHierarchy)
+		{
+			return false;
+		}
+		if (go.GetComponent<PlayerDeathHead>() != null || go.GetComponentInParent<PlayerDeathHead>() != null)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private static int GetItemValue(ValuableObject valuable)
+	{
+		try
+		{
+			FieldInfo dollarValueField = typeof(ValuableObject).GetField("dollarValueCurrent",
+				BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			if (dollarValueField != null)
+			{
+				return Convert.ToInt32(dollarValueField.GetValue(valuable));
+			}
+
+			FieldInfo valueField = typeof(ValuableObject).GetField("dollarValueOriginal",
+				BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			if (valueField != null)
+			{
+				return Convert.ToInt32(valueField.GetValue(valuable));
+			}
+		}
+		catch
+		{
+		}
+		return 0;
+	}
 }

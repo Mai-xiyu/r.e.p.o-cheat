@@ -24,21 +24,9 @@ public static class UpgradeHelper
 
             foreach (var upgrade in Upgrades)
             {
-                SetUpgrade(steamID, upgrade.Dict, 6, upgrade.Apply);
+                SetUpgrade(steamID, upgrade.Dict, 30, upgrade.Apply);
             }
 
-            // 也直接设置本地 physGrabber
-            try
-            {
-                PlayerAvatar localAvatar = SemiFunc.PlayerAvatarLocal();
-                if (localAvatar != null)
-                {
-                    localAvatar.physGrabber.grabStrength = 30f;
-                }
-            }
-            catch { }
-
-            // Update UI slider values
             Hax2.sliderValueStrength = 30f;
             Hax2.oldSliderValue = 30f;
             Hax2.sliderValue = 30f;
@@ -46,6 +34,7 @@ public static class UpgradeHelper
             Hax2.throwStrength = 30f;
             Hax2.extraJumps = 30;
             Hax2.tumbleLaunch = 20f;
+            RebuildLocalGrabPhysics();
 
             Debug.Log("[UpgradeHelper] All 13 upgrades maxed via PunManager API!");
         }
@@ -84,6 +73,44 @@ public static class UpgradeHelper
             return;
         }
         SetUpgrade(steamID, dictName, Mathf.Max(0, target), apply);
+    }
+
+    /// <summary>
+    /// Vanilla PhysGrabber: grabStrength = 1 + level*0.2, throwStrength = level*0.3, grabRange = 4 + level.
+    /// Writing the slider as an absolute (5, 30, …) makes the hold spring yank objects
+    /// toward the grab point (usually above) so they launch up on release — carts included.
+    /// </summary>
+    public static float GameGrabStrength(int level)
+    {
+        return 1f + Mathf.Max(0, level) * 0.2f;
+    }
+
+    public static float GameThrowStrength(int level)
+    {
+        return Mathf.Max(0, level) * 0.3f;
+    }
+
+    public static float GameGrabRange(int level)
+    {
+        return 4f + Mathf.Max(0, level);
+    }
+
+    public static void RebuildLocalGrabPhysics()
+    {
+        try
+        {
+            PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+            if (local == null || local.physGrabber == null)
+            {
+                return;
+            }
+            local.physGrabber.grabStrength = GameGrabStrength(Mathf.RoundToInt(Hax2.sliderValueStrength));
+            local.physGrabber.throwStrength = GameThrowStrength(Mathf.RoundToInt(Hax2.throwStrength));
+            local.physGrabber.grabRange = GameGrabRange(Mathf.RoundToInt(Hax2.grabRange));
+        }
+        catch
+        {
+        }
     }
 
     /// <summary>幂等升级：先应用差值（立即生效），再用游戏自己的 UpdateStat 同步字典到所有客户端。</summary>
@@ -132,12 +159,13 @@ public static class UpgradeHelper
             if (string.IsNullOrEmpty(steamID)) return;
             if (PunManager.instance == null || StatsManager.instance == null) return;
 
-            SetUpgrade(steamID, "playerUpgradeStrength", Mathf.Clamp(grabStrength, 0, 6), (id, v) => PunManager.instance.UpgradePlayerGrabStrength(id, v));
-            SetUpgrade(steamID, "playerUpgradeThrow", Mathf.Clamp(throwStrength, 0, 6), (id, v) => PunManager.instance.UpgradePlayerThrowStrength(id, v));
-            SetUpgrade(steamID, "playerUpgradeSpeed", Mathf.Clamp(sprintSpeed, 0, 6), (id, v) => PunManager.instance.UpgradePlayerSprintSpeed(id, v));
-            SetUpgrade(steamID, "playerUpgradeRange", Mathf.Clamp(grabRange, 0, 6), (id, v) => PunManager.instance.UpgradePlayerGrabRange(id, v));
-            SetUpgrade(steamID, "playerUpgradeExtraJump", Mathf.Clamp(extraJump, 0, 6), (id, v) => PunManager.instance.UpgradePlayerExtraJump(id, v));
-            SetUpgrade(steamID, "playerUpgradeLaunch", Mathf.Clamp(tumbleLaunch, 0, 6), (id, v) => PunManager.instance.UpgradePlayerTumbleLaunch(id, v));
+            int cap = Mathf.Clamp(Hax2.AdminUpgradeCap, Hax2.AdminUpgradeCapMin, Hax2.AdminUpgradeCapMax);
+            SetUpgrade(steamID, "playerUpgradeStrength", Mathf.Clamp(grabStrength, 0, cap), (id, v) => PunManager.instance.UpgradePlayerGrabStrength(id, v));
+            SetUpgrade(steamID, "playerUpgradeThrow", Mathf.Clamp(throwStrength, 0, cap), (id, v) => PunManager.instance.UpgradePlayerThrowStrength(id, v));
+            SetUpgrade(steamID, "playerUpgradeSpeed", Mathf.Clamp(sprintSpeed, 0, cap), (id, v) => PunManager.instance.UpgradePlayerSprintSpeed(id, v));
+            SetUpgrade(steamID, "playerUpgradeRange", Mathf.Clamp(grabRange, 0, cap), (id, v) => PunManager.instance.UpgradePlayerGrabRange(id, v));
+            SetUpgrade(steamID, "playerUpgradeExtraJump", Mathf.Clamp(extraJump, 0, cap), (id, v) => PunManager.instance.UpgradePlayerExtraJump(id, v));
+            SetUpgrade(steamID, "playerUpgradeLaunch", Mathf.Clamp(tumbleLaunch, 0, cap), (id, v) => PunManager.instance.UpgradePlayerTumbleLaunch(id, v));
 
             // 直接设置本地物理属性（立即生效，不依赖RPC）
             try
@@ -164,9 +192,10 @@ public static class UpgradeHelper
             PlayerAvatar localAvatar = SemiFunc.PlayerAvatarLocal();
             if (localAvatar == null) return;
 
-            // 力量 - physGrabber.grabStrength
-            if (localAvatar.physGrabber != null)
-                localAvatar.physGrabber.grabStrength = grabStrength;
+            // Grab/throw/range sliders are upgrade levels. The game converts those
+            // to PhysGrabber fields (1+0.2n / 0.3n / 4+n). Do not write the level
+            // into grabStrength — that is what launched items and carts on release.
+            RebuildLocalGrabPhysics();
 
             // 速度滑条是升级层数（PunManager 对 SprintSpeed 做 +=），不能把 SprintSpeed
             // 写成绝对值。每 8 秒写成 1 会冲掉商店加成，并和 Super Speed 的 OverrideSpeed 抢值，
@@ -233,9 +262,12 @@ public static class ItemInflater
                             pv = pvField.GetValue(item) as PhotonView;
                     }
 
-                    if (pv != null)
+                    FieldInfo dollar = item.GetType().GetField("dollarValueCurrent",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    dollar?.SetValue(item, targetValue);
+                    if (pv != null && NativeGameApi.IsHost())
                     {
-                        pv.RPC("DollarValueSetRPC", (RpcTarget)0, new object[] { targetValue });
+                        pv.RPC("DollarValueSetRPC", RpcTarget.Others, new object[] { targetValue });
                         count++;
                     }
                 }
@@ -286,8 +318,8 @@ public static class ItemInflater
                             pv = pvField.GetValue(item) as PhotonView;
                     }
 
-                    if (pv != null)
-                        pv.RPC("DollarValueSetRPC", (RpcTarget)0, new object[] { newValue });
+                    if (pv != null && NativeGameApi.IsHost())
+                        pv.RPC("DollarValueSetRPC", RpcTarget.Others, new object[] { newValue });
                 }
                 catch { }
             }
@@ -822,61 +854,191 @@ public static class TeamTeleport
 }
 
 /// <summary>
-/// 玩家无敌光环: 持续治疗指定玩家
+/// Keep selected players alive. Local Hurt() is owner-only, so true
+/// invincibility is a local godMode + Hurt skip; others get HealOther /
+/// Revive, and the host also drops HurtOther RPCs aimed at them.
 /// </summary>
 public static class PlayerAura
 {
     public static bool isEnabled = false;
-    public static int targetActorNumber = -1; // -1 = 全部
+    public static int targetActorNumber = -1; // -1 = everyone
     private static float lastHealTime = 0f;
-    private static float healInterval = 0.5f;
+    private const float HealInterval = 0.1f;
+    private static FieldInfo _godModeField;
 
     public static void Toggle()
     {
         isEnabled = !isEnabled;
-        if (!isEnabled) targetActorNumber = -1;
+        if (!isEnabled)
+        {
+            OnDisabled();
+        }
     }
 
-    /// <summary>
-    /// 每帧调用: 持续为目标玩家满血
-    /// （旧实现用 3 参数的伪造 UpdateHealthRPC——真实签名为 4 参数，RPC 被游戏丢弃、功能一直是死的；
-    ///  现在走游戏自己的 PlayerHealth.HealOther，内部自动同步 HealOtherRPC。）
-    /// </summary>
+    public static void OnDisabled()
+    {
+        isEnabled = false;
+        targetActorNumber = -1;
+        RestoreLocalGodMode();
+    }
+
+    public static int ActorOf(PlayerAvatar avatar)
+    {
+        if ((UnityEngine.Object)avatar == null)
+        {
+            return 0;
+        }
+        PhotonView pv = avatar.photonView;
+        if (pv == null)
+        {
+            return 0;
+        }
+        if (pv.Owner != null)
+        {
+            return pv.Owner.ActorNumber;
+        }
+        return pv.OwnerActorNr;
+    }
+
+    public static bool Covers(PlayerAvatar avatar)
+    {
+        if (!isEnabled || (UnityEngine.Object)avatar == null)
+        {
+            return false;
+        }
+        if (targetActorNumber == -1)
+        {
+            return true;
+        }
+        int actor = ActorOf(avatar);
+        return actor > 0 && actor == targetActorNumber;
+    }
+
+    public static bool BlocksDamage(PlayerHealth health)
+    {
+        if (!isEnabled || (UnityEngine.Object)health == null)
+        {
+            return false;
+        }
+        PlayerAvatar avatar = ((Component)health).GetComponent<PlayerAvatar>();
+        if ((UnityEngine.Object)avatar == null)
+        {
+            avatar = ((Component)health).GetComponentInParent<PlayerAvatar>();
+        }
+        return Covers(avatar);
+    }
+
     public static void Update()
     {
-        if (!isEnabled) return;
-        if (Time.time - lastHealTime < healInterval) return;
+        if (!isEnabled)
+        {
+            return;
+        }
+        if (Time.time - lastHealTime < HealInterval)
+        {
+            return;
+        }
         lastHealTime = Time.time;
 
         try
         {
             List<PlayerAvatar> players = SemiFunc.PlayerGetList();
-            if (players == null) return;
-
-            foreach (var avatar in players)
+            if (players == null)
             {
-                if ((UnityEngine.Object)(object)avatar == (UnityEngine.Object)null) continue;
-                try
+                return;
+            }
+
+            foreach (PlayerAvatar avatar in players)
+            {
+                if ((UnityEngine.Object)avatar == null)
                 {
-                    PhotonView pv = avatar.photonView;
-                    if (pv == null)
-                        pv = ((Component)avatar).GetComponent<PhotonView>();
-                    if (pv == null) continue;
-
-                    // 过滤目标
-                    if (targetActorNumber != -1 && pv.OwnerActorNr != targetActorNumber)
-                        continue;
-
-                    if (avatar.playerHealth != null)
-                    {
-                        // 游戏自己的治疗+同步路径（HealOther → HealOtherRPC）
-                        avatar.playerHealth.HealOther(Players.GetPlayerMaxHealth(avatar.playerHealth), effect: false);
-                    }
+                    continue;
                 }
-                catch { }
+                if (!Covers(avatar))
+                {
+                    continue;
+                }
+                if (!((Component)avatar).gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+                Protect(avatar);
             }
         }
-        catch { }
+        catch
+        {
+        }
+    }
+
+    private static void Protect(PlayerAvatar avatar)
+    {
+        try
+        {
+            PlayerHealth health = avatar.playerHealth;
+            bool local = avatar.photonView != null && avatar.photonView.IsMine;
+            if (local && health != null)
+            {
+                SetGodModeField(health, true);
+                health.InvincibleSet(2f);
+            }
+
+            bool dead = false;
+            try
+            {
+                FieldInfo deadSet = typeof(PlayerAvatar).GetField("deadSet", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                FieldInfo disabled = typeof(PlayerAvatar).GetField("isDisabled", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                dead = (deadSet?.GetValue(avatar) is bool d && d) || (disabled?.GetValue(avatar) is bool off && off);
+            }
+            catch
+            {
+            }
+            if (dead)
+            {
+                Players.HealRevivePlayer(avatar, SemiFunc.PlayerGetName(avatar) ?? "");
+            }
+            if (health == null)
+            {
+                return;
+            }
+            int max = Mathf.Max(100, Players.GetPlayerMaxHealth(health));
+            int current = Players.GetPlayerHealth(avatar);
+            if (dead || current < max)
+            {
+                health.HealOther(max, effect: false);
+                PhotonView pv = avatar.photonView;
+                if (NativeGameApi.IsHost() && SemiFunc.IsMultiplayer() && pv != null)
+                {
+                    pv.RPC("UpdateHealthRPC", RpcTarget.All, max, max, false, false);
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static void SetGodModeField(PlayerHealth health, bool value)
+    {
+        if (_godModeField == null)
+        {
+            _godModeField = typeof(PlayerHealth).GetField("godMode", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        }
+        _godModeField?.SetValue(health, value);
+    }
+
+    private static void RestoreLocalGodMode()
+    {
+        try
+        {
+            PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+            if (local != null && local.playerHealth != null && !Hax2.godModeActive)
+            {
+                SetGodModeField(local.playerHealth, false);
+            }
+        }
+        catch
+        {
+        }
     }
 }
 
@@ -900,9 +1062,11 @@ public static class UpgradeForPlayer
             try
             {
                 PlayerAvatar avatar = SemiFunc.PlayerAvatarGetFromSteamID(steamID);
-                if (avatar != null)
+                if (avatar != null && avatar.physGrabber != null)
                 {
-                    avatar.physGrabber.grabStrength = grabStrength;
+                    avatar.physGrabber.grabStrength = UpgradeHelper.GameGrabStrength(grabStrength);
+                    avatar.physGrabber.throwStrength = UpgradeHelper.GameThrowStrength(throwStrength);
+                    avatar.physGrabber.grabRange = UpgradeHelper.GameGrabRange(grabRange);
                 }
             }
             catch { }

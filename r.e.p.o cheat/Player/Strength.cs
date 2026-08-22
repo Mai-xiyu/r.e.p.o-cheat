@@ -140,110 +140,11 @@ internal static class Strength
 
 	private static void ApplyGrabStrength()
 	{
-		//IL_0101: Unknown result type (might be due to invalid IL or missing references)
-		//IL_016c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01b3: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01a0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01b8: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01ba: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01bc: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01d3: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01d7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01dc: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01e1: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01e5: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01ea: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0224: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0253: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0257: Unknown result type (might be due to invalid IL or missing references)
-		//IL_025e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_029a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02b0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0273: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0277: Unknown result type (might be due to invalid IL or missing references)
-		//IL_027e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ce: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02d2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02d9: Unknown result type (might be due to invalid IL or missing references)
 		if (physGrabberInstance == null)
 		{
 			return;
 		}
-		FieldInfo field = physGrabberInstance.GetType().GetField("grabStrength", BindingFlags.Instance | BindingFlags.Public);
-		if (field != null && (float)field.GetValue(physGrabberInstance) != Hax2.sliderValueStrength)
-		{
-			field.SetValue(physGrabberInstance, Hax2.sliderValueStrength);
-			if (Hax2.sliderValueStrength <= 1f)
-			{
-				ResetGrabbedObject();
-			}
-		}
-		FieldInfo field2 = physGrabberInstance.GetType().GetField("grabbed", BindingFlags.Instance | BindingFlags.Public);
-		bool flag = field2 != null && (bool)field2.GetValue(physGrabberInstance);
-		if (!lastGrabbedState.HasValue || flag != lastGrabbedState)
-		{
-			lastGrabbedState = flag;
-		}
-		if (!flag)
-		{
-			return;
-		}
-		FieldInfo field3 = physGrabberInstance.GetType().GetField("grabbedObjectTransform", BindingFlags.Instance | BindingFlags.Public);
-		Transform val = ((!(field3 != null)) ? ((Transform)null) : ((Transform)field3.GetValue(physGrabberInstance)));
-		if ((Object)(object)val == (Object)null)
-		{
-			return;
-		}
-		PhysGrabObject component = ((Component)val).GetComponent<PhysGrabObject>();
-		if ((Object)(object)component == (Object)null)
-		{
-			return;
-		}
-		Rigidbody rb = component.rb;
-		if ((Object)(object)rb == (Object)null)
-		{
-			return;
-		}
-		FieldInfo field4 = physGrabberInstance.GetType().GetField("physGrabPoint", BindingFlags.Instance | BindingFlags.Public);
-		Transform val2 = ((!(field4 != null)) ? ((Transform)null) : ((Transform)field4.GetValue(physGrabberInstance)));
-		if ((Object)(object)val2 == (Object)null)
-		{
-			return;
-		}
-		FieldInfo field5 = physGrabberInstance.GetType().GetField("physGrabPointPullerPosition", BindingFlags.Instance | BindingFlags.Public);
-		Vector3 val3 = (Vector3)((field5 != null) ? ((Vector3)field5.GetValue(physGrabberInstance)) : Vector3.zero);
-		if (val3 == Vector3.zero && field5 == null)
-		{
-			return;
-		}
-		Vector3 val4 = val3 - val2.position;
-		Vector3 normalized = val4.normalized;
-		float num = Hax2.sliderValueStrength * 50000f;
-		FieldInfo field6 = ((object)component).GetType().GetField("photonView", BindingFlags.Instance | BindingFlags.NonPublic);
-		PhotonView val5 = ((!(field6 != null)) ? ((PhotonView)null) : ((PhotonView)field6.GetValue(component)));
-		if (!((Object)(object)val5 != (Object)null))
-		{
-			return;
-		}
-		if (!val5.IsMine)
-		{
-			val5.RequestOwnership();
-		}
-		if (val5.IsMine)
-		{
-			rb.AddForceAtPosition(normalized * num, val2.position, (ForceMode)0);
-			return;
-		}
-		if (PhotonNetwork.IsMasterClient)
-		{
-			rb.AddForceAtPosition(normalized * num, val2.position, (ForceMode)0);
-			return;
-		}
-		val5.RPC("ApplyExtraForceRPC", (RpcTarget)2, new object[3] { normalized, num, val2.position });
-		if (Hax2.sliderValueStrength == lastAppliedStrength)
-		{
-			rb.AddForceAtPosition(normalized * num, val2.position, (ForceMode)0);
-		}
+		UpgradeHelper.RebuildLocalGrabPhysics();
 	}
 
 	private static void ResetGrabbedObject()
@@ -315,7 +216,7 @@ internal static class Strength
 			{
 				return;
 			}
-			val.physGrabber.grabStrength = strength;
+			val.physGrabber.grabStrength = UpgradeHelper.GameGrabStrength(Mathf.RoundToInt(strength));
 			Type type = Type.GetType("PunManager, Assembly-CSharp");
 			object obj = GameHelper.FindObjectOfType(type);
 			if (obj == null)

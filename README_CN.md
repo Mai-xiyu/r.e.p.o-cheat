@@ -29,7 +29,7 @@
 - **自身**：无敌、无限生命/体力、**无限电池**（房客：手持/已装备物品；枪和无人机仍由房主权威）、穿墙飞行、速度/力量/跳跃/重力/抓取距离自定义（走 `PunManager.UpdateStat`）、无后坐力/无冷却、**枪械瞬间蓄力**、隔墙抓取、自定义 FOV、去雾、自动闪避、自我复活、治疗/复活队友（`HealOtherRPC`）、创造模式、一键满级（全部 13 种升级）、游戏速度控制、游戏调试旗标（无限能量/免疫过载/禁止翻滚/慢走/羽毛坠落）、**隐藏抓取光束、隐藏物品标签、关闭镜头抖动、电影 HUD、解锁帧率**、忽略死亡坑、无限观战电池、装扮代币。
 - **视觉**：基于 TMP 的 ESP（敌人、物品、玩家、撤离点），支持方框/名称/距离/血量/价值过滤，上色（Chams）、小地图雷达、追踪线、ESP 预设、地图总价值统计、玩家状态列表、**全图揭示**。
 - **战斗与玩家**：伤害/治疗/击杀/复活玩家、传送玩家、名字伪装、附身控制、自瞄（可调平滑度与距离）、**子弹追踪**（仅房主/单人，改写 `ItemGun.ShootBullet`）。
-- **敌人**：致盲/冻结/击杀/遣散敌人（走游戏 EnemyDirector/EnemyParent）、禁用陷阱（`Trap` 基类）、传送敌人、敌人生成（仅房主，`PhotonNetwork.InstantiateRoomObject`）、**轻松抓取 / 近处刷新 / 关闭刷新冷却**。
+- **敌人**：致盲/冻结/击杀/遣散敌人（走游戏 EnemyDirector/EnemyParent）、禁用陷阱（`Trap` 基类）、**传送敌人**（`EnemyTeleported`，房客可用）、敌人生成（仅房主，`PhotonNetwork.InstantiateRoomObject`）、**轻松抓取 / 近处刷新 / 关闭刷新冷却**。
 - **物品**：物品生成列表来自 `StatsManager.itemDictionary`（房主：房间物体；**房客：`PhotonNetwork.Instantiate`**，离开后可能消失）。物品传送（`SetPositionRPC`）、价值翻倍（房主）、复制手中物品、**充满手持电池**、远程出售、自动拾取、自动出售。
 - **传送**：准星传送、撤离点传送、随机传送、命名路径点，经游戏自身的 `PhysGrabObject.Teleport` API 同步。
 - **世界**：撤离目标归零 / **低搬运调试旗标**、一键完成回合、聊天指令（`!help`）、商店工具（经 `SetRunStatSet` 修改货币 + **廉价商店**，房主）、额外生命、解锁撤离点、**请求撤离**（`RoundDirector.RequestExtractionPointActivation`，房客可用）、发现贵重品（`DiscoverRPC`）、下关刷满贵重品、经 `RunManager.ChangeLevel` 切换场景，以及**指定关卡选择器**（`debugLevel`）。原生封装在 `World/NativeGameApi.cs`。

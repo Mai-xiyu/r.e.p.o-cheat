@@ -24,24 +24,25 @@ public class Loader
 
 	private static ResolveEventHandler _resolveHandler;
 
-	private static Application.LogCallback _logCallback;
-
 	public static bool hasTriggeredRecovery;
 
-	private static void HandleUnityLog(string condition, string stackTrace, LogType type)
+	public static void RunCoroutine(IEnumerator routine)
 	{
-		// quiet the per-glyph log spam TMP produces when a font lacks a character
-		// (relevant while the Chinese fallback font is active)
-		if ((int)type == 2 && condition.Contains("Unicode value"))
+		if (Load == null || routine == null)
 		{
-			condition.Contains("font asset");
+			return;
 		}
-	}
+		Hax2 host = Load.GetComponent<Hax2>();
+		if (host != null)
+		{
+			host.StartCoroutine(routine);
+		}
+		}
 
 	/// <summary>
 	/// Injection entry point (SharpMonoInjector: -c Loader -m Init).
-	/// Idempotent: repeated injection into the same process reuses the existing
-	/// GameObject and Harmony instance instead of duplicating them.
+	/// After UnloadCheat the next inject must recreate the menu; a leftover
+	/// initialized flag or dying GameObject must not block PowerShell re-inject.
 	/// </summary>
 	public static void Init()
 	{
@@ -51,14 +52,20 @@ public class Loader
 			File.AppendAllText("C:\\temp\\inject_debug.txt", "Init() reached\n");
 			lock (InitLock)
 			{
-				if (_initialized)
+				GameObject existing = GameObject.Find(LoadGameObjectName);
+				bool live = existing != null && existing.GetComponent<Hax2>() != null;
+				if (_initialized && live)
 				{
 					File.AppendAllText("C:\\temp\\inject_debug.txt", "Init() skipped: already initialized\n");
 					return;
 				}
+				if (_initialized || existing != null)
+				{
+					File.AppendAllText("C:\\temp\\inject_debug.txt", "Init() recovering stale unload\n");
+					TearDownInternal(immediate: true);
+				}
 				_initialized = true;
 				EnsureAssemblyResolver();
-				EnsureLogCallback();
 				EnsureLoadObject();
 				LogDiagnostics();
 				File.AppendAllText("C:\\temp\\inject_debug.txt", "Init() completed\n");
@@ -66,6 +73,7 @@ public class Loader
 		}
 		catch (Exception ex)
 		{
+			_initialized = false;
 			File.WriteAllText("C:\\temp\\inject_error.txt", ex.ToString());
 		}
 	}
@@ -104,16 +112,6 @@ public class Loader
 		AppDomain.CurrentDomain.AssemblyResolve += _resolveHandler;
 	}
 
-	private static void EnsureLogCallback()
-	{
-		if (_logCallback != null)
-		{
-			return;
-		}
-		_logCallback = HandleUnityLog;
-		Application.logMessageReceived += _logCallback;
-	}
-
 	private static void EnsureLoadObject()
 	{
 		Load = GameObject.Find(LoadGameObjectName);
@@ -133,6 +131,10 @@ public class Loader
 		if (Load.GetComponent<GameLocalizationManager>() == null)
 		{
 			Load.AddComponent<GameLocalizationManager>();
+		}
+		if (Load.GetComponent<ImeInputFix>() == null)
+		{
+			Load.AddComponent<ImeInputFix>();
 		}
 	}
 
@@ -194,6 +196,7 @@ public class Loader
 				}
 			}
 			harmonyInstance = harmony;
+			FeatureHealth.RecordHarmony(patched, failures);
 			string summary = "Harmony patches: " + patched + " classes patched" +
 				(failures.Count > 0 ? ", " + failures.Count + " FAILED: " + string.Join("; ", failures) : ", all OK") + "\n";
 			File.AppendAllText("C:\\temp\\inject_debug.txt", summary);
@@ -219,41 +222,93 @@ public class Loader
 		{
 			lock (InitLock)
 			{
-				GameLocalizationManager localization = null;
-				if ((Object)(object)Load != (Object)null)
-				{
-					localization = Load.GetComponent<GameLocalizationManager>();
-					Object.Destroy((Object)(object)Load);
-				}
-				Load = null;
-				if (localization != null)
-				{
-					// OnDestroy already ran RevertAll paths; make missing-translation flush deterministic
-					localization.CleanupForUnload();
-				}
-				if (harmonyInstance != null)
-				{
-					harmonyInstance.GetType().GetMethod("UnpatchSelf")?.Invoke(harmonyInstance, null);
-					harmonyInstance = null;
-				}
-				if (_logCallback != null)
-				{
-					Application.logMessageReceived -= _logCallback;
-					_logCallback = null;
-				}
-				if (_resolveHandler != null)
-				{
-					AppDomain.CurrentDomain.AssemblyResolve -= _resolveHandler;
-					_resolveHandler = null;
-				}
-				_initialized = false;
-				GC.Collect();
+				TearDownInternal(immediate: false);
 				File.AppendAllText("C:\\temp\\inject_debug.txt", "UnloadCheat() completed\n");
 			}
 		}
 		catch (Exception ex)
 		{
+			_initialized = false;
 			File.WriteAllText("C:\\temp\\unload_error.txt", ex.ToString());
 		}
+	}
+
+	private static void TearDownInternal(bool immediate)
+	{
+		CursorController.RestoreGameCursor();
+		try
+		{
+			EffectDirector.Unload();
+			HaulAssistant.Unload();
+			ScaleSync.isEnabled = false;
+			ScaleSync.Restore();
+			GyroSpin.isEnabled = false;
+			HeadGesture.Stop();
+			MidJoin.UnhookPhotonEvents();
+			Troll.UnhookPhotonEvents();
+			CosmeticFeatures.UnhookPhotonEvents();
+		}
+		catch
+		{
+		}
+		GameLocalizationManager localization = null;
+		if ((Object)(object)Load != (Object)null)
+		{
+			localization = Load.GetComponent<GameLocalizationManager>();
+			try
+			{
+				Load.name = LoadGameObjectName + "_unloaded";
+			}
+			catch
+			{
+			}
+			if (immediate)
+			{
+				Object.DestroyImmediate((Object)(object)Load);
+			}
+			else
+			{
+				Object.Destroy((Object)(object)Load);
+			}
+		}
+		else
+		{
+			GameObject leftover = GameObject.Find(LoadGameObjectName);
+			if (leftover != null)
+			{
+				leftover.name = LoadGameObjectName + "_unloaded";
+				if (immediate)
+				{
+					Object.DestroyImmediate((Object)(object)leftover);
+				}
+				else
+				{
+					Object.Destroy((Object)(object)leftover);
+				}
+			}
+		}
+		Load = null;
+		if (localization != null)
+		{
+			localization.CleanupForUnload();
+		}
+		try
+		{
+			if (harmonyInstance is Harmony harmony)
+			{
+				harmony.UnpatchAll("dark_cheat");
+			}
+		}
+		catch
+		{
+		}
+		harmonyInstance = null;
+		if (_resolveHandler != null)
+		{
+			AppDomain.CurrentDomain.AssemblyResolve -= _resolveHandler;
+			_resolveHandler = null;
+		}
+		_initialized = false;
+		hasTriggeredRecovery = false;
 	}
 }

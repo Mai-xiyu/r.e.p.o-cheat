@@ -1,7 +1,5 @@
 using System;
-using System.Reflection;
 using HarmonyLib;
-using Photon.Pun;
 using UnityEngine;
 
 namespace r.e.p.o_cheat;
@@ -11,29 +9,11 @@ public class NoWeaponSpread
 {
 	private static float local_originalGunRandomSpread = -1f;
 
-	private static FieldInfo _photonViewField = AccessTools.Field(typeof(ItemGun), "photonView");
-
 	[HarmonyPrefix]
 	public static void Prefix(ItemGun __instance)
 	{
 		local_originalGunRandomSpread = -1f;
-		bool flag = false;
-		try
-		{
-			if ((Object)(object)__instance != (Object)null && _photonViewField != null)
-			{
-				object value = _photonViewField.GetValue(__instance);
-				PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-				if ((Object)(object)val != (Object)null)
-				{
-					flag = val.IsMine;
-				}
-			}
-		}
-		catch (Exception)
-		{
-		}
-		if (!flag)
+		if (!BulletTrack.IsLocalShot(__instance))
 		{
 			return;
 		}
@@ -45,8 +25,7 @@ public class NoWeaponSpread
 		try
 		{
 			local_originalGunRandomSpread = __instance.gunRandomSpread;
-			float gunRandomSpread = local_originalGunRandomSpread * currentSpreadMultiplier;
-			__instance.gunRandomSpread = gunRandomSpread;
+			__instance.gunRandomSpread = local_originalGunRandomSpread * currentSpreadMultiplier;
 		}
 		catch (Exception)
 		{
@@ -56,32 +35,17 @@ public class NoWeaponSpread
 	[HarmonyPostfix]
 	public static void Postfix(ItemGun __instance)
 	{
-		bool flag = false;
+		if (local_originalGunRandomSpread < 0f || !BulletTrack.IsLocalShot(__instance))
+		{
+			return;
+		}
 		try
 		{
-			if ((Object)(object)__instance != (Object)null && _photonViewField != null)
-			{
-				object value = _photonViewField.GetValue(__instance);
-				PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-				if ((Object)(object)val != (Object)null)
-				{
-					flag = val.IsMine;
-				}
-			}
+			__instance.gunRandomSpread = local_originalGunRandomSpread;
 		}
 		catch (Exception)
 		{
 		}
-		if (flag && !(local_originalGunRandomSpread < 0f))
-		{
-			try
-			{
-				__instance.gunRandomSpread = local_originalGunRandomSpread;
-			}
-			catch (Exception)
-			{
-			}
-			local_originalGunRandomSpread = -1f;
-		}
+		local_originalGunRandomSpread = -1f;
 	}
 }

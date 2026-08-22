@@ -22,11 +22,11 @@ public static class GyroSpin
         if (!stream.IsWriting) return;
         if (!isEnabled && !HeadGesture.IsActive) return;
 
-        PhotonView pv = __instance.GetComponent<PhotonView>();
+        PhotonView pv = __instance.GetComponent<PhotonView>() ?? __instance.GetComponentInParent<PhotonView>();
         if (pv == null || !pv.IsMine) return;
 
         // 只对 PlayerAvatar 生效，排除物品/敌人
-        if (__instance.GetComponent<PlayerAvatar>() == null) return;
+        if (__instance.GetComponent<PlayerAvatar>() == null && __instance.GetComponentInParent<PlayerAvatar>() == null) return;
 
         // 保存真实旋转
         __state = __instance.transform.rotation;
@@ -52,9 +52,9 @@ public static class GyroSpin
         if (__state == Quaternion.identity) return;
         if (!isEnabled && !HeadGesture.IsActive) return;
 
-        PhotonView pv = __instance.GetComponent<PhotonView>();
+        PhotonView pv = __instance.GetComponent<PhotonView>() ?? __instance.GetComponentInParent<PhotonView>();
         if (pv == null || !pv.IsMine) return;
-        if (__instance.GetComponent<PlayerAvatar>() == null) return;
+        if (__instance.GetComponent<PlayerAvatar>() == null && __instance.GetComponentInParent<PlayerAvatar>() == null) return;
 
         // 立即恢复真实旋转 — 本地玩家看不到任何变化
         __instance.transform.rotation = __state;

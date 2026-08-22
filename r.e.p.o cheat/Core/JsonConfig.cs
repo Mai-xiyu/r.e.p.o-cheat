@@ -24,6 +24,10 @@ public static class JsonConfig
         public bool infiniteStamina;
         public bool creativeMode;
         public bool rgbPlayer;
+        public int eyeColorMode;
+        public float[] eyeFixedColor = new float[] { 0.1f, 0.8f, 1f, 1f };
+        public float eyeRandomInterval = 1.25f;
+        public float eyeRainbowSpeed = 0.2f;
         public bool noFog;
         public bool showWatermark = true;
         public bool noWeaponRecoil;
@@ -36,6 +40,7 @@ public static class JsonConfig
         public bool autoSell;
         public bool autoDodge;
         public bool miniRadar;
+        public bool haulHud = true;
 
         // 属性值
         public float strength = 1f;
@@ -54,6 +59,7 @@ public static class JsonConfig
         public float flashlightIntensity;
         public float fieldOfView = 70f;
         public float weaponSpreadMultiplier = 1f;
+        public int adminUpgradeCap = 30;
 
         // ESP 设置
         public bool drawEnemyEsp;
@@ -141,6 +147,10 @@ public static class JsonConfig
             config.infiniteStamina = Hax2.stamineState;
             config.creativeMode = CreativeMode.isCreativeMode;
             config.rgbPlayer = CosmeticFeatures.RainbowMode;
+            config.eyeColorMode = (int)EyeColorEffects.Mode;
+            config.eyeFixedColor = ColorToArray(EyeColorEffects.FixedColor);
+            config.eyeRandomInterval = EyeColorEffects.RandomInterval;
+            config.eyeRainbowSpeed = EyeColorEffects.RainbowSpeed;
             config.noFog = MiscFeatures.NoFogEnabled;
             config.showWatermark = Hax2.showWatermark;
             config.noWeaponRecoil = Patches.NoWeaponRecoil._isEnabledForConfig;
@@ -153,6 +163,7 @@ public static class JsonConfig
             config.autoSell = AutoPickup.isAutoSellEnabled;
             config.autoDodge = AutoDodge.isAutoDodgeEnabled;
             config.miniRadar = MiniRadar.isRadarEnabled;
+            config.haulHud = HaulAssistant.HudEnabled;
 
             // 属性值
             config.strength = Hax2.sliderValueStrength;
@@ -171,6 +182,7 @@ public static class JsonConfig
             config.flashlightIntensity = Hax2.flashlightIntensity;
             config.fieldOfView = Hax2.fieldOfView;
             config.weaponSpreadMultiplier = ConfigManager.CurrentSpreadMultiplier;
+            config.adminUpgradeCap = Hax2.AdminUpgradeCap;
 
             // ESP
             config.drawEnemyEsp = DebugCheats.drawEspBool;
@@ -277,12 +289,21 @@ public static class JsonConfig
             ConfigManager.NoWeaponCooldownEnabled = config.noWeaponCooldown;
             MiscFeatures.NoFogEnabled = config.noFog;
             CosmeticFeatures.RainbowMode = config.rgbPlayer;
+            EyeColorEffects.Mode = (EyeColorEffects.EyeMode)Mathf.Clamp(
+                config.eyeColorMode, 0, (int)EyeColorEffects.EyeMode.Rainbow);
+            if (config.eyeFixedColor != null && config.eyeFixedColor.Length >= 4)
+                EyeColorEffects.FixedColor = ArrayToColor(config.eyeFixedColor);
+            if (config.eyeRandomInterval > 0f)
+                EyeColorEffects.RandomInterval = Mathf.Clamp(config.eyeRandomInterval, 0.1f, 10f);
+            if (config.eyeRainbowSpeed > 0f)
+                EyeColorEffects.RainbowSpeed = Mathf.Clamp(config.eyeRainbowSpeed, 0.02f, 1.5f);
 
             // 新功能
             AutoPickup.isAutoPickupEnabled = config.autoPickup;
             AutoPickup.isAutoSellEnabled = config.autoSell;
             AutoDodge.isAutoDodgeEnabled = config.autoDodge;
             MiniRadar.isRadarEnabled = config.miniRadar;
+            HaulAssistant.HudEnabled = config.haulHud;
 
             // 属性值
             Hax2.sliderValueStrength = config.strength;
@@ -301,6 +322,10 @@ public static class JsonConfig
             Hax2.flashlightIntensity = config.flashlightIntensity;
             Hax2.fieldOfView = config.fieldOfView;
             ConfigManager.CurrentSpreadMultiplier = config.weaponSpreadMultiplier;
+            if (config.adminUpgradeCap >= Hax2.AdminUpgradeCapMin)
+            {
+                Hax2.AdminUpgradeCap = Mathf.Clamp(config.adminUpgradeCap, Hax2.AdminUpgradeCapMin, Hax2.AdminUpgradeCapMax);
+            }
 
             // ESP
             DebugCheats.drawEspBool = config.drawEnemyEsp;

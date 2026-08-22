@@ -454,6 +454,13 @@ public class Hax2 : MonoBehaviour
 
 	private static SteamId selectedLobbyId = default(SteamId);
 
+	private string selectedPhotonRoom = "";
+
+	private static List<PhotonRoomFinder.RoomRow> cachedPhotonRooms;
+
+	private static int cachedPhotonListVersion = -1;
+	private static SortMode cachedPhotonSortMode = (SortMode)(-1);
+
 	public static Dictionary<SteamId, string> LobbyHostCache = new Dictionary<SteamId, string>();
 
 	public static Dictionary<SteamId, List<string>> LobbyMemberCache = new Dictionary<SteamId, List<string>>();
@@ -484,8 +491,10 @@ public class Hax2 : MonoBehaviour
 
 	// 快速创建房间
 	private string createRoomName = "";
-	private int createRoomMaxPlayers = 6;
 	private bool showCreateRoom = false;
+	private bool showRoomHistory = true;
+	private Vector2 roomHistoryScroll;
+	private static int cachedLobbyListVersion = -1;
 
 	private static Vector2 serverListScroll;
 
@@ -561,6 +570,12 @@ public class Hax2 : MonoBehaviour
 	private float adminTumbleLaunch = 0f;
 	private bool adminInvincibilityAura = false;
 	private int adminAuraTarget = -1;
+	public static int AdminUpgradeCap = 30;
+	private string adminUpgradeCapText = "30";
+	private bool adminCapFieldFocused;
+	private const string AdminCapFieldId = "adminUpgradeCap";
+	public const int AdminUpgradeCapMin = 1;
+	public const int AdminUpgradeCapMax = 9999;
 
 	// ===== 假玩家 fields =====
 	private string fakePlayerName = "Bot";
@@ -582,6 +597,10 @@ public class Hax2 : MonoBehaviour
 	private int levelAdjustIndex = 0;
 	private bool showLevelAdjustDropdown = false;
 	private Vector2 levelAdjustScroll;
+	private bool showLegacyUnsafe;
+	private bool showFeatureHealth;
+	private float _healthNext;
+	private List<FeatureHealth.Row> _healthRows;
 
 	// ===== 敌人速度 fields =====
 	private bool selfShowLook = true;
@@ -617,6 +636,7 @@ public class Hax2 : MonoBehaviour
 	{
 		List<string> list = new List<string>();
 		list.AddRange(playerNames);
+		list.Add(L.T("common.void"));
 		enemyTeleportDestOptions = list.ToArray();
 		enemyTeleportDestIndex = 0;
 		float num = menuX + 300f;
@@ -713,9 +733,14 @@ public class Hax2 : MonoBehaviour
 		// Toggle textures are now generated programmatically in DrawCustomToggle
 		// No external PNG files needed
 		ConfigManager.LoadAllToggles();
+		adminUpgradeCapText = AdminUpgradeCap.ToString();
 		GameObject val2 = new GameObject("LobbyCoroutineHost");
 		Object.DontDestroyOnLoad((Object)val2);
 		CoroutineHost = val2.AddComponent<LobbyCoroutineHost>();
+		if (val2.GetComponent<PhotonRoomFinder>() == null)
+		{
+			val2.AddComponent<PhotonRoomFinder>();
+		}
 	}
 
 	public void Update()
@@ -748,13 +773,14 @@ public class Hax2 : MonoBehaviour
 			}
 			UpdateCursorState();
 		}
-		// the game hides/locks the cursor every frame; keep it usable while the menu is open
-		// (UpdateCursorState routes through CursorController's re-entrancy guard so the
-		// Harmony cursor patches never record our own values as the game's intent)
+		// The game hides/locks the cursor every frame; keep it usable while the menu is open.
 		if (showMenu)
 		{
 			CursorController.UpdateCursorState();
 		}
+		Troll.EnsurePhotonEventHook();
+		CosmeticFeatures.EnsurePhotonEventHook();
+		EyeColorEffects.Tick();
 
 		// Smooth ease-out animation
 		float target = _isExpanding ? 1f : 0f;
@@ -839,12 +865,14 @@ public class Hax2 : MonoBehaviour
 				PlayerPossession.UpdatePossession();
 				Enemies.UpdateFreeze();
 				Enemies.UpdateSpeedModify();
-				PlayerAura.Update();
 				Aimbot.UpdateAimbot();
 				AutoPilot.UpdateAutoPilot();
 				ScaleSync.Update();
 			}
 		}
+		PlayerAura.Update();
+		EffectDirector.Tick();
+		HaulAssistant.Tick();
 		// 定期强制重新应用升级值（防止主机覆盖）
 		_upgradeEnforceTimer += Time.deltaTime;
 		if (_upgradeEnforceTimer >= UPGRADE_ENFORCE_INTERVAL)
@@ -899,7 +927,6 @@ public class Hax2 : MonoBehaviour
 
 	private void UpdateCursorState()
 	{
-		Cursor.visible = showMenu;
 		CursorController.cheatMenuOpen = showMenu;
 		CursorController.UpdateCursorState();
 	}
@@ -939,6 +966,23 @@ public class Hax2 : MonoBehaviour
 		{
 			DebugCheats.valuableObjects.AddRange(array3);
 		}
+		try
+		{
+			CosmeticWorldObject[] cubes = Object.FindObjectsOfType<CosmeticWorldObject>();
+			if (cubes != null)
+			{
+				for (int i = 0; i < cubes.Length; i++)
+				{
+					if (cubes[i] != null && !DebugCheats.valuableObjects.Contains(cubes[i]))
+					{
+						DebugCheats.valuableObjects.Add(cubes[i]);
+					}
+				}
+			}
+		}
+		catch
+		{
+		}
 		itemList = ItemTeleport.GetItemList();
 		if (itemList.Count != previousItemCount)
 		{
@@ -949,9 +993,8 @@ public class Hax2 : MonoBehaviour
 	private void UpdateEnemyList()
 	{
 		enemyNames.Clear();
-		enemyList.Clear();
 		DebugCheats.UpdateEnemyList();
-		enemyList = DebugCheats.enemyList;
+		enemyList = DebugCheats.enemyList ?? enemyList;
 		foreach (Enemy enemy in enemyList)
 		{
 			if ((Object)(object)enemy != (Object)null && ((Component)enemy).gameObject.activeInHierarchy)
@@ -981,12 +1024,27 @@ public class Hax2 : MonoBehaviour
 	{
 		playerNames.Clear();
 		playerList.Clear();
-		foreach (PlayerAvatar item in SemiFunc.PlayerGetList())
+		List<PlayerAvatar> avatars = null;
+		try
 		{
-			playerList.Add(item);
-			string text = SemiFunc.PlayerGetName(item) ?? L.T("common.unknown_player");
-			string text2 = (IsPlayerAlive(item, text) ? "<color=green>" + L.T("common.alive") + "</color> " : "<color=red>" + L.T("common.dead") + "</color> ");
-			playerNames.Add(text2 + text);
+			avatars = SemiFunc.PlayerGetList();
+		}
+		catch
+		{
+		}
+		if (avatars != null)
+		{
+			foreach (PlayerAvatar item in avatars)
+			{
+				if ((Object)(object)item == (Object)null)
+				{
+					continue;
+				}
+				playerList.Add(item);
+				string text = MidJoin.GetDisplayName(item, SemiFunc.PlayerGetName(item) ?? L.T("common.unknown_player"));
+				string text2 = (IsPlayerAlive(item, text) ? "<color=green>" + L.T("common.alive") + "</color> " : "<color=red>" + L.T("common.dead") + "</color> ");
+				playerNames.Add(text2 + text);
+			}
 		}
 		// 添加假人条目 (使用 FakePlayerManager 的列表)
 		for (int num = 0; num < FakePlayerManager.fakePlayerNames.Count; num++)
@@ -1069,6 +1127,10 @@ public class Hax2 : MonoBehaviour
 		if (activeTheme == null) activeTheme = ThemeData.GetTheme(currentTheme);
 		if (!_uiStylesInited) { UIStyles.Init(activeTheme); _uiStylesInited = true; }
 		InitStyles();
+		if (showMenu)
+		{
+			ImeInputFix.Request();
+		}
 
 		// Dynamic Island: smoothstep interpolation
 		float t = _animProgress * _animProgress * (3f - 2f * _animProgress);
@@ -1171,19 +1233,9 @@ public class Hax2 : MonoBehaviour
 			}
 			GUI.color = originalColor;
 		}
-		if (useModernESP)
-		{
-			if (DebugCheats.drawEspBool || DebugCheats.drawItemEspBool || DebugCheats.drawExtractionPointEspBool || DebugCheats.drawPlayerEspBool)
-			{
-				try { ModernESP.Render(); } catch (System.Exception ex) { Debug.LogWarning((object)("[ESP] ModernESP error: " + ex.Message)); }
-			}
-		}
-		else if (DebugCheats.drawEspBool || DebugCheats.drawItemEspBool || DebugCheats.drawExtractionPointEspBool || DebugCheats.drawPlayerEspBool)
-		{
-			try { DebugCheats.DrawESP(); } catch (System.Exception ex) { Debug.LogWarning((object)("[ESP] DrawESP error: " + ex.Message)); }
-			ModernESP.ClearItemLabels();
-			ModernESP.ClearEnemyLabels();
-		}
+		try { DebugCheats.DrawESP(); } catch (System.Exception ex) { Debug.LogWarning((object)("[ESP] DrawESP error: " + ex.Message)); }
+		ModernESP.ClearItemLabels();
+		ModernESP.ClearEnemyLabels();
 		// ESP增强：追踪线
 		try { ESPEnhancements.DrawTraceLines(); } catch (System.Exception ex) { Debug.LogWarning((object)("[ESP] TraceLine error: " + ex.Message)); }
 		// 小地图雷达
@@ -1226,7 +1278,7 @@ public class Hax2 : MonoBehaviour
 			List<string> list3 = new List<string>();
 			foreach (PlayerAvatar item in list)
 			{
-				string text = SemiFunc.PlayerGetName(item) ?? L.T("server.unknown");
+				string text = MidJoin.GetDisplayName(item, SemiFunc.PlayerGetName(item) ?? L.T("server.unknown"));
 				FieldInfo field = ((object)item).GetType().GetField("isDisabled", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 				if (field != null)
 				{
@@ -1273,6 +1325,7 @@ public class Hax2 : MonoBehaviour
 		}
 		// ─── Toast 通知系统渲染 ───
 		ToastNotification.DrawToasts();
+		HaulAssistant.Draw();
 	}
 
 	private bool DrawCustomToggle(string id, bool state)
@@ -1394,6 +1447,157 @@ public class Hax2 : MonoBehaviour
 		GUI.enabled = prev;
 	}
 
+	private void DrawMidJoinToggle()
+	{
+		HostOnlyToggle("mid_join", L.T("server.mid_join"), ref MidJoin.Enabled, delegate
+		{
+			ConfigManager.SaveToggle("mid_join", MidJoin.Enabled);
+			PlayerPrefs.Save();
+			MidJoin.Apply();
+		});
+		GUILayout.Label(L.T("server.mid_join_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T(MidJoin.StatusKey()), labelStyle, Array.Empty<GUILayoutOption>());
+		DrawMidJoinStatus();
+	}
+
+	private void DrawMidJoinStatus()
+	{
+		if (!PhotonNetwork.InRoom || !NativeGameApi.IsHost())
+		{
+			return;
+		}
+		List<MidJoin.ActorJoinStatus> rows = MidJoin.GetActorStatuses();
+		if (rows.Count == 0)
+		{
+			GUILayout.Label(L.T("midjoin.empty"), labelStyle, Array.Empty<GUILayoutOption>());
+			return;
+		}
+		GUILayout.Label(L.T("midjoin.diag_legend"), labelStyle, Array.Empty<GUILayoutOption>());
+		for (int i = 0; i < rows.Count; i++)
+		{
+			MidJoin.ActorJoinStatus row = rows[i];
+			string mark = row.RemoteReady ? "✓" :
+				(row.Complete && !string.IsNullOrEmpty(row.RemoteDiagnostic) ? "!" :
+					(row.Complete ? "✓" : (row.Running ? "…" : "✗")));
+			GUILayout.Label(
+				L.T("midjoin.row_fmt",
+					row.Actor.ToString(),
+					row.Name ?? "",
+					row.InRoom ? "✓" : "✗",
+					row.HasAvatar ? "✓" : "✗",
+					row.SpawnedRpc ? "✓" : "✗",
+					row.ModulesReady ? "✓" : "✗",
+					row.SpawnSent ? "✓" : "✗",
+					row.GenerateDone ? "✓" : "✗",
+					row.OwnerLoadingReady ? "✓" : "✗",
+					row.WaitSeconds.ToString("F1"),
+					mark),
+				labelStyle,
+				Array.Empty<GUILayoutOption>());
+			GUILayout.Label(
+				string.IsNullOrEmpty(row.RemoteDiagnostic)
+					? L.T("midjoin.diag_wait")
+					: L.T("midjoin.diag_fmt", row.RemoteDiagnostic),
+				labelStyle,
+				Array.Empty<GUILayoutOption>());
+			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+			if (HostOnlyButton(L.T("midjoin.retry")) && !row.GenerateDone)
+			{
+				string result = MidJoin.RetryCatchup(row.Actor);
+				NativeGameApi.LastStatus = result;
+			}
+			if (HostOnlyButton(L.T("midjoin.forget")))
+			{
+				MidJoin.ForgetActor(row.Actor);
+			}
+			GUILayout.EndHorizontal();
+		}
+	}
+
+	private void DrawDirectorPanel()
+	{
+		DrawSectionHeader(L.T("director.title"));
+		GUILayout.Label(L.T("director.desc"), labelStyle, Array.Empty<GUILayoutOption>());
+		IReadOnlyList<EffectDirector.Preset> presets = EffectDirector.AllPresets;
+		for (int i = 0; i < presets.Count; i++)
+		{
+			EffectDirector.Preset preset = presets[i];
+			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+			string playing = EffectDirector.PlayingId == preset.Id ? " ●" : "";
+			if (GUILayout.Button(L.T(preset.NameKey) + playing, buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				EffectDirector.Play(preset.Id);
+			}
+			GUILayout.EndHorizontal();
+			GUILayout.Label(L.T(preset.HintKey) + "  [" + L.T(ScopeKey(preset.Scope)) + "]", labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		if (EffectDirector.IsPlaying && GUILayout.Button(L.T("director.stop"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			EffectDirector.StopAll();
+		}
+		if (!string.IsNullOrEmpty(EffectDirector.LastStatus))
+		{
+			GUILayout.Label(EffectDirector.LastStatus, warningStyle, Array.Empty<GUILayoutOption>());
+		}
+	}
+
+	private static string ScopeKey(EffectScope scope)
+	{
+		switch (scope)
+		{
+			case EffectScope.LocalOnly: return "scope.local";
+			case EffectScope.SelfOwned: return "scope.self";
+			case EffectScope.HostPrivate: return "scope.host";
+			default: return "scope.consent";
+		}
+	}
+
+	private void DrawFeatureHealthPanel()
+	{
+		DrawSectionHeader(L.T("health.title"));
+		GUILayout.Label(L.T("health.desc"), labelStyle, Array.Empty<GUILayoutOption>());
+		if (!DrawFoldout("health.foldout", ref showFeatureHealth))
+		{
+			return;
+		}
+		if (_healthRows == null || Time.unscaledTime >= _healthNext)
+		{
+			_healthRows = FeatureHealth.Evaluate();
+			_healthNext = Time.unscaledTime + 1.5f;
+		}
+		GUILayout.Label(L.T("health.harmony_fmt", FeatureHealth.HarmonyPatched.ToString(), FeatureHealth.HarmonyFailures.Count.ToString()), labelStyle, Array.Empty<GUILayoutOption>());
+		for (int i = 0; i < FeatureHealth.HarmonyFailures.Count && i < 6; i++)
+		{
+			GUILayout.Label(FeatureHealth.HarmonyFailures[i], warningStyle, Array.Empty<GUILayoutOption>());
+		}
+		for (int i = 0; i < _healthRows.Count; i++)
+		{
+			FeatureHealth.Row row = _healthRows[i];
+			string ok = (row.TypeOk && row.MethodOk && row.HarmonyOk) ? "✓" : "✗";
+			GUILayout.Label(ok + " " + L.T(row.NameKey) + " [" + L.T(row.ScopeKey) + "] " + row.Detail, labelStyle, Array.Empty<GUILayoutOption>());
+		}
+	}
+
+	private void DrawMaxPlayersSlider()
+	{
+		bool canChange = RoomCreator.CanChangeMaxPlayers();
+		bool prev = GUI.enabled;
+		GUI.enabled = prev && canChange;
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("server.max_players", RoomCreator.MaxPlayers), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(140f) });
+		int next = (int)GUILayout.HorizontalSlider(RoomCreator.MaxPlayers, RoomCreator.MinPlayers, RoomCreator.MaxPlayersCap, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(150f) });
+		GUILayout.EndHorizontal();
+		GUI.enabled = prev;
+		if (canChange && next != RoomCreator.MaxPlayers)
+		{
+			RoomCreator.SetMaxPlayers(next);
+			ConfigManager.SaveInt("room_max_players", RoomCreator.MaxPlayers);
+			PlayerPrefs.Save();
+			RoomCreator.ApplyMaxPlayersToGame();
+		}
+		GUILayout.Label(L.T(canChange ? "server.max_players_hint" : "server.max_players_locked"), labelStyle, Array.Empty<GUILayoutOption>());
+	}
+
 	private bool DrawFoldout(string key, ref bool open)
 	{
 		string prefix = open ? "▼ " : "▶ ";
@@ -1425,6 +1629,73 @@ public class Hax2 : MonoBehaviour
 		}
 		GUILayout.EndHorizontal();
 		return value;
+	}
+
+	private void DrawTokenRarityButton(SemiFunc.Rarity rarity)
+	{
+		bool selected = CosmeticFeatures.TokenRarity == rarity;
+		Color prev = GUI.color;
+		if (selected)
+		{
+			GUI.color = new Color(1f, 0.85f, 0.3f);
+		}
+		if (GUILayout.Button(CosmeticFeatures.RarityLabel(rarity), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			CosmeticFeatures.TokenRarity = rarity;
+		}
+		GUI.color = prev;
+	}
+
+	private static string SelectedPlayerPlainName()
+	{
+		if (selectedPlayerIndex < 0 || selectedPlayerIndex >= playerList.Count)
+		{
+			return L.T("cos.tokens_self");
+		}
+		PlayerAvatar avatar = playerList[selectedPlayerIndex] as PlayerAvatar;
+		if ((Object)(object)avatar == null)
+		{
+			return L.T("cos.tokens_self");
+		}
+		PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+		if ((Object)(object)local != (Object)null && local == avatar)
+		{
+			return L.T("cos.tokens_self");
+		}
+		if (avatar.photonView != null && avatar.photonView.IsMine)
+		{
+			return L.T("cos.tokens_self");
+		}
+		return MidJoin.GetDisplayName(avatar, SemiFunc.PlayerGetName(avatar) ?? L.T("common.unknown_player"));
+	}
+
+	private void DrawPlayerPicker()
+	{
+		EnsureListStylesInitialized();
+		if (playerNames.Count == 0)
+		{
+			GUILayout.Label(L.T("common.no_players"), labelStyle, Array.Empty<GUILayoutOption>());
+			return;
+		}
+		for (int i = 0; i < playerNames.Count; i++)
+		{
+			if (i == selectedPlayerIndex)
+			{
+				cachedPlayerListStyle.normal.background = rowBgSelected;
+				cachedPlayerListStyle.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
+			}
+			else
+			{
+				cachedPlayerListStyle.normal.background = rowBgNormal;
+				cachedPlayerListStyle.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
+				cachedPlayerListStyle.hover.background = rowBgHover;
+				cachedPlayerListStyle.hover.textColor = Color.white;
+			}
+			if (GUILayout.Button(playerNames[i], cachedPlayerListStyle, Array.Empty<GUILayoutOption>()))
+			{
+				selectedPlayerIndex = i;
+			}
+		}
 	}
 
 	private void DrawMenuWindow(int windowID)
@@ -1732,13 +2003,14 @@ public class Hax2 : MonoBehaviour
 			PlayerPrefs.Save();
 		});
 		GUILayout.Space(5f);
-		ToggleLogic("no_weapon_recoil", L.T("self.no_recoil"), ref Patches.NoWeaponRecoil._isEnabledForConfig, delegate
+		GUILayout.Label(L.T("self.gun_master_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		HostOnlyToggle("no_weapon_recoil", L.T("self.no_recoil"), ref Patches.NoWeaponRecoil._isEnabledForConfig, delegate
 		{
 			ConfigManager.SaveToggle("no_weapon_recoil", Patches.NoWeaponRecoil._isEnabledForConfig);
 			PlayerPrefs.Save();
 		});
 		GUILayout.Space(5f);
-		ToggleLogic("no_weapon_cooldown", L.T("self.no_cooldown"), ref ConfigManager.NoWeaponCooldownEnabled, delegate
+		HostOnlyToggle("no_weapon_cooldown", L.T("self.no_cooldown"), ref ConfigManager.NoWeaponCooldownEnabled, delegate
 		{
 			ConfigManager.SaveToggle("no_weapon_cooldown", ConfigManager.NoWeaponCooldownEnabled);
 			PlayerPrefs.Save();
@@ -1747,8 +2019,12 @@ public class Hax2 : MonoBehaviour
 		ToggleLogic("instant_gun_buildup", L.T("self.instant_gun_buildup"), ref NativeGameApi.InstantGunBuildup);
 		GUILayout.Space(5f);
 		GUILayout.Label(L.T("self.spread_fmt", ConfigManager.CurrentSpreadMultiplier, ((ConfigManager.CurrentSpreadMultiplier <= 0.01f) ? L.T("self.spread_none") : (Mathf.Approximately(ConfigManager.CurrentSpreadMultiplier, 1f) ? L.T("self.spread_normal") : $"{ConfigManager.CurrentSpreadMultiplier * 100f:F0}%"))), labelStyle, Array.Empty<GUILayoutOption>());
+		bool spreadHost = NativeGameApi.IsHost();
+		bool spreadPrev = GUI.enabled;
+		GUI.enabled = spreadPrev && spreadHost;
 		float num = GUILayout.HorizontalSlider(ConfigManager.CurrentSpreadMultiplier, 0f, 2f, Array.Empty<GUILayoutOption>());
-		if (num != ConfigManager.CurrentSpreadMultiplier)
+		GUI.enabled = spreadPrev;
+		if (spreadHost && num != ConfigManager.CurrentSpreadMultiplier)
 		{
 			ConfigManager.CurrentSpreadMultiplier = num;
 			ConfigManager.SaveFloat("weapon_spread_multiplier", num);
@@ -1832,9 +2108,49 @@ public class Hax2 : MonoBehaviour
 			GUILayout.Label(L.T("cos.random_live_hint"), labelStyle, Array.Empty<GUILayoutOption>());
 		}
 		GUILayout.Space(5f);
+		GUILayout.Label(L.T("cos.rarity_pick"), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		DrawTokenRarityButton(SemiFunc.Rarity.Common);
+		DrawTokenRarityButton(SemiFunc.Rarity.Uncommon);
+		DrawTokenRarityButton(SemiFunc.Rarity.Rare);
+		DrawTokenRarityButton(SemiFunc.Rarity.UltraRare);
+		GUILayout.EndHorizontal();
+		if (GUILayout.Button(L.T("cos.set_all_rarity", CosmeticFeatures.RarityLabel(CosmeticFeatures.TokenRarity)), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			CosmeticFeatures.SetAllTokensRarity(CosmeticFeatures.TokenRarity);
+		}
+		UpdatePlayerList();
+		GUILayout.Label(L.T("misc.select"), labelStyle, Array.Empty<GUILayoutOption>());
+		DrawPlayerPicker();
+		GUILayout.Label(L.T("cos.add_tokens_target_fmt", SelectedPlayerPlainName()), labelStyle, Array.Empty<GUILayoutOption>());
 		if (GUILayout.Button(L.T("cos.add_tokens"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			CosmeticFeatures.AddTokens(8);
+			CosmeticFeatures.AddTokensToSelected(8);
+		}
+		if (GUILayout.Button(L.T("cos.add_tokens_bulk"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			CosmeticFeatures.AddTokensToSelected(40);
+		}
+		if (GUILayout.Button(L.T("cos.spawn_cube"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			CosmeticFeatures.SpawnCubeAtSelected();
+		}
+		GUILayout.Label(L.T("cos.spawn_cube_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("cos.token_energy_note"), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("cos.token_machine_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Label(CosmeticFeatures.FormatTokenPreview(), labelStyle, Array.Empty<GUILayoutOption>());
+		if (NativeGameApi.IsGuest())
+		{
+			string feedLabel = CosmeticFeatures.FeedingMachine ? L.T("cos.feed_cancel") : L.T("cos.feed_machine");
+			if (GUILayout.Button(feedLabel, buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				CosmeticFeatures.ToggleMachineFeed(this);
+			}
+			GUILayout.Label(L.T("cos.feed_machine_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		else if (HostOnlyButton(L.T("cos.cashout_tokens")))
+		{
+			CosmeticFeatures.CashOutAllTokensAsCurrency();
 		}
 		GUILayout.Space(5f);
 		GUILayout.Label(CosmeticFeatures.LastStatus, labelStyle, Array.Empty<GUILayoutOption>());
@@ -1851,6 +2167,7 @@ public class Hax2 : MonoBehaviour
 			{
 				int num2 = Mathf.RoundToInt(sliderValueStrength);
 				UpgradeHelper.SetLocalLevel("playerUpgradeStrength", num2, (id, v) => PunManager.instance.UpgradePlayerGrabStrength(id, v));
+				UpgradeHelper.RebuildLocalGrabPhysics();
 				oldSliderValueStrength = sliderValueStrength;
 			}
 			GUILayout.Label(L.T("self.throw_fmt", Mathf.RoundToInt(throwStrength)), labelStyle, Array.Empty<GUILayoutOption>());
@@ -1859,6 +2176,7 @@ public class Hax2 : MonoBehaviour
 			{
 				int num3 = Mathf.RoundToInt(throwStrength);
 				UpgradeHelper.SetLocalLevel("playerUpgradeThrow", num3, (id, v) => PunManager.instance.UpgradePlayerThrowStrength(id, v));
+				UpgradeHelper.RebuildLocalGrabPhysics();
 				OldthrowStrength = throwStrength;
 			}
 			GUILayout.Label(L.T("self.speed_fmt", Mathf.RoundToInt(sliderValue)), labelStyle, Array.Empty<GUILayoutOption>());
@@ -1875,6 +2193,7 @@ public class Hax2 : MonoBehaviour
 			{
 				int num5 = Mathf.RoundToInt(grabRange);
 				UpgradeHelper.SetLocalLevel("playerUpgradeRange", num5, (id, v) => PunManager.instance.UpgradePlayerGrabRange(id, v));
+				UpgradeHelper.RebuildLocalGrabPhysics();
 				OldgrabRange = grabRange;
 			}
 			GUILayout.Label(L.T("self.stam_delay_fmt", Mathf.RoundToInt(staminaRechargeDelay)), labelStyle, Array.Empty<GUILayoutOption>());
@@ -2000,7 +2319,7 @@ public class Hax2 : MonoBehaviour
 	private void DrawVisualsTab()
 	{
 		GUILayout.Space(5f);
-		ToggleLogic("modern_esp", L.T("vis.modern_esp"), ref useModernESP);
+		GUILayout.Label(L.T("vis.esp_transition_only"), labelStyle, Array.Empty<GUILayoutOption>());
 		DrawSectionHeader(L.T("vis.enemy_esp"));
 		ToggleLogic("enable_en_esp", L.T("vis.enemy_toggle"), ref DebugCheats.drawEspBool);
 		if (DebugCheats.drawEspBool)
@@ -2270,6 +2589,9 @@ public class Hax2 : MonoBehaviour
 		UpdatePlayerList();
 		EnsureListStylesInitialized();
 
+		DrawDirectorPanel();
+		DrawFeatureHealthPanel();
+
 		DrawSectionHeader(L.T("fun.toys"));
 		GUILayout.Label(L.T("fun.toys_desc"), labelStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
@@ -2307,6 +2629,63 @@ public class Hax2 : MonoBehaviour
 			GyroSpin.spinSpeed = GUILayout.HorizontalSlider(GyroSpin.spinSpeed, 10f, 720f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
 			GUILayout.Label(L.T("fun.gyro_desc"), labelStyle, Array.Empty<GUILayoutOption>());
 		}
+
+		// ===================== 玩家眼睛颜色（自身状态同步） =====================
+		GUILayout.Space(10f);
+		DrawSectionHeader(L.T("fun.eye_title"));
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		EyeColorEffects.EyeMode[] eyeModes =
+		{
+			EyeColorEffects.EyeMode.Off,
+			EyeColorEffects.EyeMode.Fixed,
+			EyeColorEffects.EyeMode.Random,
+			EyeColorEffects.EyeMode.Rainbow
+		};
+		string[] eyeModeKeys = { "fun.eye_off", "fun.eye_fixed", "fun.eye_random", "fun.eye_rainbow" };
+		for (int eyeModeIndex = 0; eyeModeIndex < eyeModes.Length; eyeModeIndex++)
+		{
+			EyeColorEffects.EyeMode eyeMode = eyeModes[eyeModeIndex];
+			GUIStyle eyeStyle = EyeColorEffects.Mode == eyeMode ? tabSelectedStyle : buttonStyle;
+			if (GUILayout.Button(L.T(eyeModeKeys[eyeModeIndex]), eyeStyle, Array.Empty<GUILayoutOption>()))
+			{
+				EyeColorEffects.Mode = eyeMode;
+			}
+		}
+		GUILayout.EndHorizontal();
+
+		if (EyeColorEffects.Mode == EyeColorEffects.EyeMode.Fixed)
+		{
+			Color eyeColor = EyeColorEffects.FixedColor;
+			GUILayout.Label(L.T("fun.eye_r", Mathf.RoundToInt(eyeColor.r * 255f)), labelStyle, Array.Empty<GUILayoutOption>());
+			eyeColor.r = GUILayout.HorizontalSlider(eyeColor.r, 0f, 1f, new GUILayoutOption[] { GUILayout.Width(200f) });
+			GUILayout.Label(L.T("fun.eye_g", Mathf.RoundToInt(eyeColor.g * 255f)), labelStyle, Array.Empty<GUILayoutOption>());
+			eyeColor.g = GUILayout.HorizontalSlider(eyeColor.g, 0f, 1f, new GUILayoutOption[] { GUILayout.Width(200f) });
+			GUILayout.Label(L.T("fun.eye_b", Mathf.RoundToInt(eyeColor.b * 255f)), labelStyle, Array.Empty<GUILayoutOption>());
+			eyeColor.b = GUILayout.HorizontalSlider(eyeColor.b, 0f, 1f, new GUILayoutOption[] { GUILayout.Width(200f) });
+			eyeColor.a = 1f;
+			EyeColorEffects.FixedColor = eyeColor;
+			if (GUILayout.Button(L.T("fun.eye_randomize"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				EyeColorEffects.RandomizeFixedColor();
+			}
+		}
+		else if (EyeColorEffects.Mode == EyeColorEffects.EyeMode.Random)
+		{
+			GUILayout.Label(L.T("fun.eye_interval", EyeColorEffects.RandomInterval), labelStyle, Array.Empty<GUILayoutOption>());
+			EyeColorEffects.RandomInterval = GUILayout.HorizontalSlider(EyeColorEffects.RandomInterval, 0.1f, 10f,
+				new GUILayoutOption[] { GUILayout.Width(200f) });
+			if (GUILayout.Button(L.T("fun.eye_reroll"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				EyeColorEffects.RerollRandomColors();
+			}
+		}
+		else if (EyeColorEffects.Mode == EyeColorEffects.EyeMode.Rainbow)
+		{
+			GUILayout.Label(L.T("fun.eye_speed", EyeColorEffects.RainbowSpeed), labelStyle, Array.Empty<GUILayoutOption>());
+			EyeColorEffects.RainbowSpeed = GUILayout.HorizontalSlider(EyeColorEffects.RainbowSpeed, 0.02f, 1.5f,
+				new GUILayoutOption[] { GUILayout.Width(200f) });
+		}
+		GUILayout.Label(L.T("fun.eye_hint"), labelStyle, Array.Empty<GUILayoutOption>());
 
 		// ===================== 💃 表情动作 =====================
 		GUILayout.Space(10f);
@@ -2401,6 +2780,7 @@ public class Hax2 : MonoBehaviour
 			ChatHijack.ToggleNameSpoofing(enable: false, "", spoofTargetVisibleName, playerList, playerNames);
 			spoofedNameText = "Text";
 		}
+		GUILayout.Label(L.T("misc.spoof_self_only"), labelStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		if (GUILayout.Button(L.T("misc.random_player_name"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
@@ -2506,7 +2886,7 @@ public class Hax2 : MonoBehaviour
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		if (GUILayout.Button(L.T("misc.send"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			ChatHijack.MakeChat(chatMessageText, ChatDropdownVisibleName, playerList, playerNames);
+			AsciiArtSpam.SendCustom(chatMessageText, ChatDropdownVisibleName, playerList, playerNames);
 		}
 		if (GUILayout.Button(ChatDropdownVisibleName, buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
@@ -2535,10 +2915,7 @@ public class Hax2 : MonoBehaviour
 				}
 			}
 		}
-
-		// ===================== 🎨 ASCII 艺术刷屏 =====================
-		GUILayout.Space(10f);
-		DrawSectionHeader(L.T("fun.ascii_art"));
+		GUILayout.Label(L.T("misc.chat_spam_hint"), labelStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		GUILayout.Label(L.T("fun.ascii_select"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
 		string[] artNames = AsciiArtSpam.GetArtNames();
@@ -2548,6 +2925,13 @@ public class Hax2 : MonoBehaviour
 			{
 				showAsciiDropdown = !showAsciiDropdown;
 			}
+		}
+		if (GUILayout.Button(L.T("fun.ascii_fill"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			chatMessageText = AsciiArtSpam.GetArtText(asciiArtIndex);
+			largeTextBoxContent = chatMessageText;
+			showTextEditorPopup = true;
+			activeTextFieldId = "chatmessageField";
 		}
 		GUILayout.EndHorizontal();
 		if (showAsciiDropdown)
@@ -2559,29 +2943,6 @@ public class Hax2 : MonoBehaviour
 					asciiArtIndex = ai;
 					AsciiArtSpam.selectedArtIndex = ai;
 					showAsciiDropdown = false;
-				}
-			}
-		}
-		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button(L.T("fun.ascii_send"), buttonStyle, Array.Empty<GUILayoutOption>()))
-		{
-			AsciiArtSpam.selectedArtIndex = asciiArtIndex;
-			AsciiArtSpam.Send(asciiTargetName, playerList, playerNames);
-		}
-		if (GUILayout.Button(asciiTargetName, buttonStyle, Array.Empty<GUILayoutOption>()))
-		{
-			asciiTargetDropdown = !asciiTargetDropdown;
-		}
-		GUILayout.EndHorizontal();
-		if (asciiTargetDropdown)
-		{
-			for (int ti = 0; ti < playerNames.Count + 1; ti++)
-			{
-				string tname = (ti == 0) ? L.T("common.all") : playerNames[ti - 1];
-				if (GUILayout.Button(tname, buttonStyle, Array.Empty<GUILayoutOption>()))
-				{
-					asciiTargetName = tname;
-					asciiTargetDropdown = false;
 				}
 			}
 		}
@@ -2726,13 +3087,17 @@ public class Hax2 : MonoBehaviour
 				GUILayout.EndScrollView();
 			}
 			GUILayout.Space(10f);
-			if (HostOnlyButton(L.T("enemies.kill")))
+			if (GUILayout.Button(L.T("enemies.kill"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				Enemies.KillSelectedEnemy(selectedEnemyIndex, enemyList, enemyNames);
 			}
-			if (HostOnlyButton(L.T("enemies.kill_all")))
+			if (GUILayout.Button(L.T("enemies.kill_all"), buttonStyle, Array.Empty<GUILayoutOption>()))
 			{
 				Enemies.KillAllEnemies();
+			}
+			if (NativeGameApi.IsGuest())
+			{
+				GUILayout.Label(L.T("enemies.kill_guest_hint"), labelStyle, Array.Empty<GUILayoutOption>());
 			}
 			if (HostOnlyButton(L.T("enemies.despawn_all")))
 			{
@@ -2793,10 +3158,16 @@ public class Hax2 : MonoBehaviour
 					GUILayout.EndScrollView();
 				}
 				GUILayout.Space(10f);
-				if (HostOnlyButton(L.T("enemies.execute_tp")))
+				if (GUILayout.Button(L.T("enemies.execute_tp"), buttonStyle, Array.Empty<GUILayoutOption>()))
 				{
 					int num2 = enemyTeleportDestIndex;
-					if (num2 >= 0 && num2 < playerList.Count)
+					bool toVoid = enemyTeleportDestOptions != null && enemyTeleportDestOptions.Length > 0 && num2 == enemyTeleportDestOptions.Length - 1;
+					if (toVoid)
+					{
+						Enemies.TeleportEnemyToVoid(selectedEnemyIndex, enemyList, enemyNames);
+						UpdateEnemyList();
+					}
+					else if (num2 >= 0 && num2 < playerList.Count)
 					{
 						if (DebugCheats.IsLocalPlayer(playerList[num2]))
 						{
@@ -2808,6 +3179,10 @@ public class Hax2 : MonoBehaviour
 						}
 						UpdateEnemyList();
 					}
+				}
+				if (NativeGameApi.IsGuest())
+				{
+					GUILayout.Label(L.T("role.guest_tp_enemies"), labelStyle, Array.Empty<GUILayoutOption>());
 				}
 			}
 
@@ -2894,6 +3269,25 @@ public class Hax2 : MonoBehaviour
 		//IL_06ce: Unknown result type (might be due to invalid IL or missing references)
 		//IL_06bd: Unknown result type (might be due to invalid IL or missing references)
 		GUILayout.BeginVertical(Array.Empty<GUILayoutOption>());
+		DrawSectionHeader(L.T("haul.hud_title"));
+		GUILayout.Label(L.T("haul.desc"), labelStyle, Array.Empty<GUILayoutOption>());
+		ToggleLogic("haul_hud", L.T("haul.hud_toggle"), ref HaulAssistant.HudEnabled);
+		if (!string.IsNullOrEmpty(HaulAssistant.QuotaLine))
+		{
+			GUILayout.Label(HaulAssistant.QuotaLine, labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		if (!string.IsNullOrEmpty(HaulAssistant.ComboLine))
+		{
+			GUILayout.Label(HaulAssistant.ComboLine, labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		if (!string.IsNullOrEmpty(HaulAssistant.GrabLine))
+		{
+			GUILayout.Label(HaulAssistant.GrabLine, labelStyle, Array.Empty<GUILayoutOption>());
+		}
+		if (!string.IsNullOrEmpty(HaulAssistant.RiskLine))
+		{
+			GUILayout.Label(HaulAssistant.RiskLine, warningStyle, Array.Empty<GUILayoutOption>());
+		}
 		DrawSectionHeader(L.T("items.auto"));
 		ToggleLogic("auto_pickup", L.T("items.auto_pickup"), ref AutoPickup.isAutoPickupEnabled);
 		if (AutoPickup.isAutoPickupEnabled)
@@ -2905,6 +3299,10 @@ public class Hax2 : MonoBehaviour
 		}
 		GUILayout.Space(5f);
 		ToggleLogic("auto_sell", L.T("items.auto_sell"), ref AutoPickup.isAutoSellEnabled);
+		if (AutoPickup.isAutoSellEnabled && !string.IsNullOrEmpty(AutoPickup.SellStatus))
+		{
+			GUILayout.Label(AutoPickup.SellStatus, labelStyle, Array.Empty<GUILayoutOption>());
+		}
 		GUILayout.Space(10f);
 		DrawSectionHeader(L.T("items.select"));
 		List<ItemTeleport.GameItem> list = itemList.OrderByDescending((ItemTeleport.GameItem item) => item.Value).ToList();
@@ -3006,11 +3404,13 @@ public class Hax2 : MonoBehaviour
 				}
 			}
 			GUILayout.EndHorizontal();
-			List<string> list2 = (string.IsNullOrWhiteSpace(itemSpawnSearch) ? availableItemsList : availableItemsList.Where((string item) => item.ToLower().Contains(itemSpawnSearch.ToLower())).ToList());
+			List<string> list2 = (string.IsNullOrWhiteSpace(itemSpawnSearch) ? availableItemsList : availableItemsList.Where((string item) => LanguageManager.ItemMatchesSearch(item, itemSpawnSearch)).ToList());
 			itemSpawnerScroll = GUILayout.BeginScrollView(itemSpawnerScroll, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(150f) });
 			for (int num3 = 0; num3 < list2.Count; num3++)
 			{
-				if (num3 == selectedItemToSpawnIndex)
+				string rawItemName = list2[num3];
+				int fullIndex = availableItemsList.IndexOf(rawItemName);
+				if (fullIndex == selectedItemToSpawnIndex)
 				{
 					cachedItemListStyle.normal.background = itemBgSelected;
 					cachedItemListStyle.normal.textColor = new Color(1f, 0.55f, 0.1f);
@@ -3020,16 +3420,16 @@ public class Hax2 : MonoBehaviour
 					cachedItemListStyle.normal.background = itemBgNormal;
 					cachedItemListStyle.normal.textColor = new Color(0.85f, 0.85f, 0.85f);
 				}
-				if (GUILayout.Button(list2[num3], cachedItemListStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(30f) }))
+				if (GUILayout.Button(LanguageManager.GetItemName(rawItemName), cachedItemListStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(30f) }))
 				{
-					selectedItemToSpawnIndex = availableItemsList.IndexOf(list2[num3]);
+					selectedItemToSpawnIndex = fullIndex;
 				}
 			}
 			GUILayout.EndScrollView();
 			bool flag = availableItemsList.Count > 0 && selectedItemToSpawnIndex < availableItemsList.Count && availableItemsList[selectedItemToSpawnIndex].Contains("Valuable");
 			if (flag)
 			{
-				GUILayout.Label($"Item Value: ${itemSpawnValue:n0}", labelStyle, Array.Empty<GUILayoutOption>());
+				GUILayout.Label(L.T("items.value_fmt", itemSpawnValue.ToString("n0")), labelStyle, Array.Empty<GUILayoutOption>());
 				float num4 = Mathf.Log10((float)itemSpawnValue / 1000f) / 6f;
 				float num5 = GUILayout.HorizontalSlider(num4, 0f, 1f, Array.Empty<GUILayoutOption>());
 				if (num5 != num4)
@@ -3210,6 +3610,13 @@ public class Hax2 : MonoBehaviour
 		//IL_042e: Unknown result type (might be due to invalid IL or missing references)
 		UpdatePlayerList();
 		EnsureListStylesInitialized();
+
+		DrawSectionHeader(L.T("server.mid_join"));
+		DrawMidJoinToggle();
+		GUILayout.Space(10f);
+		DrawSectionHeader(L.T("room.max_players"));
+		DrawMaxPlayersSlider();
+		GUILayout.Space(10f);
 
 		// ===================== 强制夺取主机 =====================
 		DrawSectionHeader(L.T("room.force_host"));
@@ -3529,44 +3936,48 @@ public class Hax2 : MonoBehaviour
 			MiscFeatures.ForcePlayerMicVolume(-1);
 		}
 		GUILayout.Space(5f);
-		if (HostOnlyButton(L.T("trolling.inf_tumble")))
-		{
-			Players.ForcePlayerTumble(9999999f);
-		}
-		GUILayout.Space(5f);
-		if (HostOnlyButton(L.T("trolling.inf_loading")))
-		{
-			Troll.InfiniteLoadingSelectedPlayer();
-		}
-		GUILayout.Space(5f);
 		if (GUILayout.Button(L.T("trolling.remove_loading"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			Troll.SceneRecovery();
 		}
-		GUILayout.Space(5f);
-		if (HostOnlyButton(L.T("trolling.crash_player")))
+		GUILayout.Label(L.T("trolling.remove_loading_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(8f);
+		if (DrawFoldout("trolling.legacy_unsafe", ref showLegacyUnsafe))
 		{
-			MiscFeatures.CrashSelectedPlayerNew();
-		}
-		GUILayout.Space(5f);
-		if (HostOnlyButton(L.T("trolling.detonate")))
-		{
-			Object.FindObjectOfType<ItemMine>();
-			typeof(ItemGrenade).GetMethod("TickStartRPC", BindingFlags.Instance | BindingFlags.NonPublic);
-			MiscFeatures.ExlploadAll();
-			Debug.Log((object)"Detonated All Grenades/Mines");
-		}
-		GUILayout.Space(5f);
-		if (GUILayout.Button(L.T("trolling.crash_lobby"), buttonStyle, Array.Empty<GUILayoutOption>()))
-		{
-			GameObject localPlayer = DebugCheats.GetLocalPlayer();
-			if ((Object)(object)localPlayer == (Object)null)
+			GUILayout.Label(L.T("trolling.legacy_hint"), warningStyle, Array.Empty<GUILayoutOption>());
+			if (HostOnlyButton(L.T("trolling.inf_tumble")))
 			{
-				return;
+				Players.ForcePlayerTumble(9999999f);
 			}
-			Vector3 position = localPlayer.transform.position + Vector3.up * 1.5f;
-			((Component)this).transform.position = position;
-			CrashLobby.Crash(position);
+			GUILayout.Space(5f);
+			if (HostOnlyButton(L.T("trolling.inf_loading")))
+			{
+				Troll.InfiniteLoadingSelectedPlayer();
+			}
+			GUILayout.Space(5f);
+			if (HostOnlyButton(L.T("trolling.crash_player")))
+			{
+				MiscFeatures.CrashSelectedPlayerNew();
+			}
+			GUILayout.Space(5f);
+			if (HostOnlyButton(L.T("trolling.detonate")))
+			{
+				Object.FindObjectOfType<ItemMine>();
+				typeof(ItemGrenade).GetMethod("TickStartRPC", BindingFlags.Instance | BindingFlags.NonPublic);
+				MiscFeatures.ExlploadAll();
+				Debug.Log((object)"Detonated All Grenades/Mines");
+			}
+			GUILayout.Space(5f);
+			if (GUILayout.Button(L.T("trolling.crash_lobby"), buttonStyle, Array.Empty<GUILayoutOption>()))
+			{
+				GameObject localPlayer = DebugCheats.GetLocalPlayer();
+				if ((Object)(object)localPlayer != (Object)null)
+				{
+					Vector3 position = localPlayer.transform.position + Vector3.up * 1.5f;
+					((Component)this).transform.position = position;
+					CrashLobby.Crash(position);
+				}
+			}
 		}
 		GUILayout.Space(5f);
 
@@ -3623,6 +4034,7 @@ public class Hax2 : MonoBehaviour
 		if (GUILayout.Button(L.T("config.load"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			ConfigManager.LoadAllToggles();
+			adminUpgradeCapText = AdminUpgradeCap.ToString();
 			configstatus = L.T("config.loaded");
 		}
 		GUILayout.EndHorizontal();
@@ -3637,6 +4049,7 @@ public class Hax2 : MonoBehaviour
 		if (GUILayout.Button(L.T("config.load_json"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
 			JsonConfig.LoadFromFile();
+			adminUpgradeCapText = AdminUpgradeCap.ToString();
 			configstatus = L.T("config.json_loaded");
 		}
 		GUILayout.EndHorizontal();
@@ -3908,16 +4321,19 @@ public class Hax2 : MonoBehaviour
 		EnsureListStylesInitialized();
 		GUILayout.Label(L.T("server.title"), titleStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (GUILayout.Button(L.T("server.refresh"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(160f) }))
+		if (GUILayout.Button((LobbyFinder.IsRefreshing || PhotonRoomFinder.IsRefreshing) ? L.T("server.fetching") : L.T("server.refresh"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(160f) }))
 		{
 			LobbyHostCache.Clear();
 			LobbyMemberCache.Clear();
-			LobbyFinder.AlreadyTriedLobbies.Clear();
+			selectedPhotonRoom = "";
 			LobbyFinder.RefreshLobbies();
+			PhotonRoomFinder.Refresh(RoomCreator.GetPhotonRegion(regionFilterIndex));
 		}
 		ToggleLogic("hide_full_lobbies", L.T("server.hide_full"), ref hideFullLobbies);
 		ToggleLogic("show_lobby_members", L.T("server.show_members"), ref showMemberWindow);
 		GUILayout.EndHorizontal();
+		GUILayout.Space(5f);
+		DrawMidJoinToggle();
 
 		// ===== 区域筛选下拉 =====
 		GUILayout.Space(5f);
@@ -3937,6 +4353,7 @@ public class Hax2 : MonoBehaviour
 					regionFilterIndex = ri;
 					showRegionDropdown = false;
 					cachedSortedLobbies = null; // 重新排序
+					PhotonRoomFinder.Refresh(RoomCreator.GetPhotonRegion(regionFilterIndex));
 				}
 			}
 		}
@@ -3955,16 +4372,20 @@ public class Hax2 : MonoBehaviour
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 			GUILayout.Label(L.T("server.room_name"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
 			createRoomName = GUILayout.TextField(createRoomName, textFieldStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(200f) });
-			GUILayout.Space(10f);
-			GUILayout.Label(L.T("server.max_players", createRoomMaxPlayers), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(120f) });
-			createRoomMaxPlayers = (int)GUILayout.HorizontalSlider(createRoomMaxPlayers, 2f, 20f, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(150f) });
 			GUILayout.EndHorizontal();
+			DrawMaxPlayersSlider();
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+			string visLabel = RoomCreator.CreatePublic ? L.T("server.lobby_public") : L.T("server.lobby_private");
+			if (GUILayout.Button(L.T("server.lobby_toggle", visLabel), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(180f) }))
+			{
+				RoomCreator.CreatePublic = !RoomCreator.CreatePublic;
+			}
 			if (GUILayout.Button(RoomCreator.IsCreating ? L.T("room.creating") : L.T("server.create_room"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(160f) }))
 			{
 				if (!RoomCreator.IsCreating)
-					RoomCreator.CreateRoom(createRoomName, createRoomMaxPlayers);
+					RoomCreator.CreateRoom(createRoomName, RoomCreator.MaxPlayers, regionFilterIndex);
 			}
+			GUILayout.Label(L.T("server.create_region_fmt", RoomCreator.GetPhotonRegion(regionFilterIndex)), labelStyle, Array.Empty<GUILayoutOption>());
 			if (!string.IsNullOrEmpty(RoomCreator.StatusText))
 			{
 				GUILayout.Label(RoomCreator.StatusText, labelStyle, Array.Empty<GUILayoutOption>());
@@ -4004,18 +4425,22 @@ public class Hax2 : MonoBehaviour
 		GUILayout.Label(L.T("server.col_host"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.ExpandWidth(true) });
 		GUILayout.EndHorizontal();
 		GUILayout.Space(6f);
+		if (!string.IsNullOrEmpty(PhotonRoomFinder.StatusText))
+		{
+			GUILayout.Label(PhotonRoomFinder.StatusText, labelStyle, Array.Empty<GUILayoutOption>());
+		}
 		serverListScroll = GUILayout.BeginScrollView(serverListScroll, boxStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(500f) });
 		int currentLobbyCount = (LobbyFinder.FoundLobbies != null) ? LobbyFinder.FoundLobbies.Count : 0;
-		if (cachedSortedLobbies == null || cachedSortMode != sortMode || cachedLobbyCount != currentLobbyCount)
+		if (cachedSortedLobbies == null || cachedSortMode != sortMode || cachedLobbyCount != currentLobbyCount || cachedLobbyListVersion != LobbyFinder.ListVersion)
 		{
 			cachedSortedLobbies = new List<Lobby>(LobbyFinder.FoundLobbies);
 			switch (sortMode)
 			{
 			case SortMode.RegionAZ:
-				cachedSortedLobbies.Sort((Lobby a, Lobby b) => string.Compare(a.GetData("Region"), b.GetData("Region")));
+				cachedSortedLobbies.Sort((Lobby a, Lobby b) => string.Compare(LobbyFinder.GetRegion(a), LobbyFinder.GetRegion(b)));
 				break;
 			case SortMode.RegionZA:
-				cachedSortedLobbies.Sort((Lobby a, Lobby b) => string.Compare(b.GetData("Region"), a.GetData("Region")));
+				cachedSortedLobbies.Sort((Lobby a, Lobby b) => string.Compare(LobbyFinder.GetRegion(b), LobbyFinder.GetRegion(a)));
 				break;
 			case SortMode.MostPlayers:
 				cachedSortedLobbies.Sort((Lobby a, Lobby b) => b.MemberCount.CompareTo(a.MemberCount));
@@ -4026,30 +4451,50 @@ public class Hax2 : MonoBehaviour
 			}
 			cachedSortMode = sortMode;
 			cachedLobbyCount = currentLobbyCount;
+			cachedLobbyListVersion = LobbyFinder.ListVersion;
 		}
-		foreach (Lobby item in cachedSortedLobbies)
+		if (cachedPhotonRooms == null || cachedPhotonListVersion != PhotonRoomFinder.ListVersion || cachedPhotonSortMode != sortMode)
 		{
-			Lobby current = item;
-			if ((hideFullLobbies && current.MemberCount >= current.MaxMembers) || !LobbyHostCache.ContainsKey(current.Id) || current.MemberCount < 3)
+			cachedPhotonRooms = new List<PhotonRoomFinder.RoomRow>(PhotonRoomFinder.Rooms);
+			switch (sortMode)
 			{
-				continue;
+			case SortMode.RegionAZ:
+				cachedPhotonRooms.Sort((PhotonRoomFinder.RoomRow a, PhotonRoomFinder.RoomRow b) => string.Compare(a.Region, b.Region));
+				break;
+			case SortMode.RegionZA:
+				cachedPhotonRooms.Sort((PhotonRoomFinder.RoomRow a, PhotonRoomFinder.RoomRow b) => string.Compare(b.Region, a.Region));
+				break;
+			case SortMode.MostPlayers:
+				cachedPhotonRooms.Sort((PhotonRoomFinder.RoomRow a, PhotonRoomFinder.RoomRow b) => b.Players.CompareTo(a.Players));
+				break;
+			case SortMode.LeastPlayers:
+				cachedPhotonRooms.Sort((PhotonRoomFinder.RoomRow a, PhotonRoomFinder.RoomRow b) => a.Players.CompareTo(b.Players));
+				break;
 			}
-			// 区域筛选
-			if (regionFilterIndex > 0 && regionFilterIndex < regionFilterKeywords.Length)
+			cachedPhotonListVersion = PhotonRoomFinder.ListVersion;
+			cachedPhotonSortMode = sortMode;
+		}
+		if (cachedPhotonRooms != null)
+		{
+			foreach (PhotonRoomFinder.RoomRow photon in cachedPhotonRooms)
 			{
-				string lobbyRegion = (current.GetData("Region") ?? "").ToLower();
-				bool regionMatch = false;
-				foreach (string kw in regionFilterKeywords[regionFilterIndex])
+				PhotonRoomFinder.RoomRow row = photon;
+				if (hideFullLobbies && row.MaxPlayers > 0 && row.Players >= row.MaxPlayers)
 				{
-					if (lobbyRegion.Contains(kw)) { regionMatch = true; break; }
+					continue;
 				}
-				if (!regionMatch) continue;
-			}
-			string value;
-			string text = (LobbyHostCache.TryGetValue(current.Id, out value) ? value : L.T("server.fetching"));
-			if (!text.Contains("Failed (0)") && (string.IsNullOrWhiteSpace(lobbySearchTerm) || ((object)current.Id/*cast due to .constrained prefix*/).ToString().IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0 || (LobbyMemberCache.TryGetValue(current.Id, out var value2) && value2.Exists((string m) => m.IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0))))
-			{
-				if (current.Id.Value == selectedLobbyId.Value)
+				if (!string.IsNullOrWhiteSpace(lobbySearchTerm))
+				{
+					bool photonHit = (row.DisplayName ?? "").IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0
+						|| (row.RoomName ?? "").IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0
+						|| (row.Region ?? "").IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0;
+					if (!photonHit)
+					{
+						continue;
+					}
+				}
+				bool photonSelected = !string.IsNullOrEmpty(selectedPhotonRoom) && selectedPhotonRoom == row.RoomName;
+				if (photonSelected)
 				{
 					cachedServerRowStyle.normal.background = rowBgSelected;
 					cachedServerRowStyle.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
@@ -4063,61 +4508,186 @@ public class Hax2 : MonoBehaviour
 				}
 				GUILayout.BeginVertical(Array.Empty<GUILayoutOption>());
 				GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-				string text2 = (text.Contains("(") ? text.Substring(0, text.IndexOf("(")).Trim() : text);
-				string text3 = L.T("server.room_fmt", string.IsNullOrWhiteSpace(text2) ? L.T("server.unknown") : text2);
-				if (current.MaxMembers > 6)
+				string photonTitle = L.T("server.room_fmt", row.DisplayName);
+				if (row.MaxPlayers > 6)
 				{
-					text3 += " <color=red>" + L.T("server.modded") + "</color>";
+					photonTitle += " <color=red>" + L.T("server.modded") + "</color>";
 				}
-				string data = current.GetData("Region");
-				int num = Mathf.Max(0, current.MemberCount - 1);
-				int maxMembers = current.MaxMembers;
-				if (GUILayout.Button(text3, cachedServerRowStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(280f) }))
+				if (GUILayout.Button(photonTitle, cachedServerRowStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(280f) }))
 				{
-					selectedLobbyId = current.Id;
+					selectedPhotonRoom = row.RoomName;
+					selectedLobbyId = default(SteamId);
 				}
 				GUILayout.Space(10f);
-				GUILayout.Label(num + "/" + maxMembers, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
+				GUILayout.Label(row.Players + "/" + row.MaxPlayers, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
 				GUILayout.Space(10f);
-				GUILayout.Label(data, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
+				GUILayout.Label(row.Region, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
 				GUILayout.Space(10f);
-				GUILayout.Label(text, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(260f) });
+				GUILayout.Label(L.T("server.public_host"), labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(260f) });
 				GUILayout.EndHorizontal();
 				GUILayout.Space(6f);
 				GUILayout.EndVertical();
 				GUILayout.Space(4f);
 			}
 		}
+		foreach (Lobby item in cachedSortedLobbies)
+		{
+			Lobby current = item;
+			if (!LobbyFinder.IsListable(current))
+			{
+				continue;
+			}
+			if (hideFullLobbies && current.MaxMembers > 0 && current.MemberCount >= current.MaxMembers)
+			{
+				continue;
+			}
+			if (regionFilterIndex > 0 && regionFilterIndex < regionFilterKeywords.Length)
+			{
+				string lobbyRegion = LobbyFinder.GetRegion(current).ToLower();
+				bool regionMatch = false;
+				foreach (string kw in regionFilterKeywords[regionFilterIndex])
+				{
+					if (lobbyRegion.Contains(kw)) { regionMatch = true; break; }
+				}
+				if (!regionMatch) continue;
+			}
+			string hostLabel = LobbyFinder.GetHostLabel(current);
+			string roomName = LobbyFinder.GetRoomName(current);
+			if (string.IsNullOrWhiteSpace(roomName) || LobbyFinder.LooksLikeGuid(roomName) || roomName == "0")
+			{
+				string hostOnly = hostLabel.Contains("(") ? hostLabel.Substring(0, hostLabel.IndexOf("(")).Trim() : hostLabel;
+				roomName = (string.IsNullOrWhiteSpace(hostOnly) || hostOnly == "0" || hostOnly == L.T("server.unknown"))
+					? L.T("server.unnamed")
+					: hostOnly;
+			}
+			if (!string.IsNullOrWhiteSpace(lobbySearchTerm))
+			{
+				bool hit = roomName.IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0
+					|| hostLabel.IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0
+					|| current.Id.ToString().IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0
+					|| (LobbyMemberCache.TryGetValue(current.Id, out var members) && members.Exists((string m) => m.IndexOf(lobbySearchTerm, StringComparison.OrdinalIgnoreCase) >= 0));
+				if (!hit) continue;
+			}
+			if (current.Id.Value == selectedLobbyId.Value && string.IsNullOrEmpty(selectedPhotonRoom))
+			{
+				cachedServerRowStyle.normal.background = rowBgSelected;
+				cachedServerRowStyle.normal.textColor = (Color)(new Color32(byte.MaxValue, (byte)165, (byte)0, byte.MaxValue));
+			}
+			else
+			{
+				cachedServerRowStyle.normal.background = rowBgNormal;
+				cachedServerRowStyle.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
+				cachedServerRowStyle.hover.background = rowBgHover;
+				cachedServerRowStyle.hover.textColor = Color.white;
+			}
+			GUILayout.BeginVertical(Array.Empty<GUILayoutOption>());
+			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+			string text3 = L.T("server.room_fmt", string.IsNullOrWhiteSpace(roomName) ? L.T("server.unknown") : roomName);
+			if (current.MaxMembers > 6)
+			{
+				text3 += " <color=red>" + L.T("server.modded") + "</color>";
+			}
+			string data = LobbyFinder.GetRegion(current);
+			int num = current.MemberCount;
+			int maxMembers = current.MaxMembers;
+			if (GUILayout.Button(text3, cachedServerRowStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(280f) }))
+			{
+				selectedLobbyId = current.Id;
+				selectedPhotonRoom = "";
+				LobbyFinder.SelectedLobby = current;
+			}
+			GUILayout.Space(10f);
+			GUILayout.Label(num + "/" + maxMembers, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
+			GUILayout.Space(10f);
+			GUILayout.Label(data, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(80f) });
+			GUILayout.Space(10f);
+			GUILayout.Label(hostLabel, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(260f) });
+			GUILayout.EndHorizontal();
+			GUILayout.Space(6f);
+			GUILayout.EndVertical();
+			GUILayout.Space(4f);
+		}
 		GUILayout.EndScrollView();
 		GUILayout.Space(10f);
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		if (GUILayout.Button(L.T("server.join"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(120f) }))
 		{
-			Lobby lobby = LobbyFinder.FoundLobbies.Find((Lobby l) => l.Id.Value == selectedLobbyId.Value);
-			if (lobby.Id.Value != 0uL)
+			if (!string.IsNullOrEmpty(selectedPhotonRoom))
+			{
+				PhotonRoomFinder.RoomRow pick = PhotonRoomFinder.Rooms.Find((PhotonRoomFinder.RoomRow r) => r.RoomName == selectedPhotonRoom);
+				PhotonRoomFinder.Join(selectedPhotonRoom, pick != null ? pick.Region : RoomCreator.GetPhotonRegion(regionFilterIndex));
+			}
+			else if (LobbyFinder.TryGetSelected(selectedLobbyId, out Lobby lobby))
 			{
 				LobbyFinder.JoinLobbyAndPlay(lobby);
 			}
 		}
 		GUILayout.Space(12f);
-		if (selectedLobbyId.Value != 0uL)
+		if (!string.IsNullOrEmpty(selectedPhotonRoom))
 		{
-			Lobby val2 = LobbyFinder.FoundLobbies.Find((Lobby l) => l.Id.Value == selectedLobbyId.Value);
-			string data2 = val2.GetData("Region");
-			string value3;
-			string arg = (LobbyHostCache.TryGetValue(selectedLobbyId, out value3) ? value3 : L.T("server.unknown"));
-			GUILayout.Label(L.T("server.selected_fmt", selectedLobbyId, arg, data2), labelStyle, Array.Empty<GUILayoutOption>());
+			PhotonRoomFinder.RoomRow pick = PhotonRoomFinder.Rooms.Find((PhotonRoomFinder.RoomRow r) => r.RoomName == selectedPhotonRoom);
+			if (pick != null)
+			{
+				GUILayout.Label(L.T("server.selected_fmt", pick.DisplayName, L.T("server.public_host"), pick.Region), labelStyle, Array.Empty<GUILayoutOption>());
+			}
+		}
+		else if (selectedLobbyId.Value != 0uL && LobbyFinder.TryGetSelected(selectedLobbyId, out Lobby selected))
+		{
+			string data2 = LobbyFinder.GetRegion(selected);
+			string arg = LobbyFinder.GetHostLabel(selected);
+			string shownName = LobbyFinder.GetRoomName(selected);
+			if (string.IsNullOrWhiteSpace(shownName))
+			{
+				shownName = arg;
+			}
+			GUILayout.Label(L.T("server.selected_fmt", shownName, arg, data2), labelStyle, Array.Empty<GUILayoutOption>());
 		}
 		GUILayout.FlexibleSpace();
 		if (GUILayout.Button(L.T("server.invite"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(150f) }))
 		{
-			Lobby val3 = LobbyFinder.FoundLobbies.Find((Lobby l) => l.Id.Value == selectedLobbyId.Value);
-			Friend owner = val3.Owner;
-			string arg2 = owner.Id.ToString();
-			string text4 = (GUIUtility.systemCopyBuffer = $"steam://joinlobby/3241660/{val3.Id}/{arg2}");
-			Debug.Log((object)("[InviteLink] 已复制：" + text4));
+			if (LobbyFinder.TryGetSelected(selectedLobbyId, out Lobby val3))
+			{
+				Friend owner = val3.Owner;
+				string arg2 = owner.Id.ToString();
+				string text4 = (GUIUtility.systemCopyBuffer = $"steam://joinlobby/3241660/{val3.Id}/{arg2}");
+				Debug.Log((object)("[InviteLink] copied: " + text4));
+			}
 		}
 		GUILayout.EndHorizontal();
+
+		GUILayout.Space(8f);
+		if (DrawFoldout("server.history", ref showRoomHistory))
+		{
+			List<RoomHistory.Entry> history = RoomHistory.GetEntries();
+			if (history.Count == 0)
+			{
+				GUILayout.Label(L.T("server.history_empty"), labelStyle, Array.Empty<GUILayoutOption>());
+			}
+			else
+			{
+				roomHistoryScroll = GUILayout.BeginScrollView(roomHistoryScroll, boxStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(140f) });
+				for (int hi = 0; hi < history.Count; hi++)
+				{
+					RoomHistory.Entry entry = history[hi];
+					GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+					string label = L.T("server.history_row_fmt",
+						string.IsNullOrWhiteSpace(entry.RoomName) ? L.T("server.unknown") : entry.RoomName,
+						string.IsNullOrWhiteSpace(entry.Region) ? "-" : entry.Region,
+						entry.Players + "/" + entry.MaxPlayers);
+					GUILayout.Label(label, labelStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(360f) });
+					if (GUILayout.Button(L.T("server.history_rejoin"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(90f) }))
+					{
+						RoomHistory.Rejoin(entry);
+					}
+					GUILayout.EndHorizontal();
+				}
+				GUILayout.EndScrollView();
+			}
+			if (GUILayout.Button(L.T("server.history_clear"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Width(140f) }))
+			{
+				RoomHistory.Clear();
+			}
+		}
 	}
 
 	private void DrawTextEditorPopup(int id)
@@ -4142,11 +4712,20 @@ public class Hax2 : MonoBehaviour
 			chatMessageText = largeTextBoxContent;
 		}
 		GUILayout.Space(10f);
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		if (activeTextFieldId == "chatmessageField")
+		{
+			if (GUILayout.Button(L.T("misc.send"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(25f) }))
+			{
+				AsciiArtSpam.SendCustom(largeTextBoxContent, ChatDropdownVisibleName, playerList, playerNames);
+			}
+		}
 		if (GUILayout.Button(L.T("common.close"), buttonStyle, (GUILayoutOption[])(object)new GUILayoutOption[1] { GUILayout.Height(25f) }))
 		{
 			showTextEditorPopup = false;
 			activeTextFieldId = null;
 		}
+		GUILayout.EndHorizontal();
 		GUILayout.EndVertical();
 		GUI.DragWindow();
 	}
@@ -4563,6 +5142,13 @@ public class Hax2 : MonoBehaviour
 			val10.active.background = MakeSolidBackground((Color)(new Color32((byte)70, (byte)70, (byte)90, byte.MaxValue)));
 			val10.active.textColor = Color.white;
 			textFieldStyle = val10;
+			ImeInputFix.ApplyCjkFont(titleStyle);
+			ImeInputFix.ApplyCjkFont(tabStyle);
+			ImeInputFix.ApplyCjkFont(tabSelectedStyle);
+			ImeInputFix.ApplyCjkFont(buttonStyle);
+			ImeInputFix.ApplyCjkFont(labelStyle);
+			ImeInputFix.ApplyCjkFont(warningStyle);
+			ImeInputFix.ApplyCjkFont(textFieldStyle);
 			backgroundStyle = new GUIStyle(GUI.skin.window);
 			Texture2D background = MakeSolidBackground(activeTheme.windowBg);
 			backgroundStyle.normal.background = background;
@@ -4679,7 +5265,18 @@ public class Hax2 : MonoBehaviour
 			Debug.Log((object)"Local player not found!");
 			return;
 		}
-		Vector3 position = localPlayer.transform.position + Vector3.up * 1.5f;
+		Vector3 position = localPlayer.transform.position;
+		try
+		{
+			LevelPoint point = SemiFunc.LevelPointsGetClosestToLocalPlayer();
+			if ((Object)(object)point != (Object)null)
+			{
+				position = point.transform.position;
+			}
+		}
+		catch
+		{
+		}
 		spawnCountText = Regex.Replace(spawnCountText, "[^0-9]", "");
 		if (spawnCountText.Length > 2)
 		{
@@ -5064,7 +5661,8 @@ public class Hax2 : MonoBehaviour
 			if (GUILayout.Button(L.T("menupage.confirm_unload"), warningStyle, Array.Empty<GUILayoutOption>()))
 			{
 				showMenu = false;
-				Object.Destroy(((Component)this).gameObject);
+				CursorController.RestoreGameCursor();
+				Loader.UnloadCheat();
 			}
 		}
 		else
@@ -5188,19 +5786,22 @@ public class Hax2 : MonoBehaviour
 
 	private void DrawAdminTab()
 	{
+		UpdatePlayerList();
 		DrawSectionHeader(L.T("admin.title"));
+		if (NativeGameApi.IsGuest())
+		{
+			GUILayout.Label(L.T("admin.guest_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		}
 
-		// ===================== 目标选择 =====================
 		GUILayout.Space(5f);
 		GUILayout.Label(L.T("admin.select_target"), labelStyle, Array.Empty<GUILayoutOption>());
 
-		// 更新目标列表
-		if (adminTargetOptions.Length != playerNames.Count + 1)
+		var opts = new List<string> { L.T("common.all_players") };
+		opts.AddRange(playerNames);
+		adminTargetOptions = opts.ToArray();
+		if (adminTargetIndex >= adminTargetOptions.Length)
 		{
-			var opts = new List<string> { L.T("common.all_players") };
-			opts.AddRange(playerNames);
-			adminTargetOptions = opts.ToArray();
-			if (adminTargetIndex >= adminTargetOptions.Length) adminTargetIndex = 0;
+			adminTargetIndex = 0;
 		}
 
 		string currentTarget = (adminTargetIndex >= 0 && adminTargetIndex < adminTargetOptions.Length)
@@ -5211,50 +5812,77 @@ public class Hax2 : MonoBehaviour
 		}
 		if (showAdminTargetDropdown)
 		{
-			adminTargetScroll = GUILayout.BeginScrollView(adminTargetScroll, new GUILayoutOption[] { GUILayout.Height(120f) });
+			adminTargetScroll = GUILayout.BeginScrollView(adminTargetScroll, new GUILayoutOption[] { GUILayout.Height(140f) });
 			for (int i = 0; i < adminTargetOptions.Length; i++)
 			{
-				if (i != adminTargetIndex && GUILayout.Button(adminTargetOptions[i], Array.Empty<GUILayoutOption>()))
+				if (GUILayout.Button(adminTargetOptions[i], Array.Empty<GUILayoutOption>()))
 				{
 					adminTargetIndex = i;
 					showAdminTargetDropdown = false;
+					SyncAuraTarget();
 				}
 			}
 			GUILayout.EndScrollView();
 		}
 
-		// ===================== 升级滑块 =====================
 		GUILayout.Space(10f);
 		DrawSectionHeader(L.T("admin.upgrades"));
 
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
+		GUILayout.Label(L.T("admin.cap"), labelStyle, new GUILayoutOption[] { GUILayout.Width(250f) });
+		GUI.SetNextControlName(AdminCapFieldId);
+		adminUpgradeCapText = GUILayout.TextField(adminUpgradeCapText ?? AdminUpgradeCap.ToString(), textFieldStyle, new GUILayoutOption[] { GUILayout.Width(80f) });
+		bool capFocused = GUI.GetNameOfFocusedControl() == AdminCapFieldId;
+		if (capFocused && Event.current.type == EventType.KeyDown && (Event.current.keyCode == KeyCode.Return || Event.current.keyCode == KeyCode.KeypadEnter))
+		{
+			CommitAdminUpgradeCap();
+			GUI.FocusControl(null);
+			Event.current.Use();
+			capFocused = false;
+		}
+		if (GUILayout.Button(L.T("admin.cap_set"), buttonStyle, new GUILayoutOption[] { GUILayout.Width(80f) }))
+		{
+			CommitAdminUpgradeCap();
+			GUI.FocusControl(null);
+			capFocused = false;
+		}
+		GUILayout.EndHorizontal();
+		if (adminCapFieldFocused && !capFocused)
+		{
+			CommitAdminUpgradeCap();
+		}
+		adminCapFieldFocused = capFocused;
+		GUILayout.Label(L.T("admin.cap_hint", AdminUpgradeCap.ToString()), labelStyle, Array.Empty<GUILayoutOption>());
+
+		float cap = AdminUpgradeCap;
+		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		GUILayout.Label(L.T("admin.grab_str", ((int)adminGrabStrength).ToString()), labelStyle, new GUILayoutOption[] { GUILayout.Width(250f) });
-		adminGrabStrength = GUILayout.HorizontalSlider(adminGrabStrength, 0f, 30f, new GUILayoutOption[] { GUILayout.Width(200f) });
+		adminGrabStrength = GUILayout.HorizontalSlider(adminGrabStrength, 0f, cap, new GUILayoutOption[] { GUILayout.Width(200f) });
 		GUILayout.EndHorizontal();
 
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		GUILayout.Label(L.T("admin.throw_str", ((int)adminThrowStrength).ToString()), labelStyle, new GUILayoutOption[] { GUILayout.Width(250f) });
-		adminThrowStrength = GUILayout.HorizontalSlider(adminThrowStrength, 0f, 30f, new GUILayoutOption[] { GUILayout.Width(200f) });
+		adminThrowStrength = GUILayout.HorizontalSlider(adminThrowStrength, 0f, cap, new GUILayoutOption[] { GUILayout.Width(200f) });
 		GUILayout.EndHorizontal();
 
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		GUILayout.Label(L.T("admin.sprint_spd", ((int)adminSprintSpeed).ToString()), labelStyle, new GUILayoutOption[] { GUILayout.Width(250f) });
-		adminSprintSpeed = GUILayout.HorizontalSlider(adminSprintSpeed, 0f, 30f, new GUILayoutOption[] { GUILayout.Width(200f) });
+		adminSprintSpeed = GUILayout.HorizontalSlider(adminSprintSpeed, 0f, cap, new GUILayoutOption[] { GUILayout.Width(200f) });
 		GUILayout.EndHorizontal();
 
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		GUILayout.Label(L.T("admin.grab_range", ((int)adminGrabRange).ToString()), labelStyle, new GUILayoutOption[] { GUILayout.Width(250f) });
-		adminGrabRange = GUILayout.HorizontalSlider(adminGrabRange, 0f, 30f, new GUILayoutOption[] { GUILayout.Width(200f) });
+		adminGrabRange = GUILayout.HorizontalSlider(adminGrabRange, 0f, cap, new GUILayoutOption[] { GUILayout.Width(200f) });
 		GUILayout.EndHorizontal();
 
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		GUILayout.Label(L.T("admin.extra_jump", ((int)adminExtraJump).ToString()), labelStyle, new GUILayoutOption[] { GUILayout.Width(250f) });
-		adminExtraJump = GUILayout.HorizontalSlider(adminExtraJump, 0f, 30f, new GUILayoutOption[] { GUILayout.Width(200f) });
+		adminExtraJump = GUILayout.HorizontalSlider(adminExtraJump, 0f, cap, new GUILayoutOption[] { GUILayout.Width(200f) });
 		GUILayout.EndHorizontal();
 
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		GUILayout.Label(L.T("admin.tumble_launch", ((int)adminTumbleLaunch).ToString()), labelStyle, new GUILayoutOption[] { GUILayout.Width(250f) });
-		adminTumbleLaunch = GUILayout.HorizontalSlider(adminTumbleLaunch, 0f, 20f, new GUILayoutOption[] { GUILayout.Width(200f) });
+		adminTumbleLaunch = GUILayout.HorizontalSlider(adminTumbleLaunch, 0f, cap, new GUILayoutOption[] { GUILayout.Width(200f) });
 		GUILayout.EndHorizontal();
 
 		GUILayout.Space(5f);
@@ -5265,34 +5893,82 @@ public class Hax2 : MonoBehaviour
 		}
 		if (GUILayout.Button(L.T("admin.max_all"), buttonStyle, Array.Empty<GUILayoutOption>()))
 		{
-			adminGrabStrength = 30f; adminThrowStrength = 30f; adminSprintSpeed = 30f;
-			adminGrabRange = 30f; adminExtraJump = 30f; adminTumbleLaunch = 20f;
+			adminGrabStrength = AdminUpgradeCap;
+			adminThrowStrength = AdminUpgradeCap;
+			adminSprintSpeed = AdminUpgradeCap;
+			adminGrabRange = AdminUpgradeCap;
+			adminExtraJump = AdminUpgradeCap;
+			adminTumbleLaunch = AdminUpgradeCap;
 			ApplyAdminUpgrades();
 		}
 		GUILayout.EndHorizontal();
 
-		// ===================== 无敌光环 =====================
 		GUILayout.Space(10f);
 		DrawSectionHeader(L.T("admin.aura_section"));
 		ToggleLogic("invincibility_aura", L.T("admin.aura_toggle"), ref adminInvincibilityAura, () => {
 			PlayerAura.isEnabled = adminInvincibilityAura;
 			if (adminInvincibilityAura)
 			{
-				// 设置光环目标：0=全部, 其他=对应玩家
-				if (adminTargetIndex == 0)
-					PlayerAura.targetActorNumber = -1;
-				else if (adminTargetIndex - 1 < playerList.Count)
-				{
-					var pv = ((Component)playerList[adminTargetIndex - 1]).GetComponent<PhotonView>();
-					PlayerAura.targetActorNumber = (pv != null) ? pv.OwnerActorNr : -1;
-				}
+				SyncAuraTarget();
+			}
+			else
+			{
+				PlayerAura.OnDisabled();
 			}
 		});
+		PlayerAura.isEnabled = adminInvincibilityAura;
 		if (adminInvincibilityAura)
 		{
-			string auraTargetText = (PlayerAura.targetActorNumber == -1) ? L.T("common.all_players") : L.T("admin.aura_actor", PlayerAura.targetActorNumber.ToString());
+			SyncAuraTarget();
+			string auraTargetText = (PlayerAura.targetActorNumber == -1)
+				? L.T("common.all_players")
+				: L.T("admin.aura_actor", PlayerAura.targetActorNumber.ToString());
 			GUILayout.Label(L.T("admin.aura_status", auraTargetText), labelStyle, Array.Empty<GUILayoutOption>());
+			GUILayout.Label(L.T("admin.aura_hint"), labelStyle, Array.Empty<GUILayoutOption>());
 		}
+	}
+
+	private void CommitAdminUpgradeCap()
+	{
+		string raw = (adminUpgradeCapText ?? "").Trim();
+		if (!int.TryParse(raw, out int parsed))
+		{
+			adminUpgradeCapText = AdminUpgradeCap.ToString();
+			return;
+		}
+		int cap = Mathf.Clamp(parsed, AdminUpgradeCapMin, AdminUpgradeCapMax);
+		AdminUpgradeCap = cap;
+		adminUpgradeCapText = cap.ToString();
+		adminGrabStrength = Mathf.Min(adminGrabStrength, cap);
+		adminThrowStrength = Mathf.Min(adminThrowStrength, cap);
+		adminSprintSpeed = Mathf.Min(adminSprintSpeed, cap);
+		adminGrabRange = Mathf.Min(adminGrabRange, cap);
+		adminExtraJump = Mathf.Min(adminExtraJump, cap);
+		adminTumbleLaunch = Mathf.Min(adminTumbleLaunch, cap);
+		ConfigManager.SaveInt("admin_upgrade_cap", cap);
+		PlayerPrefs.Save();
+	}
+
+	private void SyncAuraTarget()
+	{
+		if (!adminInvincibilityAura)
+		{
+			return;
+		}
+		if (adminTargetIndex == 0)
+		{
+			PlayerAura.targetActorNumber = -1;
+			return;
+		}
+		int idx = adminTargetIndex - 1;
+		if (idx < 0 || idx >= playerList.Count)
+		{
+			PlayerAura.targetActorNumber = -1;
+			return;
+		}
+		PlayerAvatar avatar = playerList[idx] as PlayerAvatar;
+		int actor = PlayerAura.ActorOf(avatar);
+		PlayerAura.targetActorNumber = actor > 0 ? actor : -1;
 	}
 
 	private void ApplyAdminUpgrades()

@@ -62,10 +62,23 @@ public class PlayerCheatSync : MonoBehaviourPunCallbacks
 			Component component = val2.GetComponent(Type.GetType("ValuableObject, Assembly-CSharp"));
 			if ((Object)(object)component != (Object)null && value > 0)
 			{
-				MethodInfo method = ((object)component).GetType().GetMethod("DollarValueSetRPC", BindingFlags.Instance | BindingFlags.Public);
-				if (method != null)
+				PhotonView itemView = component.GetComponent<PhotonView>();
+				try
 				{
-					method.Invoke(component, new object[1] { (float)value });
+					FieldInfo original = component.GetType().GetField("dollarValueOriginal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					FieldInfo current = component.GetType().GetField("dollarValueCurrent", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+						?? component.GetType().GetField("dollarValue", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					FieldInfo set = component.GetType().GetField("dollarValueSet", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					original?.SetValue(component, (float)value);
+					current?.SetValue(component, (float)value);
+					set?.SetValue(component, true);
+				}
+				catch
+				{
+				}
+				if ((Object)(object)itemView != (Object)null)
+				{
+					itemView.RPC("DollarValueSetRPC", RpcTarget.Others, (float)value);
 				}
 			}
 			val2.AddComponent<MirroredItemMarker>();

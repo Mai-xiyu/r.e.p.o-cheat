@@ -79,9 +79,15 @@ public static class ConfigManager
 		SaveToggle("inf_stam", Hax2.stamineState);
 		SaveToggle("inf_battery", Hax2.unlimitedBatteryActive);
 		SaveToggle("instant_gun_buildup", NativeGameApi.InstantGunBuildup);
+		SaveToggle("mid_join", MidJoin.Enabled);
+		SaveInt("room_max_players", RoomCreator.MaxPlayers);
 		SaveToggle("no_camera_shake", NativeGameApi.NoCameraShake);
 		SaveToggle("hide_item_labels", NativeGameApi.HideItemLabels);
 		SaveToggle("rainbow_cosmetics", CosmeticFeatures.RainbowMode);
+		SaveInt("eye_color_mode", (int)EyeColorEffects.Mode);
+		SaveColor("eye_fixed_color", EyeColorEffects.FixedColor);
+		SaveFloat("eye_random_interval", EyeColorEffects.RandomInterval);
+		SaveFloat("eye_rainbow_speed", EyeColorEffects.RainbowSpeed);
 		SaveToggle("No_Fog", MiscFeatures.NoFogEnabled);
 		SaveToggle("WaterMark_Toggle", Hax2.showWatermark);
 		SaveToggle("no_weapon_recoil", Patches.NoWeaponRecoil._isEnabledForConfig);
@@ -92,6 +98,7 @@ public static class ConfigManager
 		SaveFloat("grab_Range", Hax2.grabRange);
 		SaveFloat("stam_Recharge_Delay", Hax2.staminaRechargeDelay);
 		SaveFloat("stam_Recharge_Rate", Hax2.staminaRechargeRate);
+		SaveInt("admin_upgrade_cap", Hax2.AdminUpgradeCap);
 		SaveInt("extra_jumps", Hax2.extraJumps);
 		SaveFloat("tumble_launch", Hax2.tumbleLaunch);
 		SaveFloat("jump_force", Hax2.jumpForce);
@@ -179,9 +186,16 @@ public static class ConfigManager
 		}
 		BatteryKeepAlive.ApplyDirectorFlag();
 		NativeGameApi.InstantGunBuildup = LoadToggle("instant_gun_buildup");
+		MidJoin.Enabled = LoadToggle("mid_join");
+		RoomCreator.SetMaxPlayers(LoadInt("room_max_players", 6));
 		NativeGameApi.NoCameraShake = LoadToggle("no_camera_shake");
 		NativeGameApi.HideItemLabels = LoadToggle("hide_item_labels");
 		CosmeticFeatures.RainbowMode = LoadToggle("rainbow_cosmetics");
+		EyeColorEffects.Mode = (EyeColorEffects.EyeMode)Mathf.Clamp(
+			LoadInt("eye_color_mode", 0), 0, (int)EyeColorEffects.EyeMode.Rainbow);
+		EyeColorEffects.FixedColor = LoadColor("eye_fixed_color", EyeColorEffects.FixedColor);
+		EyeColorEffects.RandomInterval = Mathf.Clamp(LoadFloat("eye_random_interval", 1.25f), 0.1f, 10f);
+		EyeColorEffects.RainbowSpeed = Mathf.Clamp(LoadFloat("eye_rainbow_speed", 0.2f), 0.02f, 1.5f);
 		MiscFeatures.NoFogEnabled = LoadToggle("No_Fog");
 		Hax2.showWatermark = LoadToggle("WaterMark_Toggle", defaultValue: true);
 		Hax2.debounce = LoadToggle("grab_guard", defaultValue: true);
@@ -192,6 +206,12 @@ public static class ConfigManager
 		Hax2.staminaRechargeDelay = LoadFloat("stam_Recharge_Delay", Hax2.staminaRechargeDelay);
 		Hax2.staminaRechargeRate = LoadFloat("stam_Recharge_Rate", Hax2.staminaRechargeRate);
 		Hax2.extraJumps = LoadInt("extra_jumps", Hax2.extraJumps);
+		int adminCap = LoadInt("admin_upgrade_cap", 30);
+		if (adminCap < Hax2.AdminUpgradeCapMin)
+		{
+			adminCap = 30;
+		}
+		Hax2.AdminUpgradeCap = Mathf.Clamp(adminCap, Hax2.AdminUpgradeCapMin, Hax2.AdminUpgradeCapMax);
 		Hax2.tumbleLaunch = LoadFloat("tumble_launch", Hax2.tumbleLaunch);
 		Hax2.jumpForce = LoadFloat("jump_force", Hax2.jumpForce);
 		Hax2.customGravity = LoadFloat("gravity", Hax2.customGravity);

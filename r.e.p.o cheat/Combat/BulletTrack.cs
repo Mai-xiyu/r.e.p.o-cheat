@@ -48,14 +48,41 @@ public static class BulletTrack
 		}
 	}
 
-	private static bool IsLocalShot(ItemGun gun)
+	/// <summary>
+	/// Room guns are master-owned, so photonView.IsMine is true for every gun
+	/// on the host and false for every gun on a guest. Use the local grab instead.
+	/// </summary>
+	public static bool IsLocalShot(ItemGun gun)
 	{
+		if ((Object)gun == null)
+		{
+			return false;
+		}
 		PhysGrabObject body = PhysGrabObjectField?.GetValue(gun) as PhysGrabObject;
+		if ((Object)body == null)
+		{
+			body = gun.GetComponent<PhysGrabObject>();
+		}
 		if ((Object)body == null)
 		{
 			return false;
 		}
-		return body.grabbedLocal;
+		if (body.grabbedLocal)
+		{
+			return true;
+		}
+		if (body.playerGrabbing == null)
+		{
+			return false;
+		}
+		foreach (PhysGrabber grabber in body.playerGrabbing)
+		{
+			if (grabber != null && grabber.isLocal)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public static bool TryGetTargetPoint(out Vector3 point)

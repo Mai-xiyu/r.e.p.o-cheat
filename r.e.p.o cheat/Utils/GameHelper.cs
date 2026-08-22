@@ -19,7 +19,7 @@ public class GameHelper : MonoBehaviour
 
 	/// <summary>
 	/// 获取当前最佳可用相机。带 1 帧缓存避免重复开销。
-	/// 回退链: Camera.main → CameraZoom.Instance 上的 Camera → allCameras 遍历
+	/// 回退链: CameraZoom → Camera.main → allCameras（含 RenderTexture 世界相机）
 	/// </summary>
 	public static Camera GetActiveCamera()
 	{
@@ -28,16 +28,8 @@ public class GameHelper : MonoBehaviour
 			return _cachedActiveCam;
 
 		_cachedFrame = frame;
+		Camera cam = null;
 
-		// 1. 优先 Camera.main
-		Camera cam = Camera.main;
-		if ((Object)(object)cam != (Object)null)
-		{
-			_cachedActiveCam = cam;
-			return cam;
-		}
-
-		// 2. 尝试 CameraZoom 单例（游戏自带相机管理器）
 		try
 		{
 			CameraZoom cz = CameraZoom.Instance;
@@ -48,7 +40,7 @@ public class GameHelper : MonoBehaviour
 					cam = ((Component)cz).GetComponentInParent<Camera>();
 				if ((Object)(object)cam == (Object)null)
 					cam = ((Component)cz).GetComponentInChildren<Camera>();
-				if ((Object)(object)cam != (Object)null && cam.enabled)
+				if ((Object)(object)cam != (Object)null && cam.enabled && cam.cullingMask != 0)
 				{
 					_cachedActiveCam = cam;
 					return cam;
@@ -57,23 +49,31 @@ public class GameHelper : MonoBehaviour
 		}
 		catch { }
 
-		// 3. 遍历所有活跃相机，找第一个非 UI、非 RenderTexture 的相机
+		cam = Camera.main;
+		if ((Object)(object)cam != (Object)null && cam.enabled && cam.cullingMask != 0)
+		{
+			_cachedActiveCam = cam;
+			return cam;
+		}
+
 		try
 		{
 			Camera[] allCams = Camera.allCameras;
 			Camera bestCam = null;
-			float bestDepth = float.MinValue;
+			float bestScore = float.MinValue;
 
 			foreach (Camera c in allCams)
 			{
 				if ((Object)(object)c == (Object)null || !c.enabled) continue;
-				if (c.targetTexture != null) continue; // 排除 RenderTexture 相机
-				if (c.cullingMask == 0) continue;       // 排除不渲染任何层的相机
+				if (c.cullingMask == 0) continue;
 
-				// 优先选 depth 最高的（通常是主渲染相机）
-				if (c.depth > bestDepth)
+				float score = c.depth;
+				if (c.targetTexture != null)
+					score += 1000f;
+
+				if (score > bestScore)
 				{
-					bestDepth = c.depth;
+					bestScore = score;
 					bestCam = c;
 				}
 			}

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using Photon.Pun;
@@ -14,7 +15,6 @@ public static class Enemies
 
 	public static void KillSelectedEnemy(int selectedEnemyIndex, List<Enemy> enemyList, List<string> enemyNames)
 	{
-		//IL_007b: Unknown result type (might be due to invalid IL or missing references)
 		if (selectedEnemyIndex < 0 || selectedEnemyIndex >= enemyList.Count)
 		{
 			return;
@@ -26,7 +26,7 @@ public static class Enemies
 		}
 		try
 		{
-			NativeGameApi.KillEnemy(val);
+			VoidAndHaul(val);
 			DebugCheats.UpdateEnemyList();
 		}
 		catch (Exception)
@@ -36,30 +36,21 @@ public static class Enemies
 
 	public static void KillAllEnemies()
 	{
-		if (NativeGameApi.DestroyAllEnemies() > 0)
-		{
-			DebugCheats.UpdateEnemyList();
-			return;
-		}
 		List<Enemy> list = DebugCheats.enemyList;
 		if (list == null || list.Count == 0)
 		{
+			if (NativeGameApi.IsHost())
+			{
+				NativeGameApi.DestroyAllEnemies();
+				DebugCheats.UpdateEnemyList();
+			}
 			return;
 		}
-		int num = 0;
 		foreach (Enemy item in new List<Enemy>(list))
 		{
-			if ((Object)(object)item == (Object)null)
+			if ((Object)(object)item != (Object)null)
 			{
-				continue;
-			}
-			try
-			{
-				NativeGameApi.KillEnemy(item);
-				num++;
-			}
-			catch (Exception)
-			{
+				VoidAndHaul(item);
 			}
 		}
 		DebugCheats.UpdateEnemyList();
@@ -183,6 +174,108 @@ public static class Enemies
 		}
 		catch (Exception)
 		{
+		}
+	}
+
+	public static void TeleportEnemyToVoid(int selectedEnemyIndex, List<Enemy> enemyList, List<string> enemyNames)
+	{
+		if (selectedEnemyIndex < 0 || selectedEnemyIndex >= enemyList.Count)
+		{
+			return;
+		}
+		Enemy enemy = enemyList[selectedEnemyIndex];
+		if ((Object)(object)enemy == (Object)null)
+		{
+			return;
+		}
+		try
+		{
+			VoidAndHaul(enemy);
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	private static readonly Vector3 VoidPos = new Vector3(0f, -500f, 0f);
+
+	private static void VoidAndHaul(Enemy enemy)
+	{
+		if ((Object)(object)enemy == (Object)null)
+		{
+			return;
+		}
+		HashSet<int> before = SnapshotValuableIds();
+		if (NativeGameApi.IsHost())
+		{
+			NativeGameApi.KillEnemy(enemy);
+		}
+		else
+		{
+			NativeGameApi.TeleportEnemy(enemy, VoidPos);
+		}
+		EnemyNavMeshAgent agent = ((Component)enemy).GetComponent<EnemyNavMeshAgent>();
+		if ((Object)(object)agent != (Object)null)
+		{
+			agent.Disable(60f);
+		}
+		Loader.RunCoroutine(HaulNewValuables(before, enemy));
+	}
+
+	private static HashSet<int> SnapshotValuableIds()
+	{
+		HashSet<int> ids = new HashSet<int>();
+		try
+		{
+			ValuableObject[] valuables = UnityEngine.Object.FindObjectsOfType<ValuableObject>();
+			for (int i = 0; i < valuables.Length; i++)
+			{
+				if ((Object)(object)valuables[i] != (Object)null)
+				{
+					ids.Add(valuables[i].GetInstanceID());
+				}
+			}
+		}
+		catch
+		{
+		}
+		return ids;
+	}
+
+	private static IEnumerator HaulNewValuables(HashSet<int> before, Enemy enemy)
+	{
+		for (int i = 0; i < 12; i++)
+		{
+			yield return new WaitForSeconds(0.25f);
+			if (!ItemTeleport.TryGetOpenExtractionDrop(out Vector3 dropPos, out Quaternion dropRot, out _))
+			{
+				continue;
+			}
+			bool moved = false;
+			ValuableObject[] valuables = UnityEngine.Object.FindObjectsOfType<ValuableObject>();
+			for (int v = 0; v < valuables.Length; v++)
+			{
+				ValuableObject valuable = valuables[v];
+				if ((Object)(object)valuable == (Object)null || before.Contains(valuable.GetInstanceID()))
+				{
+					continue;
+				}
+				if (valuable.GetComponent<PlayerDeathHead>() != null || valuable.GetComponentInParent<PlayerDeathHead>() != null)
+				{
+					continue;
+				}
+				ItemTeleport.TeleportComponent(valuable, dropPos, dropRot);
+				before.Add(valuable.GetInstanceID());
+				moved = true;
+			}
+			if (moved)
+			{
+				break;
+			}
+		}
+		if (NativeGameApi.IsHost() && (Object)(object)enemy != (Object)null)
+		{
+			NativeGameApi.TeleportEnemy(enemy, VoidPos);
 		}
 	}
 

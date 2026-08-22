@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using HarmonyLib;
 using Photon.Pun;
 using UnityEngine;
 
@@ -55,9 +56,15 @@ public static class ItemTeleport
 				return;
 			}
 			PhotonView component = val2.GetComponent<PhotonView>();
-			if ((Object)(object)component != (Object)null)
+			ValuableObject valuable = val2.GetComponent<ValuableObject>() ?? val2.GetComponentInParent<ValuableObject>();
+			if ((Object)(object)valuable != (Object)null)
 			{
-				component.RPC("DollarValueSetRPC", (RpcTarget)3, new object[1] { (float)newValue });
+				FieldInfo dollar = AccessTools.Field(typeof(ValuableObject), "dollarValueCurrent");
+				dollar?.SetValue(valuable, (float)newValue);
+			}
+			if ((Object)(object)component != (Object)null && NativeGameApi.IsHost())
+			{
+				component.RPC("DollarValueSetRPC", RpcTarget.Others, (float)newValue);
 				Debug.Log((object)$"已通过 RPC 将“{selectedItem.Name}”的价值设置为 ${newValue}");
 			}
 			else
@@ -105,6 +112,11 @@ public static class ItemTeleport
 			{
 				continue;
 			}
+			if (valuableObject is CosmeticWorldObject cube)
+			{
+				list.Add(new GameItem(L.T("item.name.Cube") + " " + CosmeticFeatures.RarityLabel(cube.rarity), 0, cube));
+				continue;
+			}
 			PropertyInfo property = valuableObject.GetType().GetProperty("transform", BindingFlags.Instance | BindingFlags.Public);
 			if (property == null)
 			{
@@ -113,6 +125,10 @@ public static class ItemTeleport
 			object value = property.GetValue(valuableObject);
 			Transform val = (Transform)((value is Transform) ? value : null);
 			if ((Object)(object)val == (Object)null || !((Component)val).gameObject.activeInHierarchy)
+			{
+				continue;
+			}
+			if (valuableObject is PlayerDeathHead head && !IsDeathHeadReady(head))
 			{
 				continue;
 			}
@@ -212,70 +228,155 @@ public static class ItemTeleport
 		}
 	}
 
+	public static bool TeleportComponent(Component source, Vector3 position, Quaternion rotation)
+	{
+		if ((Object)(object)source == (Object)null)
+		{
+			return false;
+		}
+		PhysGrabObject body = ResolvePhysGrabObject(source);
+		if ((Object)(object)body != (Object)null)
+		{
+			PrepareDeathHead(source);
+			body.Teleport(SnapToGround(position), rotation);
+			return true;
+		}
+		source.transform.SetPositionAndRotation(SnapToGround(position), rotation);
+		return true;
+	}
+
+	public static Vector3 SnapToGround(Vector3 origin)
+	{
+		Vector3 start = origin + Vector3.up * 0.35f;
+		int mask = ~LayerMask.GetMask("Ignore Raycast", "Player", "Enemy");
+		if (Physics.Raycast(start, Vector3.down, out RaycastHit hit, 6f, mask, QueryTriggerInteraction.Ignore))
+		{
+			return hit.point + Vector3.up * 0.04f;
+		}
+		return origin;
+	}
+
+	public static bool TryGetOpenExtractionDrop(out Vector3 dropPos, out Quaternion dropRot, out string extractLabel)
+	{
+		dropPos = Vector3.zero;
+		dropRot = Quaternion.identity;
+		extractLabel = "";
+		GameObject localPlayer = DebugCheats.GetLocalPlayer();
+		Vector3 playerPos = (Object)(object)localPlayer != (Object)null ? localPlayer.transform.position : Vector3.zero;
+		ExtractionPoint bestOpen = null;
+		ExtractionPoint bestReady = null;
+		float bestOpenDist = float.MaxValue;
+		float bestReadyDist = float.MaxValue;
+		FieldInfo stateField = AccessTools.Field(typeof(ExtractionPoint), "currentState");
+		ExtractionPoint[] points = SceneCache.GetObjects<ExtractionPoint>(0.5f);
+		if (points == null)
+		{
+			return false;
+		}
+		foreach (ExtractionPoint point in points)
+		{
+			if ((Object)(object)point == (Object)null || !((Component)point).gameObject.activeInHierarchy)
+			{
+				continue;
+			}
+			string state = stateField?.GetValue(point)?.ToString() ?? "";
+			float dist = Vector3.Distance(playerPos, ((Component)point).transform.position);
+			if (state == "Active" || state == "Success" || state == "Surplus" || state == "Warning" || state == "Extracting" || state == "TaxReturn")
+			{
+				if (dist < bestOpenDist)
+				{
+					bestOpenDist = dist;
+					bestOpen = point;
+				}
+			}
+			else if (state == "Idle" && !point.isLocked && dist < bestReadyDist)
+			{
+				bestReadyDist = dist;
+				bestReady = point;
+			}
+		}
+		ExtractionPoint chosen = (Object)(object)bestOpen != (Object)null ? bestOpen : bestReady;
+		if ((Object)(object)chosen == (Object)null)
+		{
+			return false;
+		}
+		extractLabel = stateField?.GetValue(chosen)?.ToString() ?? "READY";
+		Transform pose = chosen.safetySpawn != null ? chosen.safetySpawn : (chosen.platform != null ? chosen.platform : ((Component)chosen).transform);
+		dropRot = pose.rotation;
+		dropPos = SnapToGround(pose.position);
+		return true;
+	}
+
+	public static PhysGrabObject ResolvePhysGrabObject(Component source)
+	{
+		if ((Object)(object)source == (Object)null)
+		{
+			return null;
+		}
+		PlayerDeathHead head = source as PlayerDeathHead ?? source.GetComponent<PlayerDeathHead>() ?? source.GetComponentInParent<PlayerDeathHead>();
+		if ((Object)(object)head != (Object)null)
+		{
+			PhysGrabObject fieldBody = AccessTools.Field(typeof(PlayerDeathHead), "physGrabObject")?.GetValue(head) as PhysGrabObject;
+			if ((Object)(object)fieldBody != (Object)null)
+			{
+				return fieldBody;
+			}
+		}
+		return source.GetComponent<PhysGrabObject>()
+			?? source.GetComponentInParent<PhysGrabObject>()
+			?? source.GetComponentInChildren<PhysGrabObject>(true);
+	}
+
+	private static bool IsDeathHeadReady(PlayerDeathHead head)
+	{
+		if ((Object)(object)head == (Object)null)
+		{
+			return false;
+		}
+		FieldInfo triggered = AccessTools.Field(typeof(PlayerDeathHead), "triggered");
+		return triggered != null && triggered.GetValue(head) is bool ready && ready;
+	}
+
+	private static void PrepareDeathHead(Component source)
+	{
+		PlayerDeathHead head = source as PlayerDeathHead ?? source.GetComponent<PlayerDeathHead>() ?? source.GetComponentInParent<PlayerDeathHead>();
+		if ((Object)(object)head == (Object)null)
+		{
+			return;
+		}
+		try
+		{
+			head.Trigger();
+			PhysGrabObject body = ResolvePhysGrabObject(head);
+			body?.OverrideDeactivateReset();
+			body?.DisableDeathPitEffect(8f);
+		}
+		catch
+		{
+		}
+	}
+
 	private static void PerformTeleport(GameItem item)
 	{
-		//IL_0024: Unknown result type (might be due to invalid IL or missing references)
-		//IL_002f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0039: Unknown result type (might be due to invalid IL or missing references)
-		//IL_003e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0043: Unknown result type (might be due to invalid IL or missing references)
-		//IL_004d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0052: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0057: Unknown result type (might be due to invalid IL or missing references)
 		try
 		{
 			GameObject localPlayer = DebugCheats.GetLocalPlayer();
-			if ((Object)(object)localPlayer == (Object)null)
+			if ((Object)(object)localPlayer == (Object)null || item?.ItemObject == null)
 			{
-				Debug.Log((object)"Local player not found!");
 				return;
 			}
-			Vector3 val = localPlayer.transform.position + localPlayer.transform.forward * 1f + Vector3.up * 1.5f;
+			Vector3 dest = SnapToGround(localPlayer.transform.position + localPlayer.transform.forward * 1f);
 			Quaternion rotation = localPlayer.transform.rotation;
-			Debug.Log((object)$"Target position for teleport of '{item.Name}': {val}");
-			Transform val2 = null;
-			PropertyInfo property = item.ItemObject.GetType().GetProperty("transform", BindingFlags.Instance | BindingFlags.Public);
-			if (property != null)
+			Component source = item.ItemObject as Component;
+			if ((Object)(object)source == (Object)null && item.ItemObject is GameObject go)
 			{
-				object value = property.GetValue(item.ItemObject);
-				val2 = (Transform)((value is Transform) ? value : null);
+				source = go.transform;
 			}
-			else
+			if ((Object)(object)source == (Object)null)
 			{
-				object itemObject = item.ItemObject;
-				MonoBehaviour val3 = (MonoBehaviour)((itemObject is MonoBehaviour) ? itemObject : null);
-				if ((Object)(object)val3 != (Object)null)
-				{
-					val2 = ((Component)val3).transform;
-				}
-			}
-			if ((Object)(object)val2 == (Object)null)
-			{
-				Debug.Log((object)("Could not get Transform of item '" + item.Name + "'!"));
 				return;
 			}
-			PhysGrabObject body = ((Component)val2).GetComponent<PhysGrabObject>() ?? ((Component)val2).GetComponentInParent<PhysGrabObject>();
-			if ((Object)(object)body != (Object)null)
-			{
-				body.Teleport(val, rotation);
-				return;
-			}
-			PhotonView component = ((Component)val2).GetComponent<PhotonView>();
-			if ((Object)(object)component == (Object)null)
-			{
-				Debug.Log((object)("Item '" + item.Name + "' has no PhotonView, performing local teleport only."));
-				val2.position = val;
-				val2.rotation = rotation;
-				return;
-			}
-			// 使用 ItemTeleportComponent 处理所有权和传送
-			ItemTeleportComponent teleportComp = ((Component)val2).GetComponent<ItemTeleportComponent>();
-			if ((Object)(object)teleportComp == (Object)null)
-			{
-				teleportComp = ((Component)val2).gameObject.AddComponent<ItemTeleportComponent>();
-			}
-			teleportComp.RequestTeleport(val, rotation);
-			Debug.Log((object)("Teleport of item '" + item.Name + "' requested via ItemTeleportComponent."));
+			TeleportComponent(source, dest, rotation);
 		}
 		catch (Exception ex)
 		{

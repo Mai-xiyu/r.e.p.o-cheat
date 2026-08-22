@@ -280,7 +280,7 @@ public static class NativeGameApi
 				ToggleStringList(DebugCommandHandler.instance, "enemyNoVision", steamId, enabled);
 			}
 			PhotonView punView = GetMember<PhotonView>(PunManager.instance, "photonView");
-			if (IsHost() && SemiFunc.IsMultiplayer() && PunManager.instance != null && punView != null)
+			if (SemiFunc.IsMultiplayer() && PunManager.instance != null && punView != null)
 			{
 				punView.RPC("TesterNoAggroCommandRPC", RpcTarget.MasterClient, steamId, enabled);
 			}
@@ -576,26 +576,25 @@ public static class NativeGameApi
 	public static List<string> GetItemNames()
 	{
 		var names = new List<string>();
+		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		try
 		{
-			StatsManager stats = StatsManager.instance;
-			if (stats == null || stats.itemDictionary == null)
+			AddItemNames(names, seen, StatsManager.instance != null ? StatsManager.instance.itemDictionary : null);
+			Item[] fromResources = Resources.LoadAll<Item>("ScriptableObjects");
+			AddItemAssets(names, seen, fromResources);
+			Item[] allAssets = Resources.FindObjectsOfTypeAll<Item>();
+			AddItemAssets(names, seen, allAssets);
+			ShopManager shop = ShopManager.instance;
+			if (shop != null)
 			{
-				return names;
-			}
-			foreach (Item item in stats.itemDictionary.Values)
-			{
-				if ((UnityEngine.Object)item == null || item.disabled)
-				{
-					continue;
-				}
-				string n = ((UnityEngine.Object)item).name;
-				if (!string.IsNullOrEmpty(n) && !names.Contains(n))
-				{
-					names.Add(n);
-				}
+				AddItemAssets(names, seen, shop.potentialItems);
+				AddItemAssets(names, seen, shop.potentialItemConsumables);
+				AddItemAssets(names, seen, shop.potentialItemUpgrades);
+				AddItemAssets(names, seen, shop.potentialItemHealthPacks);
 			}
 			names.Sort(StringComparer.OrdinalIgnoreCase);
+			AddItemName(names, seen, "ValuableCubeBall");
+			AddItemName(names, seen, "Cube");
 		}
 		catch
 		{
@@ -603,8 +602,54 @@ public static class NativeGameApi
 		return names;
 	}
 
+	private static void AddItemNames(List<string> names, HashSet<string> seen, Dictionary<string, Item> dictionary)
+	{
+		if (dictionary == null)
+		{
+			return;
+		}
+		foreach (KeyValuePair<string, Item> pair in dictionary)
+		{
+			string n = pair.Key;
+			if (string.IsNullOrEmpty(n) && pair.Value != null)
+			{
+				n = ((UnityEngine.Object)pair.Value).name;
+			}
+			AddItemName(names, seen, n);
+		}
+	}
+
+	private static void AddItemAssets(List<string> names, HashSet<string> seen, IEnumerable<Item> items)
+	{
+		if (items == null)
+		{
+			return;
+		}
+		foreach (Item item in items)
+		{
+			if ((UnityEngine.Object)item == null)
+			{
+				continue;
+			}
+			AddItemName(names, seen, ((UnityEngine.Object)item).name);
+		}
+	}
+
+	private static void AddItemName(List<string> names, HashSet<string> seen, string n)
+	{
+		if (string.IsNullOrEmpty(n) || !seen.Add(n))
+		{
+			return;
+		}
+		names.Add(n);
+	}
+
 	public static bool SpawnItemNative(string itemName, Vector3 position)
 	{
+		if (IsCubeItemName(itemName))
+		{
+			return SpawnCosmeticCube(CosmeticFeatures.TokenRarity, position);
+		}
 		try
 		{
 			Item item = FindItem(itemName);
@@ -634,6 +679,62 @@ public static class NativeGameApi
 		catch (Exception ex)
 		{
 			LastStatus = "item spawn: " + ex.Message;
+			return false;
+		}
+	}
+
+	public static bool IsCubeItemName(string itemName)
+	{
+		if (string.IsNullOrEmpty(itemName))
+		{
+			return false;
+		}
+		string n = itemName.Replace(" ", "");
+		return n.IndexOf("Cube", StringComparison.OrdinalIgnoreCase) >= 0
+			|| n.IndexOf("魔方", StringComparison.OrdinalIgnoreCase) >= 0;
+	}
+
+	public static bool SpawnCosmeticCube(SemiFunc.Rarity rarity, Vector3 position)
+	{
+		try
+		{
+			if (SemiFunc.IsMultiplayer() && !IsHost())
+			{
+				LastStatus = L.T("role.host_only");
+				return false;
+			}
+			ValuableDirector vd = ValuableDirector.instance;
+			if (vd == null || vd.cosmeticWorldObjectSetups == null)
+			{
+				LastStatus = "no cube setups";
+				return false;
+			}
+			int index = (int)rarity;
+			if (index < 0 || index >= vd.cosmeticWorldObjectSetups.Count)
+			{
+				index = 0;
+			}
+			ValuableDirector.CosmeticWorldObjectSetup setup = vd.cosmeticWorldObjectSetups[index];
+			if (setup == null || setup.prefab == null)
+			{
+				LastStatus = "cube prefab missing";
+				return false;
+			}
+			Quaternion rot = Quaternion.identity;
+			if (SemiFunc.IsMultiplayer())
+			{
+				PhotonNetwork.InstantiateRoomObject(setup.prefab.ResourcePath, position, rot, 0);
+			}
+			else
+			{
+				UnityEngine.Object.Instantiate(setup.prefab.Prefab, position, rot);
+			}
+			LastStatus = "cube " + rarity;
+			return true;
+		}
+		catch (Exception ex)
+		{
+			LastStatus = "cube: " + ex.Message;
 			return false;
 		}
 	}
@@ -706,6 +807,17 @@ public static class NativeGameApi
 		}
 		try
 		{
+			PhysGrabObject body = ItemTeleport.ResolvePhysGrabObject(enemy);
+			if (body == null)
+			{
+				body = enemy.GetComponentInChildren<PhysGrabObject>(true);
+			}
+			if (IsGuest() && body != null)
+			{
+				body.Teleport(position, Quaternion.identity);
+				LastStatus = "enemy tp requested";
+				return;
+			}
 			enemy.EnemyTeleported(position);
 			EnemyNavMeshAgent agent = enemy.GetComponent<EnemyNavMeshAgent>();
 			if (agent != null)
@@ -713,6 +825,7 @@ public static class NativeGameApi
 				agent.Disable(0.4f);
 				agent.Warp(position, true);
 			}
+			LastStatus = "enemy tp";
 		}
 		catch (Exception ex)
 		{
@@ -1121,7 +1234,12 @@ public static class NativeGameApi
 	{
 		try
 		{
-			if (global::PlayerController.instance != null)
+			PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+			if (local != null)
+			{
+				local.ForceImpulse(Vector3.up * 18f);
+			}
+			else if (global::PlayerController.instance != null)
 			{
 				global::PlayerController.instance.ForceImpulse(Vector3.up * 18f);
 			}
@@ -1338,6 +1456,9 @@ public static class NativeGameApi
 
 	public static void Tick()
 	{
+		MidJoin.Tick();
+		Troll.EnsurePhotonEventHook();
+		CosmeticFeatures.EnsurePhotonEventHook();
 		ApplyDirectorFlags();
 		if (HideGrabber)
 		{
@@ -1456,6 +1577,10 @@ public static class NativeGameApi
 			{
 				return;
 			}
+			if (GetMember<bool>(local, "deadSet") || GetMember<bool>(local, "isDisabled"))
+			{
+				return;
+			}
 			PlayerHealth health = local.playerHealth;
 			int current = GetMember<int>(health, "health");
 			int max = GetMember<int>(health, "maxHealth");
@@ -1473,32 +1598,61 @@ public static class NativeGameApi
 		}
 	}
 
-	private static Item FindItem(string itemName)
+	public static string GetItemPlainName(string itemName)
 	{
-		StatsManager stats = StatsManager.instance;
-		if (stats == null || stats.itemDictionary == null)
+		Item item = FindItem(itemName);
+		if ((UnityEngine.Object)item == null || string.IsNullOrEmpty(item.itemName))
 		{
 			return null;
 		}
-		if (stats.itemDictionary.TryGetValue(itemName, out Item exact))
+		if (string.Equals(item.itemName, "N/A", StringComparison.OrdinalIgnoreCase))
 		{
-			return exact;
+			return null;
 		}
+		return item.itemName;
+	}
+
+	private static Item FindItem(string itemName)
+	{
 		string want = (itemName ?? "").ToLower();
-		foreach (Item item in stats.itemDictionary.Values)
+		StatsManager stats = StatsManager.instance;
+		if (stats != null && stats.itemDictionary != null)
 		{
-			if ((UnityEngine.Object)item == null)
+			if (stats.itemDictionary.TryGetValue(itemName, out Item exact))
 			{
-				continue;
+				return exact;
 			}
-			string n = ((UnityEngine.Object)item).name;
-			if (n.Equals(itemName, StringComparison.OrdinalIgnoreCase) ||
-				n.ToLower().Replace("item ", "") == want.Replace("item ", ""))
+			foreach (Item item in stats.itemDictionary.Values)
 			{
-				return item;
+				if (ItemNameMatches(item, itemName, want))
+				{
+					return item;
+				}
+			}
+		}
+		Item[] all = Resources.FindObjectsOfTypeAll<Item>();
+		if (all != null)
+		{
+			for (int i = 0; i < all.Length; i++)
+			{
+				if (ItemNameMatches(all[i], itemName, want))
+				{
+					return all[i];
+				}
 			}
 		}
 		return null;
+	}
+
+	private static bool ItemNameMatches(Item item, string itemName, string want)
+	{
+		if ((UnityEngine.Object)item == null)
+		{
+			return false;
+		}
+		string n = ((UnityEngine.Object)item).name;
+		return n.Equals(itemName, StringComparison.OrdinalIgnoreCase) ||
+			n.ToLower().Replace("item ", "") == want.Replace("item ", "");
 	}
 
 	private static List<EnemyParent> GetSpawnedParents()

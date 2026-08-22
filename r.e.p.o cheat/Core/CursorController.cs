@@ -1,90 +1,44 @@
 using System;
-using System.Collections;
-using HarmonyLib;
 using UnityEngine;
 
 public static class CursorController
 {
-	[HarmonyPatch(typeof(Cursor), "set_lockState")]
-	public class SetLockStatePatch
+	private static bool _cheatMenuOpen;
+
+	public static bool cheatMenuOpen
 	{
-		private static void Prefix(ref CursorLockMode value)
+		get => _cheatMenuOpen;
+		set
 		{
-			//IL_0009: Unknown result type (might be due to invalid IL or missing references)
-			if (!currentlySettingCursor)
+			if (value && !_cheatMenuOpen)
 			{
-				lastLockState = value;
-				if (cheatMenuOpen)
-				{
-					value = (CursorLockMode)0;
-				}
+				lastLockState = Cursor.lockState;
+				lastCursorVisible = Cursor.visible;
+				hasCapturedGameState = true;
 			}
+			_cheatMenuOpen = value;
 		}
 	}
 
-	[HarmonyPatch(typeof(Cursor), "set_visible")]
-	public class SetVisiblePatch
-	{
-		private static void Prefix(ref bool value)
-		{
-			if (!currentlySettingCursor)
-			{
-				lastCursorVisible = value;
-				if (cheatMenuOpen)
-				{
-					value = true;
-				}
-			}
-		}
-	}
-
-	public static bool cheatMenuOpen = false;
-
-	public static bool overrideCursorSetting = false;
-
-	private static bool currentlySettingCursor = false;
-
-	private static CursorLockMode lastLockState = Cursor.lockState;
-
-	private static Vector2 lastCursorPosition;
-
-	private static bool lastCursorVisible = Cursor.visible;
-
-	private static WaitForEndOfFrame waitForEndOfFrame = new WaitForEndOfFrame();
-
-	public static void Init()
-	{
-		//IL_0005: Unknown result type (might be due to invalid IL or missing references)
-		new Harmony("com.mycompany.mycheat.cursorcontroller").PatchAll();
-	}
+	private static CursorLockMode lastLockState;
+	private static bool lastCursorVisible;
+	private static bool hasCapturedGameState;
 
 	public static void UpdateCursorState()
 	{
-		//IL_002a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0030: Invalid comparison between Unknown and I4
-		//IL_0019: Unknown result type (might be due to invalid IL or missing references)
-		//IL_001e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0023: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0038: Unknown result type (might be due to invalid IL or missing references)
 		try
 		{
-			currentlySettingCursor = true;
 			if (cheatMenuOpen)
 			{
-				Cursor.lockState = (CursorLockMode)0;
+				Cursor.lockState = CursorLockMode.None;
 				Cursor.visible = true;
-				lastCursorPosition = (Vector2)Input.mousePosition;
 			}
-			else
+			else if (hasCapturedGameState)
 			{
-				if ((int)lastLockState == 1)
-				{
-					Cursor.lockState = (CursorLockMode)0;
-				}
 				Cursor.lockState = lastLockState;
 				Cursor.visible = lastCursorVisible;
+				hasCapturedGameState = false;
 			}
-			currentlySettingCursor = false;
 		}
 		catch (Exception ex)
 		{
@@ -92,12 +46,9 @@ public static class CursorController
 		}
 	}
 
-	public static IEnumerator UnlockCoroutine()
+	public static void RestoreGameCursor()
 	{
-		while (true)
-		{
-			yield return waitForEndOfFrame;
-			UpdateCursorState();
-		}
+		cheatMenuOpen = false;
+		UpdateCursorState();
 	}
 }

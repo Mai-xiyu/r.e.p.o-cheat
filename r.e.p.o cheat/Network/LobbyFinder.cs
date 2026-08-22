@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading.Tasks;
-using Photon.Pun;
 using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
@@ -12,34 +11,176 @@ namespace r.e.p.o_cheat;
 
 public static class LobbyFinder
 {
-	public static HashSet<SteamId> AlreadyTriedLobbies = new HashSet<SteamId>();
-
 	public static List<Lobby> FoundLobbies { get; private set; } = new List<Lobby>();
 
 	public static Lobby SelectedLobby { get; set; }
 
 	public static bool IsRefreshing { get; private set; }
 
+	public static int ListVersion { get; private set; }
+
 	public static event Action OnLobbyListUpdated;
+
+	public static string GetRoomName(Lobby lobby)
+	{
+		try
+		{
+			string display = lobby.GetData("DisplayName");
+			if (IsHumanName(display))
+			{
+				return display;
+			}
+			string serverName = lobby.GetData("server_name");
+			if (IsHumanName(serverName))
+			{
+				return serverName;
+			}
+			string hostName = lobby.GetData("HostName");
+			if (IsHumanName(hostName))
+			{
+				return hostName;
+			}
+			foreach (KeyValuePair<string, string> pair in lobby.Data)
+			{
+				string key = pair.Key ?? "";
+				if (key.Equals("Region", StringComparison.OrdinalIgnoreCase)
+					|| key.Equals("BuildName", StringComparison.OrdinalIgnoreCase)
+					|| key.Equals("HasPassword", StringComparison.OrdinalIgnoreCase)
+					|| key.Equals("RoomName", StringComparison.OrdinalIgnoreCase))
+				{
+					continue;
+				}
+				if (IsHumanName(pair.Value))
+				{
+					return pair.Value;
+				}
+			}
+			string room = lobby.GetData("RoomName");
+			if (IsHumanName(room))
+			{
+				return room;
+			}
+			string host = GetHostLabel(lobby);
+			if (IsHumanName(host) && host != "0")
+			{
+				return host;
+			}
+			if (!string.IsNullOrWhiteSpace(room) && !LooksLikeGuid(room))
+			{
+				return room;
+			}
+		}
+		catch
+		{
+		}
+		return string.Empty;
+	}
+
+	public static string GetRegion(Lobby lobby)
+	{
+		try
+		{
+			return lobby.GetData("Region") ?? string.Empty;
+		}
+		catch
+		{
+			return string.Empty;
+		}
+	}
+
+	public static string GetHostLabel(Lobby lobby)
+	{
+		try
+		{
+			Friend owner = lobby.Owner;
+			if (owner.Id.Value != 0uL)
+			{
+				string name = owner.Name;
+				string id = owner.Id.ToString();
+				if (!string.IsNullOrWhiteSpace(name) && name != "0")
+				{
+					return name + " (" + id + ")";
+				}
+				if (!string.IsNullOrWhiteSpace(id) && id != "0")
+				{
+					return id;
+				}
+			}
+			string hostName = lobby.GetData("HostName");
+			if (IsHumanName(hostName))
+			{
+				return hostName;
+			}
+		}
+		catch
+		{
+		}
+		return L.T("server.unknown");
+	}
+
+	public static bool LooksLikeGuid(string value)
+	{
+		if (string.IsNullOrWhiteSpace(value))
+		{
+			return false;
+		}
+		string s = value.Trim();
+		if (s.Length < 32)
+		{
+			return false;
+		}
+		return Guid.TryParse(s, out _) || Guid.TryParse(s.Replace("-", ""), out _);
+	}
+
+	private static bool IsHumanName(string value)
+	{
+		if (string.IsNullOrWhiteSpace(value))
+		{
+			return false;
+		}
+		string s = value.Trim();
+		if (s == "0" || s == "unknown")
+		{
+			return false;
+		}
+		if (LooksLikeGuid(s))
+		{
+			return false;
+		}
+		if (ulong.TryParse(s, out _))
+		{
+			return false;
+		}
+		return true;
+	}
+
+	public static bool IsListable(Lobby lobby)
+	{
+		if (IsHumanName(GetRoomName(lobby)))
+		{
+			return true;
+		}
+		string host = GetHostLabel(lobby);
+		return IsHumanName(host) && host != L.T("server.unknown");
+	}
 
 	public static void RefreshLobbies(int maxResults = 100)
 	{
-		if (!IsRefreshing)
+		if (IsRefreshing || (UnityEngine.Object)Hax2.CoroutineHost == null)
 		{
-			Debug.Log((object)"开始协程：RefreshLobbiesCoroutine");
-			((MonoBehaviour)Hax2.CoroutineHost).StartCoroutine(RefreshLobbiesCoroutine(maxResults));
+			return;
 		}
+		((MonoBehaviour)Hax2.CoroutineHost).StartCoroutine(RefreshLobbiesCoroutine(maxResults));
 	}
 
 	private static IEnumerator RefreshLobbiesCoroutine(int maxResults)
 	{
 		IsRefreshing = true;
 		FoundLobbies.Clear();
-		AlreadyTriedLobbies.Clear();
-		LobbyQuery val = SteamMatchmaking.LobbyList;
-		val = val.WithMaxResults(maxResults);
-		val = val.FilterDistanceWorldwide();
-		Task<Lobby[]> requestTask = val.RequestAsync();
+		LobbyQuery query = SteamMatchmaking.LobbyList;
+		query = query.WithMaxResults(maxResults);
+		query = query.FilterDistanceWorldwide();
+		Task<Lobby[]> requestTask = query.RequestAsync();
 		while (!requestTask.IsCompleted)
 		{
 			yield return null;
@@ -47,113 +188,88 @@ public static class LobbyFinder
 		if (requestTask.IsFaulted || requestTask.Result == null)
 		{
 			IsRefreshing = false;
+			ListVersion++;
 			LobbyFinder.OnLobbyListUpdated?.Invoke();
 			yield break;
 		}
-		Lobby[] result = requestTask.Result;
-		Debug.Log((object)$"[LobbyFinder] 找到 {result.Length} 个房间。");
-		FoundLobbies.AddRange(result);
-		yield return ((MonoBehaviour)Hax2.CoroutineHost).StartCoroutine(FakeJoinAndFetchLobbies(result));
-		IsRefreshing = false;
-		LobbyFinder.OnLobbyListUpdated?.Invoke();
-	}
-
-	private static IEnumerator FakeJoinAndFetchLobbies(Lobby[] lobbies)
-	{
-		int maxJoins = 50;
-		int joinCount = 0;
-		float timeout = 5f;
-		for (int i = 0; i < lobbies.Length; i++)
+		FoundLobbies.AddRange(requestTask.Result);
+		int refreshCount = Math.Min(FoundLobbies.Count, 80);
+		for (int i = 0; i < refreshCount; i++)
 		{
-			Lobby lobby = lobbies[i];
-			if (AlreadyTriedLobbies.Contains(lobby.Id))
+			try
 			{
-				continue;
+				FoundLobbies[i].Refresh();
 			}
-			AlreadyTriedLobbies.Add(lobby.Id);
-			Hax2.LobbyHostCache[lobby.Id] = "Fetching...";
-			Task<RoomEnter> joinTask = lobby.Join();
-			float elapsed = 0f;
-			while (!joinTask.IsCompleted && elapsed < timeout)
+			catch
 			{
-				yield return null;
-				elapsed += Time.deltaTime;
 			}
-			if (!joinTask.IsCompleted)
+		}
+		float wait = 0f;
+		while (wait < 1.25f)
+		{
+			wait += Time.unscaledDeltaTime;
+			yield return null;
+		}
+		for (int j = 0; j < FoundLobbies.Count; j++)
+		{
+			Lobby lobby = FoundLobbies[j];
+			Hax2.LobbyHostCache[lobby.Id] = GetHostLabel(lobby);
+			List<string> members = new List<string>();
+			try
 			{
-				Debug.LogWarning((object)("[LobbyFinder] 加入房间超时：" + ((object)lobby.Id/*cast due to .constrained prefix*/).ToString()));
-				continue;
-			}
-			if ((int)joinTask.Result == 1)
-			{
-				Friend owner = lobby.Owner;
-				string name = owner.Name;
-				if (lobby.Owner.Id.Value == 0L || string.IsNullOrWhiteSpace(name))
-				{
-					Debug.LogWarning((object)("[LobbyFinder] 跳过无效房间：" + ((object)lobby.Id/*cast due to .constrained prefix*/).ToString()));
-					lobby.Leave();
-					continue;
-				}
-				owner = lobby.Owner;
-				string text = owner.Id.ToString();
-				Hax2.LobbyHostCache[lobby.Id] = name + " (" + text + ")";
-				List<string> list = new List<string>();
 				foreach (Friend member in lobby.Members)
 				{
-					Friend current = member;
-					string arg = (string.IsNullOrWhiteSpace(current.Name) ? "Unknown" : current.Name);
-					list.Add($"{arg} ({current.Id})");
+					if (member.Id.Value == 0uL)
+					{
+						continue;
+					}
+					string n = string.IsNullOrWhiteSpace(member.Name) ? "Unknown" : member.Name;
+					members.Add(n + " (" + member.Id + ")");
 				}
-				list.RemoveAll((string m) => m.Contains(SteamClient.Name) || m.Contains(((object)SteamClient.SteamId/*cast due to .constrained prefix*/).ToString()));
-				Hax2.LobbyMemberCache[lobby.Id] = list;
-				lobby.Leave();
 			}
-			else
+			catch
 			{
-				Hax2.LobbyHostCache[lobby.Id] = $"Failed ({lobby.Owner.Id})";
 			}
-			joinCount++;
-			if (joinCount >= maxJoins)
-			{
-				break;
-			}
-			yield return (object)new WaitForSeconds(0.15f);
+			Hax2.LobbyMemberCache[lobby.Id] = members;
 		}
-		GC.Collect();
-		Debug.Log((object)"[LobbyFinder] 已完成对所有房间的假加入与信息抓取。");
+		ListVersion++;
+		IsRefreshing = false;
+		LobbyFinder.OnLobbyListUpdated?.Invoke();
+		Debug.Log((object)("[LobbyFinder] listed " + FoundLobbies.Count + " steam lobbies"));
 	}
 
-	public static async void JoinLobbyAndPlay(Lobby lobby)
+	public static bool TryGetSelected(SteamId selectedId, out Lobby lobby)
 	{
-		//IL_000e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_000f: Unknown result type (might be due to invalid IL or missing references)
+		lobby = default(Lobby);
+		if (selectedId.Value == 0uL)
+		{
+			return false;
+		}
+		if (SelectedLobby.Id.Value == selectedId.Value)
+		{
+			lobby = SelectedLobby;
+			return true;
+		}
+		lobby = FoundLobbies.Find((Lobby l) => l.Id.Value == selectedId.Value);
+		return lobby.Id.Value != 0uL;
+	}
+
+	public static void JoinLobbyAndPlay(Lobby lobby)
+	{
+		if (lobby.Id.Value == 0uL || SteamManager.instance == null)
+		{
+			Debug.LogError((object)"[JoinLobby] invalid lobby");
+			return;
+		}
+		SelectedLobby = lobby;
 		try
 		{
-			Debug.Log((object)$"[JoinLobby] 正在尝试加入：{lobby.Id}");
-			if ((int)(await lobby.Join()) == 1)
-			{
-				Debug.Log((object)"[JoinLobby] 加入房间成功。");
-				MenuManager.instance.PageCloseAll();
-				MenuManager.instance.PageOpen((MenuPageIndex)0, false);
-				if ((Object)(object)RunManager.instance.levelCurrent != (Object)(object)RunManager.instance.levelMainMenu)
-				{
-					foreach (PlayerAvatar player in GameDirector.instance.PlayerList)
-					{
-						player.OutroStartRPC(default(PhotonMessageInfo));
-					}
-					typeof(RunManager).GetField("lobbyJoin", BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(RunManager.instance, true);
-					RunManager.instance.ChangeLevel(true, false, (RunManager.ChangeLevelType)3);
-				}
-				typeof(SteamManager).GetField("joinLobby", BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(SteamManager.instance, true);
-			}
-			else
-			{
-				Debug.LogError((object)"[JoinLobby] 加入房间失败。");
-			}
+			typeof(SteamManager).GetMethod("JoinSteamLobby", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+				?.Invoke(SteamManager.instance, new object[] { lobby });
 		}
 		catch (Exception ex)
 		{
-			Debug.LogError((object)("[JoinLobby] 异常：" + ex));
+			Debug.LogError((object)("[JoinLobby] " + ex));
 		}
 	}
 }

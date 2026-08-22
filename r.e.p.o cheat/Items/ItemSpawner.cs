@@ -215,13 +215,16 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 				}
 				try
 				{
-					val = PhotonNetwork.Instantiate(prefabPath, position, Quaternion.identity, (byte)0, array);
+					val = PhotonNetwork.InstantiateRoomObject(prefabPath, position, Quaternion.identity, (byte)0, array);
 				}
 				catch (Exception)
 				{
-					val = Object.Instantiate<GameObject>(itemPrefab, position, Quaternion.identity);
-					ConfigureSyncComponents(val);
+					return;
 				}
+			}
+			if ((Object)(object)val == (Object)null)
+			{
+				return;
 			}
 			if (itemName.Contains("Valuable") && value > 0)
 			{
@@ -240,41 +243,21 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 
 	private static void SpawnItemNonHost(string itemName, Vector3 position, int value)
 	{
-		//IL_009d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_009e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00c6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00e5: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00ec: Expected O, but got Unknown
-		//IL_00ff: Unknown result type (might be due to invalid IL or missing references)
 		try
 		{
 			string prefabPath = GetPrefabPath(itemName);
-			GameObject val = Resources.Load<GameObject>(prefabPath);
+			if (string.IsNullOrEmpty(prefabPath))
+			{
+				return;
+			}
+			GameObject val = PhotonNetwork.Instantiate(prefabPath, position, Quaternion.identity, 0);
 			if ((Object)(object)val == (Object)null)
 			{
 				return;
 			}
-			Type typeFromHandle = typeof(PhotonNetwork);
-			MethodInfo method = typeFromHandle.GetMethod("NetworkInstantiate", BindingFlags.Static | BindingFlags.NonPublic, null, new Type[3]
+			if (itemName.Contains("Valuable") && value > 0)
 			{
-				typeof(InstantiateParameters),
-				typeof(bool),
-				typeof(bool)
-			}, null);
-			if (method == null)
-			{
-				return;
-			}
-			FieldInfo field = typeFromHandle.GetField("currentLevelPrefix", BindingFlags.Static | BindingFlags.NonPublic);
-			if (!(field == null))
-			{
-				object value2 = field.GetValue(null);
-				InstantiateParameters val2 = new InstantiateParameters(prefabPath, position, Quaternion.identity, (byte)0, null, (byte)value2, null, PhotonNetwork.LocalPlayer, PhotonNetwork.ServerTimestamp);
-				GameObject val3 = (GameObject)method.Invoke(null, new object[3] { val2, true, false });
-				if ((Object)(object)val3 != (Object)null)
-				{
-					((MonoBehaviour)FindOrCreateCheatSync()).StartCoroutine(SetupItemAndNotifyHost(val3, val, itemName, position, value));
-				}
+				ConfigureValuableObject(val, value, isMultiplayer: true);
 			}
 		}
 		catch (Exception)
@@ -331,14 +314,7 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 				Component component2 = item.GetComponent(Type.GetType("ValuableObject, Assembly-CSharp"));
 				if ((Object)(object)component2 != (Object)null)
 				{
-					SetFieldValue(component2, "dollarValueCurrent", (float)value);
-					SetFieldValue(component2, "dollarValueOriginal", (float)value);
-					SetFieldValue(component2, "dollarValueSet", true);
-					MethodInfo method = ((object)component2).GetType().GetMethod("DollarValueSetRPC", BindingFlags.Instance | BindingFlags.Public);
-					if (method != null)
-					{
-						method.Invoke(component2, new object[1] { (float)value });
-					}
+					ApplyDollarValue(component2, value);
 				}
 			}
 			Component component3 = item.GetComponent(Type.GetType("PhysGrabObject, Assembly-CSharp"));
@@ -422,14 +398,7 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 				Component component = item.GetComponent(Type.GetType("ValuableObject, Assembly-CSharp"));
 				if ((Object)(object)component != (Object)null)
 				{
-					SetFieldValue(component, "dollarValueCurrent", (float)value);
-					SetFieldValue(component, "dollarValueOriginal", (float)value);
-					SetFieldValue(component, "dollarValueSet", true);
-					MethodInfo method = ((object)component).GetType().GetMethod("DollarValueSetRPC", BindingFlags.Instance | BindingFlags.Public);
-					if (method != null)
-					{
-						method.Invoke(component, new object[1] { (float)value });
-					}
+					ApplyDollarValue(component, value);
 				}
 			}
 			Component component2 = item.GetComponent(Type.GetType("PhysGrabObject, Assembly-CSharp"));
@@ -582,14 +551,7 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 			Component component = spawnedItem.GetComponent(Type.GetType("ValuableObject, Assembly-CSharp"));
 			if ((Object)(object)component != (Object)null)
 			{
-				SetFieldValue(component, "dollarValueCurrent", (float)value);
-				SetFieldValue(component, "dollarValueOriginal", (float)value);
-				SetFieldValue(component, "dollarValueSet", true);
-				MethodInfo method = ((object)component).GetType().GetMethod("DollarValueSetRPC", BindingFlags.Instance | BindingFlags.Public);
-				if (method != null)
-				{
-					method.Invoke(component, new object[1] { (float)value });
-				}
+				ApplyDollarValue(component, value);
 			}
 		}
 		Renderer[] componentsInChildren = spawnedItem.GetComponentsInChildren<Renderer>(true);
@@ -691,26 +653,7 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 				{
 					field4.SetValue(obj4, true);
 				}
-				FieldInfo field5 = type2.GetField("excludeFromExtraction", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-				if (field5 != null)
-				{
-					field5.SetValue(obj4, true);
-				}
-				FieldInfo field6 = type2.GetField("discovered", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-				if (field6 != null)
-				{
-					field6.SetValue(obj4, true);
-				}
-				FieldInfo field7 = type2.GetField("addedToDollarHaulList", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-				if (field7 != null)
-				{
-					field7.SetValue(obj4, true);
-				}
-				MethodInfo method = type2.GetMethod("DollarValueSetRPC", BindingFlags.Instance | BindingFlags.Public);
-				if (method != null)
-				{
-					method.Invoke(obj4, new object[1] { (float)value });
-				}
+				ApplyDollarValue(obj4, value);
 			}
 			GameObject obj5 = GameObject.CreatePrimitive((PrimitiveType)3);
 			obj5.transform.SetParent(val.transform, false);
@@ -906,6 +849,26 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 		EnsureItemVisibility(item);
 	}
 
+	private static void ApplyDollarValue(Component valuable, float value)
+	{
+		if ((Object)(object)valuable == (Object)null)
+		{
+			return;
+		}
+		SetFieldValue(valuable, "dollarValueOriginal", value);
+		SetFieldValue(valuable, "dollarValueCurrent", value);
+		SetFieldValue(valuable, "dollarValueSet", true);
+		if (!SemiFunc.IsMultiplayer() || !PhotonNetwork.IsMasterClient)
+		{
+			return;
+		}
+		PhotonView view = valuable.GetComponent<PhotonView>();
+		if ((Object)(object)view != (Object)null)
+		{
+			view.RPC("DollarValueSetRPC", RpcTarget.Others, value);
+		}
+	}
+
 	private static void ConfigureValuableObject(GameObject spawnedItem, int value, bool isMultiplayer)
 	{
 		Component component = spawnedItem.GetComponent(Type.GetType("ValuableObject, Assembly-CSharp"));
@@ -914,33 +877,11 @@ public class ItemSpawner : MonoBehaviourPunCallbacks
 			return;
 		}
 		SetFieldValue(component, "dollarValueOverride", value);
-		SetFieldValue(component, "dollarValueOriginal", (float)value);
-		SetFieldValue(component, "dollarValueCurrent", (float)value);
-		SetFieldValue(component, "dollarValueSet", true);
-		SetFieldValue(component, "excludeFromExtraction", true);
-		FieldInfo field = ((object)component).GetType().GetField("addedToDollarHaulList", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-		if (field != null)
-		{
-			field.SetValue(component, true);
-		}
+		ApplyDollarValue(component, value);
 		FieldInfo field2 = ((object)component).GetType().GetField("discovered", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 		if (field2 != null)
 		{
 			field2.SetValue(component, true);
-		}
-		MethodInfo method = ((object)component).GetType().GetMethod("DollarValueSetRPC", BindingFlags.Instance | BindingFlags.Public);
-		if (method != null)
-		{
-			method.Invoke(component, new object[1] { (float)value });
-			if (isMultiplayer)
-			{
-				PhotonView component2 = component.GetComponent<PhotonView>();
-				if ((Object)(object)component2 != (Object)null)
-				{
-					component2.RequestOwnership();
-					component2.RPC("DollarValueSetRPC", (RpcTarget)1, new object[1] { (float)value });
-				}
-			}
 		}
 		try
 		{

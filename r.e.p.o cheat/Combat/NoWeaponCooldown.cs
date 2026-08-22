@@ -1,7 +1,6 @@
 using System;
 using System.Reflection;
 using HarmonyLib;
-using Photon.Pun;
 using UnityEngine;
 
 namespace r.e.p.o_cheat;
@@ -9,8 +8,6 @@ namespace r.e.p.o_cheat;
 [HarmonyPatch(typeof(ItemGun), "UpdateMaster")]
 public class NoWeaponCooldown
 {
-	private static FieldInfo _photonViewField = AccessTools.Field(typeof(ItemGun), "photonView");
-
 	private static FieldInfo _shootCooldownTimerField = AccessTools.Field(typeof(ItemGun), "shootCooldown");
 
 	[HarmonyPrefix]
@@ -20,23 +17,7 @@ public class NoWeaponCooldown
 		{
 			return true;
 		}
-		bool flag = false;
-		try
-		{
-			if ((Object)(object)__instance != (Object)null && _photonViewField != null)
-			{
-				object value = _photonViewField.GetValue(__instance);
-				PhotonView val = (PhotonView)((value is PhotonView) ? value : null);
-				if ((Object)(object)val != (Object)null)
-				{
-					flag = val.IsMine;
-				}
-			}
-		}
-		catch (Exception)
-		{
-		}
-		if (!flag)
+		if (!BulletTrack.IsLocalShot(__instance))
 		{
 			return true;
 		}

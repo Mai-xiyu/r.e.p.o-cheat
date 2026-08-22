@@ -136,49 +136,7 @@ internal class MiscFeatures
 
 	public static void ForceActivateAllExtractionPoints()
 	{
-		try
-		{
-			RoundDirector instance = RoundDirector.instance;
-			if ((Object)(object)instance == (Object)null)
-			{
-				Debug.LogError((object)"[ForceActivate] 未找到 RoundDirector 实例。");
-				return;
-			}
-			object obj = typeof(RoundDirector).GetField("photonView", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(instance);
-			PhotonView val = (PhotonView)((obj is PhotonView) ? obj : null);
-			if ((Object)(object)val == (Object)null)
-			{
-				Debug.LogError((object)"[ForceActivate] RoundDirector 上未找到 photonView。");
-				return;
-			}
-			FieldInfo field = typeof(RoundDirector).GetField("extractionPointList", BindingFlags.Instance | BindingFlags.NonPublic);
-			if (field == null)
-			{
-				Debug.LogError((object)"[ForceActivate] 未找到 extractionPointList 字段。");
-				return;
-			}
-			if (!(field.GetValue(instance) is List<GameObject> list))
-			{
-				Debug.LogError((object)"[ForceActivate] extractionPointList 为空或类型无效。");
-				return;
-			}
-			foreach (GameObject item in list)
-			{
-				if (!((Object)(object)item == (Object)null) && item.activeInHierarchy)
-				{
-					PhotonView component = item.GetComponent<PhotonView>();
-					if ((Object)(object)component != (Object)null)
-					{
-						val.RPC("ExtractionPointActivateRPC", (RpcTarget)0, new object[1] { component.ViewID });
-						Debug.Log((object)("[ForceActivate] 已激活撤离点：" + ((Object)item).name));
-					}
-				}
-			}
-		}
-		catch (Exception ex)
-		{
-			Debug.LogError((object)("[ForceActivate] 发生异常：" + ex.Message));
-		}
+		NativeGameApi.RequestActivateExtraction();
 	}
 
 	public static void ExlploadAll()

@@ -1,87 +1,115 @@
 using System;
-using System.Reflection;
 using Photon.Pun;
 using UnityEngine;
 
 namespace r.e.p.o_cheat;
 
 /// <summary>
-/// 随机恐吓音效 — 触发游戏场景中已有的恐怖音效 RPC
-/// 通过查找场景中的音效触发器/怪物，调用它们的音效 RPC
+/// Local scare uses AudioScare (game jump-scare mixer). Host ambience uses
+/// AmbienceBreakers.PlaySoundRPC, which is MasterOnlyRPC.
 /// </summary>
 public static class ScareSound
 {
-    public static string statusMessage = "";
+	public static string statusMessage = "";
 
-    /// <summary>
-    /// 尝试触发场景中的恐怖音效
-    /// </summary>
-    public static void TriggerRandomScare()
-    {
-        try
-        {
-            int triggered = 0;
+	public static void TriggerRandomScare()
+	{
+		bool local = PlayLocalImpact(soft: UnityEngine.Random.value > 0.45f);
+		bool ambience = PlayHostAmbience();
+		if (local && ambience)
+		{
+			statusMessage = L.T("fun.scare_ok_both");
+		}
+		else if (local)
+		{
+			statusMessage = L.T("fun.scare_ok_local");
+		}
+		else if (ambience)
+		{
+			statusMessage = L.T("fun.scare_ok_host");
+		}
+		else
+		{
+			statusMessage = L.T("fun.scare_fail");
+		}
+	}
 
-            // 方案 1: 触发怪物的声音 RPC
-            var enemies = UnityEngine.Object.FindObjectsOfType<EnemyParent>();
-            if (enemies != null && enemies.Length > 0)
-            {
-                int idx = UnityEngine.Random.Range(0, enemies.Length);
-                var enemy = enemies[idx];
-                var pv = ((Component)enemy).GetComponentInChildren<PhotonView>();
-                if (pv != null)
-                {
-                    // 尝试常见的音效 RPC
-                    try { pv.RPC("MakeNoiseRPC", RpcTarget.All, new object[] { }); triggered++; } catch { }
-                    if (triggered == 0)
-                    {
-                        try { pv.RPC("PlaySound", RpcTarget.All, new object[] { }); triggered++; } catch { }
-                    }
-                }
-            }
+	public static bool PlayLocalImpact(bool soft)
+	{
+		try
+		{
+			AudioScare scare = AudioScare.instance;
+			if (scare == null)
+			{
+				return false;
+			}
+			if (soft)
+			{
+				scare.PlaySoft();
+			}
+			else
+			{
+				scare.PlayImpact();
+			}
+			return true;
+		}
+		catch (Exception ex)
+		{
+			statusMessage = ex.Message;
+			Debug.LogWarning("[ScareSound] " + ex.Message);
+			return false;
+		}
+	}
 
-            // 方案 2: 触发场景中的门/陷阱音效
-            if (triggered == 0)
-            {
-                // 查找场景中的门对象 (通过名称匹配)
-                var allPVs = UnityEngine.Object.FindObjectsOfType<PhotonView>();
-                foreach (var doorPV in allPVs)
-                {
-                    if (doorPV != null && ((Component)doorPV).gameObject.name.ToLower().Contains("door"))
-                    {
-                        try { doorPV.RPC("DoorOpenRPC", RpcTarget.All, new object[] { }); triggered++; break; } catch { }
-                    }
-                }
-            }
-
-            // 方案 3: 播放本地恐怖音效 (备选)
-            if (triggered == 0)
-            {
-                // 查找场景中所有 AudioSource 并播放一个低沉的音效
-                var sources = UnityEngine.Object.FindObjectsOfType<AudioSource>();
-                foreach (var src in sources)
-                {
-                    if (src.clip != null && src.clip.name != null &&
-                        (src.clip.name.ToLower().Contains("scare") ||
-                         src.clip.name.ToLower().Contains("horror") ||
-                         src.clip.name.ToLower().Contains("monster") ||
-                         src.clip.name.ToLower().Contains("scream") ||
-                         src.clip.name.ToLower().Contains("growl") ||
-                         src.clip.name.ToLower().Contains("roar")))
-                    {
-                        src.Play();
-                        triggered++;
-                        break;
-                    }
-                }
-            }
-
-            statusMessage = triggered > 0 ? "恐吓成功!" : "未找到可用音效";
-        }
-        catch (Exception ex)
-        {
-            statusMessage = "发生错误: " + ex.Message;
-            Debug.LogWarning("[ScareSound] " + ex.Message);
-        }
-    }
+	public static bool PlayHostAmbience()
+	{
+		try
+		{
+			if (NativeGameApi.IsGuest())
+			{
+				return false;
+			}
+			AmbienceBreakers breakers = AmbienceBreakers.instance;
+			if (breakers == null)
+			{
+				return false;
+			}
+			AudioManager audio = AudioManager.instance;
+			if (audio == null || audio.levelAmbiences == null || audio.levelAmbiences.Count == 0)
+			{
+				return false;
+			}
+			LevelAmbience preset = audio.levelAmbiences[UnityEngine.Random.Range(0, audio.levelAmbiences.Count)];
+			if (preset == null || preset.breakers == null || preset.breakers.Count == 0)
+			{
+				return false;
+			}
+			int breaker = UnityEngine.Random.Range(0, preset.breakers.Count);
+			Vector3 pos = Vector3.zero;
+			PlayerAvatar local = SemiFunc.PlayerAvatarLocal();
+			if (local != null)
+			{
+				Vector2 ring = UnityEngine.Random.insideUnitCircle.normalized;
+				float dist = UnityEngine.Random.Range(8f, 15f);
+				pos = local.transform.position + new Vector3(ring.x, 0f, ring.y) * dist;
+			}
+			if (!SemiFunc.IsMultiplayer())
+			{
+				breakers.PlaySoundRPC(pos, preset.name, breaker);
+				return true;
+			}
+			PhotonView view = breakers.GetComponent<PhotonView>();
+			if (view == null)
+			{
+				return false;
+			}
+			view.RPC("PlaySoundRPC", RpcTarget.All, pos, preset.name, breaker);
+			return true;
+		}
+		catch (Exception ex)
+		{
+			Debug.LogWarning("[ScareSound] ambience: " + ex.Message);
+			return false;
+		}
+	}
 }

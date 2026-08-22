@@ -287,13 +287,19 @@ public static class AutoPilot
                         float dist = Vector3.Distance(myPos, ((Component)ep).transform.position);
                         if (dist < nearestDist) { nearestDist = dist; nearest = ep; }
                     }
-                    if (nearest != null)
+                    if (nearest != null && currentTargetItem is Component itemComp)
                     {
-                        // 直接传送物品到交易点
-                        itemT.position = ((Component)nearest).transform.position + Vector3.up * 0.5f;
+                        if (ItemTeleport.TryGetOpenExtractionDrop(out Vector3 dropPos, out Quaternion dropRot, out _))
+                        {
+                            ItemTeleport.TeleportComponent(itemComp, dropPos, dropRot);
+                        }
+                        else
+                        {
+                            Transform pose = nearest.safetySpawn != null ? nearest.safetySpawn : ((Component)nearest).transform;
+                            ItemTeleport.TeleportComponent(itemComp, ItemTeleport.SnapToGround(pose.position), pose.rotation);
+                        }
                         itemsDelivered++;
                         currentTargetItem = null;
-                        // 继续找下一个物品
                         currentState = PilotState.FindingItem;
                         statusText = L.T("autopilot.delivered", itemsDelivered);
                         return;

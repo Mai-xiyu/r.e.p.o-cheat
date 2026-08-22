@@ -163,6 +163,20 @@ public class ForceHost : MonoBehaviourPunCallbacks
 		ResetAuthorityState();
 	}
 
+	public override void OnJoinedRoom()
+	{
+		try
+		{
+			if (PhotonNetwork.LocalPlayer != null && PhotonNetwork.LocalPlayer.ActorNumber > 0)
+			{
+				_savedActorNumber = PhotonNetwork.LocalPlayer.ActorNumber;
+			}
+		}
+		catch
+		{
+		}
+	}
+
 	public static void TickSafety()
 	{
 		if (isProcessing && Time.unscaledTime - _processingStartedAt > ProcessingTimeout)
@@ -174,17 +188,31 @@ public class ForceHost : MonoBehaviourPunCallbacks
 			RestoreLocalIdentity();
 			statusMessage = L.T("room.force_timeout");
 		}
-		if (!isProcessing && !PhotonNetwork.InRoom)
+		if (!isProcessing)
 		{
 			SafeRestoreNM();
 		}
-		if (!_spoofingActor && !_localFakeActive && PhotonNetwork.InRoom && PhotonNetwork.LocalPlayer != null)
+		if (PhotonNetwork.InRoom && PhotonNetwork.LocalPlayer != null && !_spoofingActor)
 		{
+			int creator = ReadLocalAvatarCreatorActor();
+			if (creator > 0)
+			{
+				_savedActorNumber = creator;
+			}
 			int actor = PhotonNetwork.LocalPlayer.ActorNumber;
-			if (actor > 0)
+			if (_savedActorNumber <= 0 && actor > 0)
 			{
 				_savedActorNumber = actor;
 			}
+			else if (_savedActorNumber > 0 && actor != _savedActorNumber)
+			{
+				RestoreLocalIdentity();
+			}
+			if (_localFakeActive)
+			{
+				RestoreLocalIdentity();
+			}
+			RepairLocalGrab();
 		}
 		if (ShadowHostMode.isEnabled && !_spoofingActor && PhotonNetwork.InRoom)
 		{
@@ -214,7 +242,7 @@ public class ForceHost : MonoBehaviourPunCallbacks
 		{
 			if (PhotonNetwork.LocalPlayer != null && _savedActorNumber > 0)
 			{
-				FieldInfo actorField = typeof(Player).GetField("actorNumber", BindingFlags.Instance | BindingFlags.NonPublic);
+				FieldInfo actorField = typeof(Player).GetField("actorNumber", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 				if (actorField != null)
 				{
 					int current = PhotonNetwork.LocalPlayer.ActorNumber;
@@ -243,6 +271,7 @@ public class ForceHost : MonoBehaviourPunCallbacks
 				}
 				_localFakeActive = false;
 			}
+			RepairLocalGrab();
 		}
 		catch
 		{
@@ -600,58 +629,64 @@ public class ForceHost : MonoBehaviourPunCallbacks
 	// ================================================================
 	// 方法5: 本地主机伪装 (仅修改本地标识，可发送主机专属RPC)
 	// ================================================================
+	/// <summary>
+	/// Local IsMasterClient / actorNumber fakes do not make the server accept
+	/// host RPCs (Photon checks the real sender). They do break grab and interact.
+	/// </summary>
 	public static bool Method_LocalMasterFake()
+	{
+		RestoreLocalIdentity();
+		RepairLocalGrab();
+		statusMessage = L.T("room.no_host_rpc_spoof");
+		return false;
+	}
+
+	private static void RepairLocalGrab()
 	{
 		try
 		{
-			if (!PhotonNetwork.InRoom) return false;
-
-			Room room = PhotonNetwork.CurrentRoom;
-			int myActor = PhotonNetwork.LocalPlayer.ActorNumber;
-			if (_savedMasterClientId <= 0 && PhotonNetwork.MasterClient != null)
+			PhysGrabber grabber = PhysGrabber.instance;
+			if ((Object)(object)grabber == (Object)null)
 			{
-				_savedMasterClientId = PhotonNetwork.MasterClient.ActorNumber;
+				return;
 			}
-			if (_savedActorNumber <= 0)
+			PhotonView view = grabber.photonView;
+			if ((Object)(object)view != (Object)null && view.IsMine && !grabber.isLocal)
 			{
-				_savedActorNumber = myActor;
+				grabber.isLocal = true;
 			}
-
-			FieldInfo masterIdField = typeof(Room).GetField("masterClientId",
-				BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-			if (masterIdField != null)
-			{
-				masterIdField.SetValue(room, myActor);
-			}
-
-			FieldInfo baseField = typeof(RoomInfo).GetField("masterClientId",
-				BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-			if (baseField != null && baseField != masterIdField)
-			{
-				baseField.SetValue(room, myActor);
-			}
-
-			FieldInfo isMasterField = typeof(Player).GetField("isMasterClient",
-				BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-			if (isMasterField != null)
-			{
-				foreach (Player p in PhotonNetwork.PlayerList)
-				{
-					isMasterField.SetValue(p, false);
-				}
-				isMasterField.SetValue(PhotonNetwork.LocalPlayer, true);
-			}
-
-			_localFakeActive = true;
-			ShadowHostMode.isEnabled = false;
-			statusMessage = L.T("room.local_fake_warn");
-			return true;
 		}
-		catch (Exception ex)
+		catch
 		{
-			statusMessage = L.T("room.method_fail_fmt", "5 - LocalFake: " + ex.Message);
-			return false;
 		}
+	}
+
+	private static int ReadLocalAvatarCreatorActor()
+	{
+		try
+		{
+			PlayerAvatar[] avatars = Object.FindObjectsOfType<PlayerAvatar>();
+			if (avatars == null)
+			{
+				return -1;
+			}
+			foreach (PlayerAvatar avatar in avatars)
+			{
+				if ((Object)(object)avatar == (Object)null || (Object)(object)avatar.photonView == (Object)null)
+				{
+					continue;
+				}
+				PhotonView view = avatar.photonView;
+				if (view.Owner != null && view.Owner.IsLocal && view.CreatorActorNr > 0)
+				{
+					return view.CreatorActorNr;
+				}
+			}
+		}
+		catch
+		{
+		}
+		return -1;
 	}
 
 	// ================================================================
