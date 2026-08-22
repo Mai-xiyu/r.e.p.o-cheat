@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>embedded</DebugType>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>DarkMenu.Injector</AssemblyName>
+    <RootNamespace>DarkMenu.Injector</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The upstream SDK project has a legacy custom OutputPath. Build it explicitly
+         below, then reference its deterministic output so SDK project-reference copy
+         logic cannot override that path. -->
+    <Reference Include="SharpMonoInjector">
+      <HintPath>..\external\SharpMonoInjector\src\SharpMonoInjector\bin\$(Configuration)\SharpMonoInjector.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\r.e.p.o cheat\bin\$(Configuration)\r.e.p.o cheat.dll"
+                      LogicalName="DarkMenu.Injector.Payload.dll" />
+    <EmbeddedResource Include="ThirdPartyNotices.txt"
+                      LogicalName="DarkMenu.Injector.ThirdPartyNotices.txt" />
+  </ItemGroup>
+
+  <Target Name="BuildBundledDependencies" BeforeTargets="ResolveReferences">
+    <MSBuild Projects="..\external\SharpMonoInjector\src\SharpMonoInjector\SharpMonoInjector.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);OutputPath=bin\$(Configuration)\" />
+  </Target>
+
+  <Target Name="BuildPayload" BeforeTargets="CoreCompile">
+    <MSBuild Projects="..\r.e.p.o cheat\r.e.p.o cheat.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);Platform=AnyCPU" />
+  </Target>
+
+  <Target Name="RemovePublishedSymbols" AfterTargets="Publish">
+    <Delete Files="$(PublishDir)SharpMonoInjector.pdb" />
+  </Target>
+</Project>

@@ -43,6 +43,7 @@ Desktop.ini
 .tmp-latejoin/
 
 # Temp / cache
+artifacts/
 *.tmp
 *.temp
 ~$*

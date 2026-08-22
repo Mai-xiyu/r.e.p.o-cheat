@@ -19,9 +19,10 @@ namespace r.e.p.o_cheat;
 /// barrier naturally. Player count changes only how many flags are absent.
 ///
 /// Host-only compatibility uses a receiver-local PUN OwnershipUpdate relay. Only the joining
-/// actor temporarily sees one old PlayerAvatar view as master-owned, the host replays the
-/// vanilla loading-complete RPC, and the original owner is restored before moving to the next
-/// view. Room-wide ownership, Photon event senders and other receivers are never changed.
+/// actor temporarily sees historical PlayerAvatar views as master-owned, the host replays the
+/// vanilla loading-complete RPC in that ownership window, and the original owners are restored
+/// together afterwards. Room-wide ownership, Photon event senders and other receivers are never
+/// changed.
 /// Every historical avatar is replayed unconditionally; the host reflection flag is diagnostic.
 ///
 /// The catch-up pipeline follows the vanilla generation barriers for map construction, then
@@ -127,6 +128,12 @@ public static class MidJoin
 	private static readonly HashSet<int> NeedsLateJoinSpawn = new HashSet<int>();
 	private static readonly HashSet<int> SpawnCompleted = new HashSet<int>();
 	private static readonly HashSet<int> GenerateDoneSentActors = new HashSet<int>();
+	// A client without the peer protocol is still admitted immediately. We leave its
+	// current level on the game's native Photon path, without injecting a synthetic
+	// GenerateDone/ownership/loading sequence. The following normal scene handoff
+	// rebuilds the complete vanilla state. This is not a join queue or room lock.
+	private static readonly HashSet<int> NativeCurrentLevelPassThroughActors = new HashSet<int>();
+	private static readonly Dictionary<int, float> NativeCurrentLevelPassThroughSince = new Dictionary<int, float>();
 	private static readonly Dictionary<int, float> PendingSince = new Dictionary<int, float>();
 	private static readonly Dictionary<int, int> CatchupAttempts = new Dictionary<int, int>();
 	private static readonly Dictionary<int, float> RetryAfter = new Dictionary<int, float>();
@@ -137,6 +144,7 @@ public static class MidJoin
 	private static readonly Dictionary<int, float> ActivityWatchStarted = new Dictionary<int, float>();
 	private static readonly Dictionary<int, float> ActivityArmedAt = new Dictionary<int, float>();
 	private static readonly float[] CompletionReplaySchedule = { 0f, 0.35f, 1f, 2f, 3.5f, 5.5f };
+	private static readonly float[] PostGenerateRecoverySchedule = { 0f, 2.5f, 6f, 11f };
 	private const float CompletionRecoveryTimeout = 6.5f;
 	private const float ForceOwnCompletionAfter = 0.35f;
 	private const float ActivityWatchTimeout = 30f;
@@ -156,7 +164,12 @@ public static class MidJoin
 	private const float PlayerSpawnedTimeout = 12f;
 	private const float OwnerLoadingTimeout = 20f;
 	private const float LocalGeneratedTimeout = 35f;
+	private const float LegacyOwnershipMappingPrepareSeconds = 0.15f;
 	private const float LegacyOwnershipMappingSettleSeconds = 1.5f;
+	// The peer protocol is published from NetworkConnect.OnJoinedRoom. Wait a short,
+	// bounded period before classifying an absent property as native so an injected
+	// client is not accidentally placed on the current-level pass-through path.
+	private const float PeerProtocolProbeSeconds = 2.5f;
 
 	public static bool TransitionLocked => _transitionLock;
 
@@ -171,6 +184,7 @@ public static class MidJoin
 		public bool SpawnSent;
 		public bool GenerateDone;
 		public bool OwnerLoadingReady;
+		public bool NativeCurrentLevelPassThrough;
 		public bool Complete;
 		public bool Running;
 		public float WaitSeconds;
@@ -192,6 +206,7 @@ public static class MidJoin
 		}
 		_transitionLock = false;
 		AbortAllCatchups();
+		ClearNativeCurrentLevelPassThroughActors();
 		TransitionUnsafeActors.Clear();
 		_restartSceneWaitSince = 0f;
 		_restartSceneForceLogged = false;
@@ -210,6 +225,7 @@ public static class MidJoin
 			ResetLocalBootstrapState();
 			_transitionLock = false;
 			AbortAllCatchups();
+			ClearNativeCurrentLevelPassThroughActors();
 			TransitionUnsafeActors.Clear();
 			_restartSceneWaitSince = 0f;
 			_restartSceneForceLogged = false;
@@ -271,6 +287,7 @@ public static class MidJoin
 		ResetLocalBootstrapState();
 		PublishPeerState("joined", ready: false, moduleCount: -1);
 		AbortAllCatchups();
+		ClearNativeCurrentLevelPassThroughActors();
 		TransitionUnsafeActors.Clear();
 		_restartSceneWaitSince = 0f;
 		_restartSceneForceLogged = false;
@@ -286,6 +303,10 @@ public static class MidJoin
 
 	internal static void OnLevelGeneratorStarted()
 	{
+		if (PhotonNetwork.IsMasterClient)
+		{
+			ReleaseNativeCurrentLevelPassThroughActors("next level generator started");
+		}
 		_localLoadingComplete = false;
 		_nextUnstick = 0f;
 		_preparedGenerateDoneViewId = 0;
@@ -617,12 +638,9 @@ public static class MidJoin
 		int actor = newPlayer.ActorNumber;
 		if (_transitionLock)
 		{
-			// Photon already accepted this actor while a scene change is in
-			// flight.  Keep them in the unsafe set so RestartScene / outro
-			// does not wait on an incomplete late joiner.
-			JoiningActors.Add(actor);
-			TransitionUnsafeActors.Add(actor);
-			Debug.Log("[MJ] actor=" + actor + " entered during transition lock; marked unsafe");
+			// A scene handoff is already in progress. Let the game's normal next-level
+			// initialization own this actor instead of starting any current-level replay.
+			MarkNativeCurrentLevelPassThrough(newPlayer, "entered during transition lock");
 			return;
 		}
 
@@ -635,11 +653,11 @@ public static class MidJoin
 		TransitionUnsafeActors.Add(actor);
 		PendingActors.Add(actor);
 		PendingSince[actor] = Time.unscaledTime;
-		if (!SpawnCompleted.Contains(actor))
-		{
-			NeedsLateJoinSpawn.Add(actor);
-		}
-		Debug.Log("[MJ] actor=" + actor + " entered");
+		NativeCurrentLevelPassThroughActors.Remove(actor);
+		NativeCurrentLevelPassThroughSince.Remove(actor);
+		Debug.Log("[MJ] actor=" + actor + " admitted by Photon; capability grace started protocol=" +
+			(DescribePeerState(newPlayer) ?? "none") +
+			". This does not block the room or vanilla PlayerSpawn.");
 	}
 
 	internal static void HandlePlayerLeft(Player otherPlayer)
@@ -666,6 +684,8 @@ public static class MidJoin
 		ModulesReadyActors.Remove(actor);
 		LevelSpawnedActors.Remove(actor);
 		GenerateDoneSentActors.Remove(actor);
+		NativeCurrentLevelPassThroughActors.Remove(actor);
+		NativeCurrentLevelPassThroughSince.Remove(actor);
 		CatchupAttempts.Remove(actor);
 		RetryAfter.Remove(actor);
 	}
@@ -677,13 +697,24 @@ public static class MidJoin
 			return;
 		}
 		int actor = sender.ActorNumber;
-		SpawnedRpcActors.Add(actor);
+		bool firstObserved = SpawnedRpcActors.Add(actor);
 		if (!Enabled || !PhotonNetwork.IsMasterClient || _transitionLock || InWaitingLobby() || sender.IsLocal)
 		{
 			return;
 		}
 		if (!PendingActors.Contains(actor))
 		{
+			return;
+		}
+		if (NativeCurrentLevelPassThroughActors.Contains(actor) || !PeerSupportsLocalBootstrap(sender))
+		{
+			// The periodic classifier gives an injected client a short property-race
+			// grace period. Native clients remain on the original current-level path;
+			// this only prevents our synthetic pipeline from overriding it.
+			if (firstObserved)
+			{
+				Debug.Log("[MJ.NATIVE] actor=" + actor + " PlayerSpawnedRPC observed; native current-level pass-through remains active");
+			}
 			return;
 		}
 		Debug.Log("[MJ] actor=" + actor + " PlayerSpawnedRPC received");
@@ -699,7 +730,9 @@ public static class MidJoin
 		int actor = sender.ActorNumber;
 		if (JoiningActors.Contains(actor) && ModulesReadyActors.Add(actor))
 		{
-			Debug.Log("[MJ] actor=" + actor + " ModulesReadyRPC received");
+			Debug.Log((NativeCurrentLevelPassThroughActors.Contains(actor) ? "[MJ.NATIVE]" : "[MJ]") +
+				" actor=" + actor + " ModulesReadyRPC received" +
+				(NativeCurrentLevelPassThroughActors.Contains(actor) ? "; no synthetic catchup will follow" : string.Empty));
 		}
 	}
 
@@ -712,7 +745,9 @@ public static class MidJoin
 		int actor = sender.ActorNumber;
 		if (JoiningActors.Contains(actor) && LevelSpawnedActors.Add(actor))
 		{
-			Debug.Log("[MJ] actor=" + actor + " LevelGenerator.PlayerSpawnedRPC received");
+			Debug.Log((NativeCurrentLevelPassThroughActors.Contains(actor) ? "[MJ.NATIVE]" : "[MJ]") +
+				" actor=" + actor + " LevelGenerator.PlayerSpawnedRPC received" +
+				(NativeCurrentLevelPassThroughActors.Contains(actor) ? "; vanilla scene path retained" : string.Empty));
 		}
 	}
 
@@ -731,6 +766,12 @@ public static class MidJoin
 		int actor = owner.ActorNumber;
 		if (!JoiningActors.Contains(actor) && !PendingActors.Contains(actor))
 		{
+			return;
+		}
+		if (NativeCurrentLevelPassThroughActors.Contains(actor) || !PeerSupportsLocalBootstrap(owner))
+		{
+			// Do not create support objects or force setup for a native receiver.
+			// Its current scene is intentionally left to the stock client path.
 			return;
 		}
 		RegisterLateJoinerSubsystems(avatar);
@@ -1159,6 +1200,14 @@ public static class MidJoin
 		}
 
 		int actor = owner.ActorNumber;
+		if (NativeCurrentLevelPassThroughActors.Contains(actor))
+		{
+			// A native peer can still emit this naturally. Do not convert it into the
+			// host-side completion relay: that relay is part of the synthetic pipeline
+			// which is intentionally disabled for this current scene.
+			Debug.Log("[MJ.NATIVE] actor=" + actor + " owner loading completion observed; leaving native current-level state untouched");
+			return;
+		}
 		if (!JoiningActors.Contains(actor) && !TransitionUnsafeActors.Contains(actor))
 		{
 			return;
@@ -1373,6 +1422,7 @@ public static class MidJoin
 		{
 			Debug.Log("[MJ] " + reason + "; lobby left joinable");
 		}
+		ReleaseNativeCurrentLevelPassThroughActors("waiting lobby: " + reason);
 		TransitionUnsafeActors.Clear();
 		if (Enabled)
 		{
@@ -1471,6 +1521,7 @@ public static class MidJoin
 			return;
 		}
 
+		List<Player> nativePassThrough = null;
 		List<int> ready = null;
 		foreach (int actor in PendingActors)
 		{
@@ -1482,14 +1533,36 @@ public static class MidJoin
 			{
 				continue;
 			}
-			bool spawnBarrierSeen = SpawnedRpcActors.Contains(actor);
-			if (!spawnBarrierSeen && (!PendingSince.TryGetValue(actor, out float since) || Time.unscaledTime - since < 3f))
+			Player target = PhotonNetwork.CurrentRoom.GetPlayer(actor);
+			if (target == null)
 			{
 				continue;
 			}
+			PendingSince.TryGetValue(actor, out float since);
+			bool protocolKnown = HasPeerProtocol(target);
+			if (!PeerSupportsLocalBootstrap(target))
+			{
+				// The native client has already entered the room. Give an injected peer
+				// one short chance to publish its capability, then leave the current
+				// scene on the original client path without synthetic reconstruction.
+				if (!protocolKnown && Time.unscaledTime - since < PeerProtocolProbeSeconds)
+				{
+					continue;
+				}
+				if (nativePassThrough == null)
+				{
+					nativePassThrough = new List<Player>();
+				}
+				nativePassThrough.Add(target);
+				continue;
+			}
 
-			Player target = PhotonNetwork.CurrentRoom.GetPlayer(actor);
-			if (target == null || FindAvatar(target) == null)
+			bool spawnBarrierSeen = SpawnedRpcActors.Contains(actor);
+			if (!spawnBarrierSeen && Time.unscaledTime - since < 3f)
+			{
+				continue;
+			}
+			if (FindAvatar(target) == null)
 			{
 				continue;
 			}
@@ -1499,6 +1572,16 @@ public static class MidJoin
 				ready = new List<int>();
 			}
 			ready.Add(actor);
+		}
+
+		if (nativePassThrough != null)
+		{
+			for (int i = 0; i < nativePassThrough.Count; i++)
+			{
+				MarkNativeCurrentLevelPassThrough(nativePassThrough[i], HasPeerProtocol(nativePassThrough[i])
+					? "peer protocol below current bootstrap version"
+					: "peer protocol probe elapsed; native current-level pass-through selected");
+			}
 		}
 
 		if (ready == null)
@@ -1540,6 +1623,11 @@ public static class MidJoin
 		{
 			return;
 		}
+		if (!PeerSupportsLocalBootstrap(newPlayer))
+		{
+			MarkNativeCurrentLevelPassThrough(newPlayer, "active synthetic catchup requires peer protocol");
+			return;
+		}
 		int actor = newPlayer.ActorNumber;
 		if (!RunningPipelines.Add(actor))
 		{
@@ -1548,6 +1636,10 @@ public static class MidJoin
 		PendingActors.Remove(actor);
 		PendingSince.Remove(actor);
 		RetryAfter.Remove(actor);
+		if (!SpawnCompleted.Contains(actor))
+		{
+			NeedsLateJoinSpawn.Add(actor);
+		}
 		CatchupAttempts.TryGetValue(actor, out int previousAttempts);
 		CatchupAttempts[actor] = previousAttempts + 1;
 		Debug.Log("[MJ] actor=" + actor + " catchup attempt=" + (previousAttempts + 1));
@@ -1557,6 +1649,11 @@ public static class MidJoin
 	private static IEnumerator CatchupPipeline(Player newPlayer)
 	{
 		int actor = newPlayer.ActorNumber;
+		if (!PeerSupportsLocalBootstrap(newPlayer))
+		{
+			MarkNativeCurrentLevelPassThrough(newPlayer, "peer capability disappeared before synthetic catchup started");
+			yield break;
+		}
 		Debug.Log("[MJ] actor=" + actor + " catchup start nick=" + (newPlayer.NickName ?? string.Empty) +
 			" peer=" + (string.IsNullOrEmpty(DescribePeerState(newPlayer)) ? "none" : DescribePeerState(newPlayer)));
 
@@ -1582,6 +1679,11 @@ public static class MidJoin
 		if (!StillCatching(actor) || avatar == null || newPlayer == null)
 		{
 			FailCatchup(actor, "avatar timeout");
+			yield break;
+		}
+		if (!PeerSupportsLocalBootstrap(newPlayer))
+		{
+			MarkNativeCurrentLevelPassThrough(newPlayer, "peer capability disappeared before current-level state replay");
 			yield break;
 		}
 
@@ -1688,29 +1790,7 @@ public static class MidJoin
 		// ModulesReadyRPC above proves the pre-generation replay completed, so do
 		// not replay the same module links after GenerateDone.
 
-		// A receiver without the local bootstrap cannot produce its own animation
-		// completion until LoadingUI sees every *other* avatar complete.  Sending
-		// those historical completions after waiting for the receiver's own one is
-		// circular.  Break that cycle only for legacy receivers; injected clients
-		// perform the same release themselves immediately after Generated.
-		if (!PeerSupportsLocalBootstrap(newPlayer))
-		{
-			Debug.Log("[MJ] actor=" + actor + " legacy receiver: replaying historical completions before owner ack");
-			yield return new WaitForSecondsRealtime(0.25f);
-			yield return ReplayHistoricalLoadingCompletions(newPlayer, "pre-owner-legacy");
-			if (!StillCatching(actor))
-			{
-				yield break;
-			}
-		}
-		else
-		{
-			Debug.Log("[MJ] actor=" + actor + " bootstrap-capable receiver: waiting for owner ack");
-		}
-
-		// GenerateDone starts the joiner's native loading animation.  The owner
-		// acknowledgement remains the completion proof, while legacy receivers have
-		// already received the missing historical flags above.
+		Debug.Log("[MJ] actor=" + actor + " bootstrap-capable receiver: waiting for owner ack");
 		yield return WaitForJoinerLoadingReady(actor, OwnerLoadingTimeout);
 		if (!StillCatching(actor))
 		{
@@ -1827,7 +1907,6 @@ public static class MidJoin
 		}
 	}
 
-
 	private static bool StillCatching(int actor)
 	{
 		if (!Enabled || _transitionLock || !PhotonNetwork.InRoom || !PhotonNetwork.IsMasterClient)
@@ -1929,6 +2008,73 @@ public static class MidJoin
 		ActivityOrigins.Clear();
 		ActivityWatchStarted.Clear();
 		ActivityArmedAt.Clear();
+	}
+
+	private static void MarkNativeCurrentLevelPassThrough(Player player, string reason)
+	{
+		if (player == null || player.ActorNumber <= 0)
+		{
+			return;
+		}
+
+		int actor = player.ActorNumber;
+		bool newlyMarked = NativeCurrentLevelPassThroughActors.Add(actor);
+		JoiningActors.Add(actor);
+		// This marker is only for end-of-run safety. It does not close the room or
+		// suppress vanilla PlayerSpawn; the native peer remains admitted now.
+		TransitionUnsafeActors.Add(actor);
+		PendingActors.Remove(actor);
+		PendingSince.Remove(actor);
+		RunningPipelines.Remove(actor);
+		NeedsLateJoinSpawn.Remove(actor);
+		SpawnCompleted.Remove(actor);
+		GenerateDoneSentActors.Remove(actor);
+		CatchupAttempts.Remove(actor);
+		RetryAfter.Remove(actor);
+		CompletionRetryActors.Remove(actor);
+		ClearJoinerActivityObservation(actor);
+		if (!NativeCurrentLevelPassThroughSince.ContainsKey(actor))
+		{
+			NativeCurrentLevelPassThroughSince[actor] = Time.unscaledTime;
+		}
+
+		if (newlyMarked)
+		{
+			Debug.Log("[MJ.NATIVE] actor=" + actor + " admitted now; current-level native pass-through selected. " +
+				"Vanilla PlayerSpawn/buffered traffic remains allowed; synthetic GenerateDone, ownership and loading relays are disabled. " +
+				"reason=" + reason + " state=" + CurrentGameState() +
+				". The next normal scene initialization will rebuild vanilla state.");
+		}
+	}
+
+	private static void ReleaseNativeCurrentLevelPassThroughActors(string reason)
+	{
+		if (NativeCurrentLevelPassThroughActors.Count == 0)
+		{
+			return;
+		}
+
+		List<int> actors = new List<int>(NativeCurrentLevelPassThroughActors);
+		for (int i = 0; i < actors.Count; i++)
+		{
+			int actor = actors[i];
+			JoiningActors.Remove(actor);
+			PendingActors.Remove(actor);
+			PendingSince.Remove(actor);
+			TransitionUnsafeActors.Remove(actor);
+			NeedsLateJoinSpawn.Remove(actor);
+			SpawnCompleted.Remove(actor);
+			ClearJoinerActivityObservation(actor);
+			Debug.Log("[MJ.NATIVE] actor=" + actor + " pass-through marker cleared for normal scene lifecycle: " + reason);
+		}
+		NativeCurrentLevelPassThroughActors.Clear();
+		NativeCurrentLevelPassThroughSince.Clear();
+	}
+
+	private static void ClearNativeCurrentLevelPassThroughActors()
+	{
+		NativeCurrentLevelPassThroughActors.Clear();
+		NativeCurrentLevelPassThroughSince.Clear();
 	}
 
 	private static void RegisterLateJoinerSubsystems(PlayerAvatar avatar)
@@ -2213,6 +2359,7 @@ public static class MidJoin
 			yield break;
 		}
 		_transitionLock = false;
+		ReleaseNativeCurrentLevelPassThroughActors("scene handoff reached Main");
 		TransitionUnsafeActors.Clear();
 		_restartSceneWaitSince = 0f;
 		_restartSceneForceLogged = false;
@@ -2642,9 +2789,10 @@ public static class MidJoin
 		}
 	}
 
-	private static bool SendTargetedOwnershipUpdate(int targetActor, int viewId, int ownerActor)
+	private static bool SendTargetedOwnershipUpdate(int targetActor, int[] viewOwnerPairs)
 	{
-		if (!PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom || targetActor <= 0 || viewId == 0 || OwnershipUpdateMethod == null)
+		if (!PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom || targetActor <= 0 || OwnershipUpdateMethod == null ||
+			viewOwnerPairs == null || viewOwnerPairs.Length == 0 || (viewOwnerPairs.Length & 1) != 0)
 		{
 			return false;
 		}
@@ -2653,15 +2801,15 @@ public static class MidJoin
 		{
 			// PUN internal OwnershipUpdate sends event 212. With targetActor != -1 it
 			// only rewrites the receiver's local OwnerActorNr/ControllerActorNr cache.
-			// This is the same narrow mechanism used by the working reference mod:
-			// no room-wide TransferOwnership and no mutation of B/C on other clients.
-			OwnershipUpdateMethod.Invoke(null, new object[] { new[] { viewId, ownerActor }, targetActor });
+			// Sending every pair in one event is important for a 6-12 player room: the
+			// old per-avatar 1.5s window could outlive the joiner's loading timeout.
+			OwnershipUpdateMethod.Invoke(null, new object[] { viewOwnerPairs, targetActor });
 			return true;
 		}
 		catch (System.Exception ex)
 		{
-			Debug.LogWarning("[MJ] targeted ownership update failed target=" + targetActor +
-				" view=" + viewId + " owner=" + ownerActor + ": " +
+			Debug.LogWarning("[MJ.LEGACY] targeted ownership update failed target=" + targetActor +
+				" pairs=" + (viewOwnerPairs.Length / 2) + ": " +
 				ex.GetType().Name + ": " + ex.Message);
 			return false;
 		}
@@ -2671,6 +2819,13 @@ public static class MidJoin
 	{
 		if (!Enabled || !PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom || newPlayer == null)
 		{
+			yield break;
+		}
+		if (NativeCurrentLevelPassThroughActors.Contains(newPlayer.ActorNumber) ||
+			!PeerSupportsLocalBootstrap(newPlayer))
+		{
+			Debug.Log("[MJ.NATIVE] actor=" + newPlayer.ActorNumber +
+				" historical loading replay skipped stage=" + stage + "; native current-level pass-through is active");
 			yield break;
 		}
 
@@ -2734,15 +2889,12 @@ public static class MidJoin
 		int restored = 0;
 		int missing = 0;
 		int mapFailed = 0;
+		List<int> directRpcViewIds = new List<int>();
+		List<int> mappedRpcViewIds = new List<int>();
+		List<int> temporaryOwnerPairs = new List<int>();
+		List<int> restoreOwnerPairs = new List<int>();
 		for (int i = 0; i < replayViewIds.Count && i < replayOwners.Count; i++)
 		{
-			Room room = PhotonNetwork.CurrentRoom;
-			newPlayer = room != null ? room.GetPlayer(targetActor) : null;
-			if (newPlayer == null)
-			{
-				break;
-			}
-
 			int viewId = replayViewIds[i];
 			int originalOwner = replayOwners[i];
 			PhotonView view = PhotonView.Find(viewId);
@@ -2752,87 +2904,101 @@ public static class MidJoin
 				continue;
 			}
 
-			bool ownerMapped = false;
-			// A protocol-v3 receiver narrowly accepts the host's historical
-			// LoadingLevelAnimationCompletedRPC itself. This removes the receiver
-			// owner-cache race altogether. Older/uninjected receivers retain the
-			// target-local ownership relay compatibility path below.
+			// A protocol-v3 receiver narrowly accepts the host's historical RPC itself.
+			// Older/uninjected receivers require a target-local owner mapping first.
 			if (!targetAdvertisesBootstrap && originalOwner != masterActor)
 			{
-				ownerMapped = SendTargetedOwnershipUpdate(targetActor, viewId, masterActor);
-				if (!ownerMapped)
-				{
-					mapFailed++;
-					continue;
-				}
-				mapped++;
+				temporaryOwnerPairs.Add(viewId);
+				temporaryOwnerPairs.Add(masterActor);
+				restoreOwnerPairs.Add(viewId);
+				restoreOwnerPairs.Add(originalOwner);
+				mappedRpcViewIds.Add(viewId);
+			}
+			else
+			{
+				directRpcViewIds.Add(viewId);
+			}
+		}
+
+		bool mappingOpen = false;
+		if (temporaryOwnerPairs.Count > 0)
+		{
+			mappingOpen = SendTargetedOwnershipUpdate(targetActor, temporaryOwnerPairs.ToArray());
+			if (mappingOpen)
+			{
+				mapped = temporaryOwnerPairs.Count / 2;
 				PhotonNetwork.SendAllOutgoingCommands();
-				// Put the owner mapping in an earlier PUN service cycle than the RPC.
-				yield return null;
+			}
+			else
+			{
+				mapFailed = temporaryOwnerPairs.Count / 2;
+			}
+		}
+
+		try
+		{
+			if (mappingOpen)
+			{
+				// Keep the mapping event ahead of the owner-guarded RPCs while still
+				// opening only one temporary window for the entire historical set.
+				yield return new WaitForSecondsRealtime(LegacyOwnershipMappingPrepareSeconds);
 			}
 
-			// C# iterators may yield in a try/finally block but not in a try block
-			// that has a catch. Keep RPC exception handling in a nested no-yield try.
-			try
+			List<int> rpcViewIds = new List<int>(directRpcViewIds);
+			if (mappingOpen)
 			{
-				bool rpcQueued = false;
+				rpcViewIds.AddRange(mappedRpcViewIds);
+			}
+
+			for (int i = 0; i < rpcViewIds.Count; i++)
+			{
+				Room room = PhotonNetwork.CurrentRoom;
+				newPlayer = room != null ? room.GetPlayer(targetActor) : null;
+				PhotonView view = PhotonView.Find(rpcViewIds[i]);
+				if (newPlayer == null || view == null)
+				{
+					missing++;
+					continue;
+				}
+
 				try
 				{
-					room = PhotonNetwork.CurrentRoom;
-					newPlayer = room != null ? room.GetPlayer(targetActor) : null;
-					view = PhotonView.Find(viewId);
-					if (newPlayer == null || view == null)
-					{
-						missing++;
-					}
-					else
-					{
-						view.RPC("LoadingLevelAnimationCompletedRPC", newPlayer);
-						sent++;
-						rpcQueued = true;
-						PhotonNetwork.SendAllOutgoingCommands();
-					}
+					view.RPC("LoadingLevelAnimationCompletedRPC", newPlayer);
+					sent++;
 				}
 				catch (System.Exception ex)
 				{
 					Debug.LogWarning("[MJ] actor=" + targetActor +
 						" deterministic loading completion failed stage=" + stage +
-						" view=" + viewId + ": " + ex.GetType().Name + ": " + ex.Message);
-				}
-
-				if (rpcQueued)
-				{
-					// The target must process the completion RPC while its local view still
-					// reports the temporary master owner.  Restoring immediately was the
-					// race in the previous implementation: host-side send logs looked
-					// successful, while the receiver's OwnerOnlyRPC rejected the payload.
-					if (targetAdvertisesBootstrap)
-					{
-						yield return null;
-					}
-					else
-					{
-						yield return new WaitForSecondsRealtime(LegacyOwnershipMappingSettleSeconds);
-					}
+						" view=" + rpcViewIds[i] + ": " + ex.GetType().Name + ": " + ex.Message);
 				}
 			}
-			finally
+			PhotonNetwork.SendAllOutgoingCommands();
+
+			if (mappingOpen && sent > 0)
 			{
-				if (ownerMapped && PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null &&
-					PhotonNetwork.CurrentRoom.GetPlayer(targetActor) != null)
+				// The target must process every owner-guarded RPC while its local cache
+				// still reports the temporary master owner.  This is one network window,
+				// not one 1.5s delay per historical player.
+				yield return new WaitForSecondsRealtime(LegacyOwnershipMappingSettleSeconds);
+			}
+		}
+		finally
+		{
+			if (mappingOpen && PhotonNetwork.InRoom && PhotonNetwork.CurrentRoom != null &&
+				PhotonNetwork.CurrentRoom.GetPlayer(targetActor) != null)
+			{
+				if (SendTargetedOwnershipUpdate(targetActor, restoreOwnerPairs.ToArray()))
 				{
-					if (SendTargetedOwnershipUpdate(targetActor, viewId, originalOwner))
-					{
-						restored++;
-					}
-					PhotonNetwork.SendAllOutgoingCommands();
+					restored = restoreOwnerPairs.Count / 2;
 				}
+				PhotonNetwork.SendAllOutgoingCommands();
 			}
 		}
 
-		PhotonNetwork.SendAllOutgoingCommands();
 		Debug.Log("[MJ] actor=" + targetActor + " deterministic historical barrier stage=" + stage +
-			" expected=" + expected + " sent=" + sent + " mapped=" + mapped +
+			" expected=" + expected + " queued=" + (directRpcViewIds.Count + (mappingOpen ? mappedRpcViewIds.Count : 0)) +
+			" sent=" + sent + " mapBatch=" + (temporaryOwnerPairs.Count / 2) + " mapped=" + mapped +
 			" restored=" + restored + " missing=" + missing + " mapFailed=" + mapFailed +
 			" hostFlagFalseDiagnostic=" + hostFlagFalse +
 			" ownerMapMode=" + (targetAdvertisesBootstrap ? "peer-direct" : "legacy-owner-map"));
@@ -2842,6 +3008,13 @@ public static class MidJoin
 	{
 		if (!Enabled || newPlayer == null || !PhotonNetwork.IsMasterClient)
 		{
+			return false;
+		}
+		if (NativeCurrentLevelPassThroughActors.Contains(newPlayer.ActorNumber) ||
+			!PeerSupportsLocalBootstrap(newPlayer))
+		{
+			Debug.Log("[MJ.NATIVE] actor=" + newPlayer.ActorNumber +
+				" host loading completion suppressed reason=" + reason + "; native current-level pass-through is active");
 			return false;
 		}
 
@@ -2976,6 +3149,95 @@ public static class MidJoin
 			}
 			Debug.Log("[MJ] actor=" + actor + " historical loading barrier replay complete mode=" +
 				(legacyTarget ? "legacy" : "peer") + " stages=" + replayStage);
+		}
+		finally
+		{
+			CompletionRetryActors.Remove(actor);
+		}
+	}
+
+	// GenerateDone is not idempotent: repeating it can restart parts of the joiner's
+	// generation state.  When a player is already past that point, recovery must only
+	// resend the idempotent historical loading-complete barrier, never the full pipeline.
+	private static bool StartPostGenerateBarrierRecovery(int actor, string reason)
+	{
+		if (!Enabled || !PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom || _transitionLock ||
+			!GenerateDoneSentActors.Contains(actor) || NativeCurrentLevelPassThroughActors.Contains(actor))
+		{
+			return false;
+		}
+
+		Room room = PhotonNetwork.CurrentRoom;
+		if (room == null || room.GetPlayer(actor) == null)
+		{
+			return false;
+		}
+		if (!CompletionRetryActors.Add(actor))
+		{
+			Debug.Log("[MJ.LEGACY] actor=" + actor + " post-Generate recovery already running reason=" + reason);
+			return false;
+		}
+
+		JoiningActors.Add(actor);
+		TransitionUnsafeActors.Add(actor);
+		Debug.Log("[MJ.LEGACY] actor=" + actor + " post-Generate barrier recovery scheduled reason=" + reason +
+			" mode=" + (PeerSupportsLocalBootstrap(room.GetPlayer(actor)) ? "peer" : "native"));
+		Loader.RunCoroutine(RecoverPostGenerateBarrier(actor, reason));
+		return true;
+	}
+
+	private static IEnumerator RecoverPostGenerateBarrier(int actor, string reason)
+	{
+		float started = Time.unscaledTime;
+		int replayStage = 0;
+		try
+		{
+			while (replayStage < PostGenerateRecoverySchedule.Length)
+			{
+				if (!Enabled || !PhotonNetwork.IsMasterClient || !PhotonNetwork.InRoom || _transitionLock)
+				{
+					yield break;
+				}
+				if (IsJoinerLoadingReady(actor))
+				{
+					MarkJoinerPlayable(actor, "post-Generate barrier recovery");
+					CompleteCatchup(actor);
+					yield break;
+				}
+
+				float elapsed = Time.unscaledTime - started;
+				if (elapsed < PostGenerateRecoverySchedule[replayStage])
+				{
+					yield return null;
+					continue;
+				}
+
+				Room room = PhotonNetwork.CurrentRoom;
+				Player target = room != null ? room.GetPlayer(actor) : null;
+				if (target == null)
+				{
+					yield break;
+				}
+
+				int displayStage = replayStage + 1;
+				Debug.Log("[MJ.LEGACY] actor=" + actor + " post-Generate barrier replay=" + displayStage + "/" +
+					PostGenerateRecoverySchedule.Length + " reason=" + reason + " elapsed=" + elapsed.ToString("0.00") + "s");
+				yield return ReplayHistoricalLoadingCompletions(target, "post-generate-recovery-" + displayStage + "-" + reason);
+				SendOwnCatchupTo(target);
+				PhotonNetwork.SendAllOutgoingCommands();
+				replayStage++;
+			}
+
+			if (IsJoinerLoadingReady(actor))
+			{
+				MarkJoinerPlayable(actor, "post-Generate barrier recovery final");
+				CompleteCatchup(actor);
+			}
+			else
+			{
+				Debug.LogWarning("[MJ.LEGACY] actor=" + actor + " post-Generate recovery exhausted reason=" + reason +
+					" replays=" + replayStage + " ownerReady=0; manual retry remains barrier-only");
+			}
 		}
 		finally
 		{
@@ -3462,8 +3724,16 @@ public static class MidJoin
 
 	internal static bool TrySpawnLateJoiners()
 	{
-		if (!Enabled || !PhotonNetwork.IsMasterClient || NeedsLateJoinSpawn.Count == 0)
+		if (!Enabled || !PhotonNetwork.IsMasterClient)
 		{
+			return false;
+		}
+		if (NeedsLateJoinSpawn.Count == 0)
+		{
+			// Do not turn the native fallback into a queue. If there is no enhanced
+			// pipeline spawn to perform, allow the game's original PlayerSpawn call so
+			// a native client can enter this scene immediately (even if its local map
+			// or loading presentation is incomplete until the next scene transition).
 			return false;
 		}
 
@@ -3922,6 +4192,7 @@ public static class MidJoin
 		AddTrackedActors(actors, GenerateDoneSentActors);
 		AddTrackedActors(actors, CompletionRetryActors);
 		AddTrackedActors(actors, TransitionUnsafeActors);
+		AddTrackedActors(actors, NativeCurrentLevelPassThroughActors);
 
 		Room room = PhotonNetwork.CurrentRoom;
 		List<ActorJoinStatus> rows = new List<ActorJoinStatus>(actors.Count);
@@ -3931,7 +4202,8 @@ public static class MidJoin
 			string remoteDiagnostic = ReadRemoteDiagnostic(player);
 			PlayerAvatar avatar = FindAvatar(player);
 			float since;
-			float wait = PendingSince.TryGetValue(actor, out since)
+			float wait = (NativeCurrentLevelPassThroughSince.TryGetValue(actor, out since) ||
+				PendingSince.TryGetValue(actor, out since))
 				? Mathf.Max(0f, Time.unscaledTime - since)
 				: 0f;
 			rows.Add(new ActorJoinStatus
@@ -3945,7 +4217,9 @@ public static class MidJoin
 				SpawnSent = SpawnCompleted.Contains(actor),
 				GenerateDone = GenerateDoneSentActors.Contains(actor),
 				OwnerLoadingReady = IsJoinerLoadingReady(actor),
-				Complete = GenerateDoneSentActors.Contains(actor) && !TransitionUnsafeActors.Contains(actor),
+				NativeCurrentLevelPassThrough = NativeCurrentLevelPassThroughActors.Contains(actor),
+				Complete = !NativeCurrentLevelPassThroughActors.Contains(actor) &&
+					GenerateDoneSentActors.Contains(actor) && !TransitionUnsafeActors.Contains(actor),
 				Running = RunningPipelines.Contains(actor),
 				WaitSeconds = wait,
 				RemoteDiagnostic = remoteDiagnostic,
@@ -3976,6 +4250,21 @@ public static class MidJoin
 		if (target == null)
 		{
 			return L.T("midjoin.left");
+		}
+		if (NativeCurrentLevelPassThroughActors.Contains(actor))
+		{
+			return L.T("midjoin.current_level_passthrough");
+		}
+		if (GenerateDoneSentActors.Contains(actor))
+		{
+			// The old panel path silently became ineffective here: it reset only the
+			// pre-generation barriers while GenerateDone stayed suppressed.  Keep the
+			// completed generation intact and reissue only the native loading barrier.
+			if (StartPostGenerateBarrierRecovery(actor, "manual-panel"))
+			{
+				return L.T("midjoin.retry_ok");
+			}
+			return CompletionRetryActors.Contains(actor) ? L.T("midjoin.running") : L.T("server.mid_join_switching");
 		}
 
 		JoiningActors.Add(actor);
@@ -4009,6 +4298,8 @@ public static class MidJoin
 		NeedsLateJoinSpawn.Remove(actor);
 		SpawnCompleted.Remove(actor);
 		GenerateDoneSentActors.Remove(actor);
+		NativeCurrentLevelPassThroughActors.Remove(actor);
+		NativeCurrentLevelPassThroughSince.Remove(actor);
 		PendingSince.Remove(actor);
 		CatchupAttempts.Remove(actor);
 		RetryAfter.Remove(actor);
@@ -4056,6 +4347,11 @@ public static class MidJoin
 	private static bool PeerSupportsLocalBootstrap(Player player)
 	{
 		return TryReadPlayerPropertyInt(player, PeerProtocolProp, out int version) && version >= PeerProtocolVersion;
+	}
+
+	private static bool HasPeerProtocol(Player player)
+	{
+		return TryReadPlayerPropertyInt(player, PeerProtocolProp, out _);
 	}
 
 	private static bool PeerReportsReady(Player player)
@@ -4219,6 +4515,7 @@ public static class MidJoinPlayerEnteredPatch
 {
 	private static void Postfix(Player newPlayer)
 	{
+		EyeColorEffects.HandlePlayerEntered(newPlayer);
 		MidJoin.HandlePlayerEntered(newPlayer);
 	}
 }

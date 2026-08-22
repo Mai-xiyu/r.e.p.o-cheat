@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using IEnumerator = System.Collections.IEnumerator;
 using ExitGames.Client.Photon;
 using HarmonyLib;
 using Photon.Pun;
@@ -10,9 +11,10 @@ using UnityEngine;
 namespace r.e.p.o_cheat;
 
 /// <summary>
-/// Per-player eye renderer effect. Each injected client publishes only its own
-/// selected state through its Photon player custom properties. Receivers render
-/// the state for the owner of each avatar; no master-client relay is involved.
+/// Per-player eye effect. The local owner drives PlayerHealth.EyeMaterialOverride,
+/// which is a vanilla owner-authenticated RPC and is therefore visible to clients
+/// without this injection. Custom player properties retain the exact RGB selection
+/// for injected peers; vanilla clients see the nearest built-in eye preset.
 /// Native hurt/death/expression overlays always take priority.
 /// </summary>
 public static class EyeColorEffects
@@ -55,11 +57,18 @@ public static class EyeColorEffects
 	private static readonly FieldInfo PupilMaterialField = AccessTools.Field(typeof(PlayerHealth), "pupilMaterial");
 	private static readonly FieldInfo NativeOverrideField = AccessTools.Field(typeof(PlayerHealth), "overrideEyeActive");
 	private static readonly FieldInfo NativeOverrideLerpField = AccessTools.Field(typeof(PlayerHealth), "overrideEyeMaterialLerp");
+	private static readonly FieldInfo NativeOverrideStateField = AccessTools.Field(typeof(PlayerHealth), "overrideEyeState");
+	private static readonly FieldInfo NativeOverridePriorityField = AccessTools.Field(typeof(PlayerHealth), "overrideEyePriority");
 	private static readonly FieldInfo MaterialEffectField = AccessTools.Field(typeof(PlayerHealth), "materialEffect");
 	private static readonly FieldInfo HealthField = AccessTools.Field(typeof(PlayerHealth), "health");
 	private static readonly Dictionary<int, InstanceState> States = new Dictionary<int, InstanceState>();
+	private static readonly HashSet<int> NativeRelayActors = new HashSet<int>();
 	private static readonly int OverlayColor = Shader.PropertyToID("_ColorOverlay");
 	private static readonly int OverlayAmount = Shader.PropertyToID("_ColorOverlayAmount");
+	private const int NativeEyePriority = 0;
+	private const float NativeEyeHoldSeconds = 0.75f;
+	private const float NativeEyeRefreshSeconds = 0.25f;
+	private static readonly float[] NativeRelaySchedule = { 0.25f, 1f, 2.5f };
 
 	private static bool _timelineInitialized;
 	private static EyeMode _timelineMode;
@@ -72,6 +81,9 @@ public static class EyeColorEffects
 	private static bool _hasPublished;
 	private static SyncState _publishedState;
 	private static float _nextPublishAttempt;
+	private static bool _nativeVisualActive;
+	private static PlayerHealth.EyeOverrideState _nativeVisualState;
+	private static float _nextNativeVisualRefresh;
 
 	public static EyeMode Mode = EyeMode.Off;
 	public static Color FixedColor = new Color(0.1f, 0.8f, 1f, 1f);
@@ -98,6 +110,7 @@ public static class EyeColorEffects
 	{
 		if (!PhotonNetwork.InRoom || PhotonNetwork.LocalPlayer == null || PhotonNetwork.CurrentRoom == null)
 		{
+			DriveNativeEyeVisual(BuildLocalState());
 			_publishedRoom = null;
 			_publishedActor = 0;
 			_hasPublished = false;
@@ -117,6 +130,7 @@ public static class EyeColorEffects
 		}
 
 		SyncState state = BuildLocalState();
+		DriveNativeEyeVisual(state);
 		if (_hasPublished && StatesEqual(state, _publishedState))
 		{
 			return;
@@ -180,9 +194,20 @@ public static class EyeColorEffects
 		}
 
 		bool nativeOwnsFrame = NativeEffectActive(health);
-		if (!TryGetOwnerState(health, out SyncState state) || state.Mode == EyeMode.Off || nativeOwnsFrame)
+		if (!TryGetOwnerState(health, out SyncState state) || state.Mode == EyeMode.Off)
 		{
 			Release(health, eye, pupil, instance, nativeOwnsFrame);
+			return;
+		}
+		// The vanilla-compatible state is intentionally applied through the game's
+		// native override.  When that override matches this owner's selected state,
+		// injected peers may still render the precise RGB overlay while unmodified
+		// peers keep the nearest native preset. A different native override remains
+		// authoritative (hurt, death, healing, enemy effects, etc.).
+		bool customNativeReplica = nativeOwnsFrame && IsCustomNativeReplica(health, state);
+		if (nativeOwnsFrame && !customNativeReplica)
+		{
+			Release(health, eye, pupil, instance, nativeOwnsFrame: true);
 			return;
 		}
 
@@ -202,6 +227,36 @@ public static class EyeColorEffects
 			light.intensity = 4f;
 		}
 		instance.Applied = true;
+	}
+
+	private static bool IsCustomNativeReplica(PlayerHealth health, SyncState state)
+	{
+		try
+		{
+			if (MaterialEffectField?.GetValue(health) is bool materialEffect && materialEffect)
+			{
+				return false;
+			}
+			if (HealthField?.GetValue(health) is int currentHealth && currentHealth <= 0)
+			{
+				return false;
+			}
+			if (!TryReadNativeOverride(health, out bool active, out PlayerHealth.EyeOverrideState nativeState, out int priority) ||
+				!active || nativeState != ResolveNativeEyeState(state))
+			{
+				return false;
+			}
+
+			// The owner can validate its priority. A remote vanilla RPC does not carry
+			// priority, so matching the selected state is the strongest safe signal it
+			// can observe locally.
+			PlayerAvatar localAvatar = PlayerAvatar.instance;
+			return localAvatar == null || localAvatar.playerHealth != health || priority == NativeEyePriority;
+		}
+		catch
+		{
+			return false;
+		}
 	}
 
 	private static bool TryGetOwnerState(PlayerHealth health, out SyncState state)
@@ -259,6 +314,203 @@ public static class EyeColorEffects
 			Seed = _randomSeed,
 			StartedAt = _timelineStartedAt
 		};
+	}
+
+	internal static void HandlePlayerEntered(Player newPlayer)
+	{
+		if (newPlayer == null || newPlayer.IsLocal || !PhotonNetwork.InRoom || Mode == EyeMode.Off)
+		{
+			return;
+		}
+
+		int actor = newPlayer.ActorNumber;
+		if (actor <= 0 || !NativeRelayActors.Add(actor))
+		{
+			return;
+		}
+		Loader.RunCoroutine(RelayNativeEyeVisualToJoiner(actor));
+	}
+
+	private static IEnumerator RelayNativeEyeVisualToJoiner(int actor)
+	{
+		float started = Time.unscaledTime;
+		try
+		{
+			for (int i = 0; i < NativeRelaySchedule.Length; i++)
+			{
+				while (PhotonNetwork.InRoom && Time.unscaledTime - started < NativeRelaySchedule[i])
+				{
+					yield return null;
+				}
+				if (!PhotonNetwork.InRoom || Mode == EyeMode.Off || PhotonNetwork.CurrentRoom == null)
+				{
+					yield break;
+				}
+
+				Player target = PhotonNetwork.CurrentRoom.GetPlayer(actor);
+				if (target == null)
+				{
+					yield break;
+				}
+				if (SendNativeEyeVisualTo(target))
+				{
+					Debug.Log("[EyeSync] native eye relay target=" + actor + " attempt=" + (i + 1) + "/" +
+						NativeRelaySchedule.Length + " state=" + _nativeVisualState);
+				}
+			}
+		}
+		finally
+		{
+			NativeRelayActors.Remove(actor);
+		}
+	}
+
+	private static void DriveNativeEyeVisual(SyncState state)
+	{
+		if (state.Mode == EyeMode.Off)
+		{
+			_nativeVisualActive = false;
+			_nextNativeVisualRefresh = 0f;
+			return;
+		}
+
+		PlayerAvatar avatar = PlayerAvatar.instance;
+		PlayerHealth health = avatar != null ? avatar.playerHealth : null;
+		PhotonView view = avatar != null ? avatar.photonView : null;
+		if (avatar == null || health == null || (PhotonNetwork.InRoom && (view == null || !view.IsMine)))
+		{
+			_nativeVisualActive = false;
+			return;
+		}
+
+		PlayerHealth.EyeOverrideState desired = ResolveNativeEyeState(state);
+		if (NativeVisualBlocked(health, desired))
+		{
+			_nativeVisualActive = false;
+			return;
+		}
+
+		if (_nativeVisualActive && _nativeVisualState == desired &&
+			Time.unscaledTime < _nextNativeVisualRefresh)
+		{
+			return;
+		}
+
+		try
+		{
+			health.EyeMaterialOverride(desired, NativeEyeHoldSeconds, NativeEyePriority);
+			_nativeVisualActive = true;
+			_nativeVisualState = desired;
+			_nextNativeVisualRefresh = Time.unscaledTime + NativeEyeRefreshSeconds;
+		}
+		catch (Exception ex)
+		{
+			_nativeVisualActive = false;
+			_nextNativeVisualRefresh = Time.unscaledTime + 1f;
+			Debug.LogWarning("[EyeSync] native eye drive failed: " + ex.GetType().Name);
+		}
+	}
+
+	private static bool SendNativeEyeVisualTo(Player target)
+	{
+		if (target == null || target.IsLocal || Mode == EyeMode.Off)
+		{
+			return false;
+		}
+
+		SyncState state = BuildLocalState();
+		DriveNativeEyeVisual(state);
+		if (!_nativeVisualActive)
+		{
+			return false;
+		}
+
+		PlayerAvatar avatar = PlayerAvatar.instance;
+		PlayerHealth health = avatar != null ? avatar.playerHealth : null;
+		PhotonView view = avatar != null ? avatar.photonView : null;
+		if (avatar == null || health == null || view == null || !view.IsMine ||
+			!TryReadNativeOverride(health, out bool active, out PlayerHealth.EyeOverrideState current, out int priority) ||
+			!active || current != _nativeVisualState || priority != NativeEyePriority)
+		{
+			return false;
+		}
+
+		try
+		{
+			// EyeMaterialOverrideRPC is the game's own owner-only RPC.  The sender is
+			// this avatar's owner, so unmodified receivers execute it normally.
+			view.RPC("EyeMaterialOverrideRPC", target, _nativeVisualState, true);
+			PhotonNetwork.SendAllOutgoingCommands();
+			return true;
+		}
+		catch (Exception ex)
+		{
+			Debug.LogWarning("[EyeSync] native eye relay failed target=" + target.ActorNumber + ": " +
+				ex.GetType().Name);
+			return false;
+		}
+	}
+
+	private static bool NativeVisualBlocked(PlayerHealth health, PlayerHealth.EyeOverrideState desired)
+	{
+		try
+		{
+			if (MaterialEffectField?.GetValue(health) is bool materialEffect && materialEffect)
+			{
+				return true;
+			}
+			if (HealthField?.GetValue(health) is int currentHealth && currentHealth <= 0)
+			{
+				return true;
+			}
+			if (!TryReadNativeOverride(health, out bool active, out PlayerHealth.EyeOverrideState current, out int priority))
+			{
+				return false;
+			}
+			if (active)
+			{
+				// A state we just installed may be refreshed. Any different active state
+				// belongs to the game (hurt/heal/eye enemy/etc.) and must finish first.
+				return !_nativeVisualActive || current != desired || priority != NativeEyePriority;
+			}
+			return NativeOverrideLerpField?.GetValue(health) is float lerp && lerp > 0.001f;
+		}
+		catch
+		{
+			return true;
+		}
+	}
+
+	private static bool TryReadNativeOverride(PlayerHealth health, out bool active,
+		out PlayerHealth.EyeOverrideState state, out int priority)
+	{
+		active = false;
+		state = PlayerHealth.EyeOverrideState.None;
+		priority = int.MinValue;
+		try
+		{
+			if (!(NativeOverrideField?.GetValue(health) is bool currentActive))
+			{
+				return false;
+			}
+			if (!(NativeOverrideStateField?.GetValue(health) is PlayerHealth.EyeOverrideState currentState))
+			{
+				return false;
+			}
+			if (NativeOverridePriorityField?.GetValue(health) == null)
+			{
+				return false;
+			}
+
+			active = currentActive;
+			state = currentState;
+			priority = Convert.ToInt32(NativeOverridePriorityField.GetValue(health));
+			return true;
+		}
+		catch
+		{
+			return false;
+		}
 	}
 
 	private static bool TryReadState(Hashtable properties, out SyncState state)
@@ -385,6 +637,72 @@ public static class EyeColorEffects
 			default:
 				return Color.white;
 		}
+	}
+
+	private static PlayerHealth.EyeOverrideState ResolveNativeEyeState(SyncState state)
+	{
+		switch (state.Mode)
+		{
+			case EyeMode.Fixed:
+				return NearestNativeEyeState(new Color(state.Red / 255f, state.Green / 255f, state.Blue / 255f, 1f));
+			case EyeMode.Random:
+				return NearestNativeEyeState(ResolveColor(state));
+			case EyeMode.Rainbow:
+			{
+				uint elapsed = unchecked((uint)(ClockMilliseconds() - state.StartedAt));
+				float phase = elapsed * 0.001f * state.RainbowSpeed;
+				int index = Mathf.FloorToInt(Mathf.Repeat(phase, 1f) * 5f);
+				switch (Mathf.Clamp(index, 0, 4))
+				{
+					case 0:
+						return PlayerHealth.EyeOverrideState.Red;
+					case 1:
+						return PlayerHealth.EyeOverrideState.Love;
+					case 2:
+						return PlayerHealth.EyeOverrideState.CeilingEye;
+					case 3:
+						return PlayerHealth.EyeOverrideState.Green;
+					default:
+						return PlayerHealth.EyeOverrideState.Inverted;
+				}
+			}
+			default:
+				return PlayerHealth.EyeOverrideState.Red;
+		}
+	}
+
+	private static PlayerHealth.EyeOverrideState NearestNativeEyeState(Color color)
+	{
+		PlayerHealth.EyeOverrideState bestState = PlayerHealth.EyeOverrideState.Red;
+		float bestDistance = ColorDistanceSquared(color, Color.red);
+		ConsiderNativeEyeState(color, new Color(0f, 1f, 0f, 1f), PlayerHealth.EyeOverrideState.Green,
+			ref bestState, ref bestDistance);
+		ConsiderNativeEyeState(color, new Color(1f, 0f, 0.5f, 1f), PlayerHealth.EyeOverrideState.Love,
+			ref bestState, ref bestDistance);
+		ConsiderNativeEyeState(color, new Color(1f, 0.4f, 0f, 1f), PlayerHealth.EyeOverrideState.CeilingEye,
+			ref bestState, ref bestDistance);
+		ConsiderNativeEyeState(color, Color.black, PlayerHealth.EyeOverrideState.Inverted,
+			ref bestState, ref bestDistance);
+		return bestState;
+	}
+
+	private static void ConsiderNativeEyeState(Color source, Color candidate,
+		PlayerHealth.EyeOverrideState candidateState, ref PlayerHealth.EyeOverrideState bestState, ref float bestDistance)
+	{
+		float distance = ColorDistanceSquared(source, candidate);
+		if (distance < bestDistance)
+		{
+			bestState = candidateState;
+			bestDistance = distance;
+		}
+	}
+
+	private static float ColorDistanceSquared(Color left, Color right)
+	{
+		float red = left.r - right.r;
+		float green = left.g - right.g;
+		float blue = left.b - right.b;
+		return red * red + green * green + blue * blue;
 	}
 
 	private static bool NativeEffectActive(PlayerHealth health)

@@ -13,7 +13,7 @@ using r.e.p.o_cheat.Localization;
 
 namespace r.e.p.o_cheat;
 
-public class Hax2 : MonoBehaviour
+public partial class Hax2 : MonoBehaviour
 {
 	private enum MenuCategory
 	{
@@ -136,9 +136,15 @@ public class Hax2 : MonoBehaviour
 	private bool _uiStylesInited = false;
 	private const float PILL_WIDTH = 220f;
 	private const float PILL_HEIGHT = 44f;
-	private const float MENU_WIDTH = 860f;
-	private const float MENU_HEIGHT = 600f;
+	private const float MENU_WIDTH = 900f;
+	private const float MENU_HEIGHT = 650f;
 	private const float ANIM_SPEED = 8f;
+	// The shell owns the expanded size rather than rewriting menuRect every OnGUI
+	// pass. This makes the resize handle persistent and lets wide pages request a
+	// sensible minimum without fighting the open/close animation.
+	private Vector2 _expandedMenuSize = new Vector2(MENU_WIDTH, MENU_HEIGHT);
+	private bool _expandedMenuSizeInitialized;
+	private bool _menuSizeWasUserAdjusted;
 	// Pill always-visible + drag support
 	private bool _pillAlwaysShow = true;
 	private Vector2 _menuDragOffset = Vector2.zero;
@@ -1134,8 +1140,9 @@ public class Hax2 : MonoBehaviour
 
 		// Dynamic Island: smoothstep interpolation
 		float t = _animProgress * _animProgress * (3f - 2f * _animProgress);
-		float curW = Mathf.Lerp(PILL_WIDTH, MENU_WIDTH, t);
-		float curH = Mathf.Lerp(PILL_HEIGHT, MENU_HEIGHT, t);
+		Vector2 expandedSize = GetExpandedMenuSize();
+		float curW = Mathf.Lerp(PILL_WIDTH, expandedSize.x, t);
+		float curH = Mathf.Lerp(PILL_HEIGHT, expandedSize.y, t);
 		// Calculate centered position, then apply drag offset
 		float centeredX = (Screen.width - curW) / 2f;
 		float centeredY = 20f;
@@ -1214,6 +1221,7 @@ public class Hax2 : MonoBehaviour
 				_hasDragged = true;
 
 			HandleResize();
+			ClampMenuToScreen();
 			if (showChamsWindow)
 			{
 				chamsWindowRect = GUI.Window(10001, chamsWindowRect, new WindowFunction(DrawChamsColorWindow), "", backgroundStyle);
@@ -1476,9 +1484,10 @@ public class Hax2 : MonoBehaviour
 		for (int i = 0; i < rows.Count; i++)
 		{
 			MidJoin.ActorJoinStatus row = rows[i];
-			string mark = row.RemoteReady ? "✓" :
+			string mark = row.NativeCurrentLevelPassThrough ? "≈" :
+				(row.RemoteReady ? "✓" :
 				(row.Complete && !string.IsNullOrEmpty(row.RemoteDiagnostic) ? "!" :
-					(row.Complete ? "✓" : (row.Running ? "…" : "✗")));
+					(row.Complete ? "✓" : (row.Running ? "…" : "✗"))));
 			GUILayout.Label(
 				L.T("midjoin.row_fmt",
 					row.Actor.ToString(),
@@ -1495,13 +1504,19 @@ public class Hax2 : MonoBehaviour
 				labelStyle,
 				Array.Empty<GUILayoutOption>());
 			GUILayout.Label(
-				string.IsNullOrEmpty(row.RemoteDiagnostic)
+				row.NativeCurrentLevelPassThrough
+					? L.T("midjoin.diag_native")
+					: (string.IsNullOrEmpty(row.RemoteDiagnostic)
 					? L.T("midjoin.diag_wait")
-					: L.T("midjoin.diag_fmt", row.RemoteDiagnostic),
+					: L.T("midjoin.diag_fmt", row.RemoteDiagnostic)),
 				labelStyle,
 				Array.Empty<GUILayoutOption>());
+			if (row.NativeCurrentLevelPassThrough)
+			{
+				GUILayout.Label(L.T("midjoin.current_level_passthrough"), warningStyle, Array.Empty<GUILayoutOption>());
+			}
 			GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-			if (HostOnlyButton(L.T("midjoin.retry")) && !row.GenerateDone)
+			if (!row.NativeCurrentLevelPassThrough && HostOnlyButton(L.T("midjoin.retry")))
 			{
 				string result = MidJoin.RetryCatchup(row.Actor);
 				NativeGameApi.LastStatus = result;
@@ -1699,6 +1714,13 @@ public class Hax2 : MonoBehaviour
 	}
 
 	private void DrawMenuWindow(int windowID)
+	{
+		DrawRefreshedMenuWindow(windowID);
+	}
+
+	// Kept temporarily as a source-level rollback reference while the feature pages
+	// continue to live in this partial. It is deliberately not wired into OnGUI.
+	private void DrawLegacyMenuWindow(int windowID)
 	{
 		// === Dynamic Island: Collapsed Pill State ===
 		if (_animProgress < 0.82f)
@@ -2312,7 +2334,6 @@ public class Hax2 : MonoBehaviour
 			{
 				GUILayout.Label(AutoPilot.statusText, warningStyle, Array.Empty<GUILayoutOption>());
 			}
-			DrawNativeStatus();
 		}
 	}
 
@@ -2590,8 +2611,6 @@ public class Hax2 : MonoBehaviour
 		EnsureListStylesInitialized();
 
 		DrawDirectorPanel();
-		DrawFeatureHealthPanel();
-
 		DrawSectionHeader(L.T("fun.toys"));
 		GUILayout.Label(L.T("fun.toys_desc"), labelStyle, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
@@ -2618,8 +2637,6 @@ public class Hax2 : MonoBehaviour
 		{
 			NativeGameApi.ToggleGreenScreen();
 		}
-		DrawNativeStatus();
-
 		DrawSectionHeader(L.T("fun.title"));
 		GUILayout.Space(5f);
 		ToggleLogic("gyro_spin", L.T("fun.gyro_spin"), ref GyroSpin.isEnabled);
@@ -3614,9 +3631,6 @@ public class Hax2 : MonoBehaviour
 		DrawSectionHeader(L.T("server.mid_join"));
 		DrawMidJoinToggle();
 		GUILayout.Space(10f);
-		DrawSectionHeader(L.T("room.max_players"));
-		DrawMaxPlayersSlider();
-		GUILayout.Space(10f);
 
 		// ===================== 强制夺取主机 =====================
 		DrawSectionHeader(L.T("room.force_host"));
@@ -4054,6 +4068,8 @@ public class Hax2 : MonoBehaviour
 		}
 		GUILayout.EndHorizontal();
 		GUILayout.Label(L.T("config.json_path_fmt", JsonConfig.GetConfigPath()), labelStyle, Array.Empty<GUILayoutOption>());
+		GUILayout.Space(12f);
+		DrawFeatureHealthPanel();
 	}
 
 	private void DrawFeatureSelectionWindow(int id)
@@ -4332,9 +4348,6 @@ public class Hax2 : MonoBehaviour
 		ToggleLogic("hide_full_lobbies", L.T("server.hide_full"), ref hideFullLobbies);
 		ToggleLogic("show_lobby_members", L.T("server.show_members"), ref showMemberWindow);
 		GUILayout.EndHorizontal();
-		GUILayout.Space(5f);
-		DrawMidJoinToggle();
-
 		// ===== 区域筛选下拉 =====
 		GUILayout.Space(5f);
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
@@ -5240,8 +5253,11 @@ public class Hax2 : MonoBehaviour
 			if ((int)Event.current.type == 3)
 			{
 				Vector2 val6 = Event.current.mousePosition - resizeStartMousePos;
-				menuRect.width = Mathf.Clamp(resizeStartSize.x + val6.x, 400f, 1200f);
-				menuRect.height = Mathf.Clamp(resizeStartSize.y + val6.y, 300f, 1000f);
+				_expandedMenuSize = ClampExpandedMenuSize(resizeStartSize + val6);
+				menuRect.width = _expandedMenuSize.x;
+				menuRect.height = _expandedMenuSize.y;
+				_expandedMenuSizeInitialized = true;
+				_menuSizeWasUserAdjusted = true;
 				Event.current.Use();
 			}
 			else if ((int)Event.current.type == 1 || (int)Event.current.rawType == 1)
@@ -5500,6 +5516,14 @@ public class Hax2 : MonoBehaviour
 			}
 		}
 		GUILayout.EndHorizontal();
+		GUILayout.Space(15f);
+
+		DrawSectionHeader(L.T("menupage.layout"));
+		GUILayout.Label(L.T("menupage.layout_hint"), labelStyle, Array.Empty<GUILayoutOption>());
+		if (GUILayout.Button(L.T("menupage.reset_layout"), buttonStyle, Array.Empty<GUILayoutOption>()))
+		{
+			ResetMenuLayout();
+		}
 		GUILayout.Space(15f);
 
 		// 背景颜色设置
