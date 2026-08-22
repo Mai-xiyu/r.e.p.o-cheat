@@ -35,7 +35,10 @@
                       LogicalName="DarkMenu.Injector.ThirdPartyNotices.txt" />
   </ItemGroup>
 
-  <Target Name="BuildBundledDependencies" BeforeTargets="ResolveReferences">
+  <!-- ResolveReferences runs ResolveAssemblyReferences as a dependency. Building
+       before the outer target is too late on a clean CI worker, because the
+       HintPath is probed inside that dependency. -->
+  <Target Name="BuildBundledDependencies" BeforeTargets="ResolveAssemblyReferences">
     <MSBuild Projects="..\external\SharpMonoInjector\src\SharpMonoInjector\SharpMonoInjector.csproj"
              Targets="Build"
              Properties="Configuration=$(Configuration);OutputPath=bin\$(Configuration)\" />

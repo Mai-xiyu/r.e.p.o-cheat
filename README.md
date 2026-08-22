@@ -6,7 +6,7 @@ An open-source C# Mono cheat for the Unity game [R.E.P.O.](https://store.steampo
 
 - [中文文档](README_CN.md)
 
-**Current release: [v2.5.0](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.5.0)** — adapted for R.E.P.O. v0.4.4.3.
+**Current release: [v2.5.1](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.5.1)** — adapted for R.E.P.O. v0.4.4.3.
 
 ## Compatibility
 

@@ -6,7 +6,7 @@
 
 - [English Documentation](README.md)
 
-**当前版本：[v2.5.0](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.5.0)** — 适配 R.E.P.O. v0.4.4.3。
+**当前版本：[v2.5.1](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.5.1)** — 适配 R.E.P.O. v0.4.4.3。
 
 ## 兼容性
 
