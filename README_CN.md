@@ -8,9 +8,7 @@
 
 **当前版本：[v2.5.1](https://github.com/Mai-xiyu/r.e.p.o-cheat/releases/tag/v2.5.1)** — 适配 R.E.P.O. v0.4.4.3。
 
-## 挂人
-<img width="1968" height="1128" alt="image" src="https://github.com/user-attachments/assets/b14bd671-0d4d-42fa-ae65-ad9c26504d19" />
-拒绝这种以折磨玩家为乐趣的傻逼使用该注入式程序
+
 ## 兼容性
 
 本项目基于以下已安装游戏基线适配：
