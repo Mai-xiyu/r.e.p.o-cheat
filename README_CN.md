@@ -118,4 +118,4 @@ powershell -ExecutionPolicy Bypass -File run-tests.ps1
 
 ## 许可证
 
-[MIT](LICENSE)
+[GNU 3.0](LICENSE)
