@@ -113,4 +113,4 @@ Cosmetics suite and game-API feature overhaul for v0.4.4.3.
 
 ## License
 
-[MIT](LICENSE)
+[GNU 3.0](LICENSE)
